@@ -1,36 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getRevision, type ProductFactRow } from "@/lib/products/queries";
+import { getRevision } from "@/lib/products/queries";
+import { describeProductFact } from "@/lib/products/describe-fact";
 import { listFailureCases } from "@/lib/cases/queries";
 import { AddFactForm } from "./add-fact-form";
 import { OpenCaseButton } from "./open-case-button";
 
 interface RevisionPageProps {
   params: Promise<{ productId: string; revisionId: string }>;
-}
-
-function describeFact(row: ProductFactRow): string {
-  const fact = row.fact;
-  switch (row.category) {
-    case "clock":
-      return `${fact.label} — ${fact.frequencyMhz} MHz`;
-    case "radio":
-      return `${fact.label} — ${fact.technology}${
-        fact.frequencyMhz ? ` (${fact.frequencyMhz} MHz)` : ""
-      }`;
-    case "power":
-      return `${fact.label} — ${fact.topology}${
-        fact.switchingFrequencyMhz
-          ? ` (${fact.switchingFrequencyMhz} MHz switching)`
-          : ""
-      }`;
-    case "cable":
-      return `${fact.label} — ${fact.shielded ? "shielded" : "unshielded"}`;
-    case "other":
-      return `${fact.label}${fact.notes ? ` — ${fact.notes}` : ""}`;
-    default:
-      return String(fact.label ?? "");
-  }
 }
 
 export default async function RevisionPage({ params }: RevisionPageProps) {
@@ -77,7 +54,7 @@ export default async function RevisionPage({ params }: RevisionPageProps) {
                   <span className="mr-2 rounded bg-foreground/10 px-1.5 py-0.5 text-xs uppercase tracking-wide">
                     {fact.category}
                   </span>
-                  {describeFact(fact)}
+                  {describeProductFact(fact)}
                 </li>
               ))}
             </ul>

@@ -18,6 +18,23 @@ export interface HypothesisModelAdapter {
   ): Promise<HypothesisGenerationOutput>;
 }
 
+/**
+ * Thrown when a real analysis run needs the model and no API key is
+ * configured. The message is safe to show a user or log as-is — it never
+ * echoes the key itself or any provider error body. Callers must let this
+ * fail loudly (e.g. as a `run.failed` event); never catch it to silently
+ * fall back to fake/mock output in production. See CLAUDE.md security
+ * rules and MVP-08 requirement 10.
+ */
+export class MissingProviderApiKeyError extends Error {
+  constructor() {
+    super(
+      "ANTHROPIC_API_KEY is not configured. Set it in the environment before running analysis.",
+    );
+    this.name = "MissingProviderApiKeyError";
+  }
+}
+
 const SYSTEM_PROMPT = `
 You are assisting a hardware engineer investigating a radiated-emissions test failure.
 
@@ -42,6 +59,13 @@ export function createAnthropicHypothesisAdapter(
 ): HypothesisModelAdapter {
   return {
     async generateHypotheses(input) {
+      if (!process.env.ANTHROPIC_API_KEY) {
+        // Fail clearly and safely rather than let the provider SDK raise a
+        // less legible error deep inside generateObject, or — worse —
+        // silently proceed with no real model behind it.
+        throw new MissingProviderApiKeyError();
+      }
+
       const validatedInput = hypothesisGenerationInputSchema.parse(input);
       const { object } = await generateObject({
         model: anthropic(modelId),

@@ -1,12 +1,13 @@
 # Claude Progress
 
 ## Current state
-MVP-01 through MVP-07 done. Auth, workspace isolation, the full core domain
+MVP-01 through MVP-08 done. Auth, workspace isolation, the full core domain
 schema, product/revision/fact entry, failure-case + measurement entry, the
-deterministic harmonic correlation engine, and the AI structured hypothesis
-service all work, tested, against a local Supabase instance
-(`supabase start`). MVP-07's service is not yet wired into a UI/route —
-that's MVP-08 (streaming) and MVP-09 (workspace UI).
+deterministic harmonic correlation engine, the AI structured hypothesis
+service, and a real streaming `POST /api/analysis-runs` endpoint all work,
+tested, against a local Supabase instance (`supabase start`). The endpoint
+is not yet called from any page UI — that's MVP-09 (investigation
+workspace).
 
 ## Session handoff format
 Append one entry per completed/paused ticket:
@@ -403,4 +404,108 @@ Append one entry per completed/paused ticket:
   — Claude has not been given one; ask before assuming it's available, or
   test the wiring against the fake adapter and note the live-model path as
   unverified until a key is supplied.
+- Commit: (see git log)
+
+### 2026-08-31 — MVP-08
+- Completed: `POST /api/analysis-runs` — a real Route Handler, not a
+  chatbot. Given `{failureCaseId, measurementId}`, it loads the real
+  measurement/peak/product-facts from Postgres (RLS-scoped to the caller),
+  creates an `analysis_runs` row, runs the pipeline
+  (`src/lib/analysis/run-analysis.ts`: ingest → MVP-06 correlation → MVP-07
+  hypotheses → typed events), persists each `analysis_events` row *as it's
+  produced* (not batched at the end), and streams the same events to the
+  browser as Server-Sent Events using the Vercel AI SDK's
+  `JsonToSseTransformStream` (a small framing utility, not the SDK's
+  chat/UIMessage protocol — deliberately avoided per "do not build a
+  chatbot"). Event types: `run.started`, `measurement.loaded`,
+  `correlation.found`, `hypothesis.created`, `clarification.required`,
+  `run.completed`, `run.failed` — the DB's `analysis_events.event_type`
+  check constraint gained `measurement.loaded` via an additive migration
+  (kept `measurement.parsed` for a future document-extraction ticket).
+  `correlation.found` mirrors `HarmonicCorrelationCandidate` field-for-field
+  (provenance intact); `hypothesis.created` carries MVP-07's
+  OBSERVED/KNOWN/INFERRED/MISSING evidence array exactly as assembled,
+  untouched. The route only ever imports `createAnthropicHypothesisAdapter`
+  from `src/lib/ai/provider.ts` — never `@ai-sdk/anthropic` directly — and
+  that adapter now throws a clear `MissingProviderApiKeyError` (safe
+  message, no secret in it) the moment it's actually called with no
+  `ANTHROPIC_API_KEY` configured, which surfaces to the client as an
+  ordinary `run.failed` event rather than a crash or a silent fake result.
+- Tests: `pnpm lint`, `pnpm typecheck`, `pnpm test` (61, incl. 17 new in
+  `run-analysis.test.ts` and 3 in `route.test.ts`), `pnpm build`, and
+  `pnpm test:integration` (12, incl. 5 new in
+  `create-analysis-run.integration.test.ts` and 1 in
+  `route.integration.test.ts`) all pass — 73 tests total, zero live model
+  calls in any of them (a fake `HypothesisModelAdapter` throughout).
+  `run-analysis.test.ts` proves the pure pipeline: the exact Gateway X
+  sequence (run.started → measurement.loaded → correlation.found [40 MHz x
+  5] → hypothesis.created → run.completed), strictly increasing sequence
+  numbers, a clarification-required path, the missing-data case (zero
+  candidates completes without ever calling the adapter — asserted via a
+  spy), and that a thrown error becomes a safe `run.failed` message (a
+  planted fake API key string in the thrown error is asserted absent from
+  the output). `create-analysis-run.integration.test.ts` proves the same
+  flow against real Postgres — every streamed event is later found in
+  `analysis_events` in the same order, `analysis_runs.status` ends
+  `completed`/`failed` correctly, a cross-workspace `failureCaseId` 404s
+  (not another user's data), a `measurementId` not belonging to the given
+  case 404s, and a measurement with no peak 400s. Beyond the test suite: a
+  full real-browser run (chrome-devtools MCP, real cookie session, actual
+  `fetch('/api/analysis-runs')`) reproduced the exact same sequence live,
+  ending in `run.failed` with the safe "ANTHROPIC_API_KEY is not
+  configured" message (this repo has no live key), confirmed persisted to
+  Postgres by direct query — proving requirement 10 end-to-end, not just in
+  a unit test. Smoke-test user deleted afterward.
+- Files/areas changed:
+  `supabase/migrations/20260831060000_analysis_events_measurement_loaded.sql`,
+  `src/lib/domain/schema.ts` (event-type enum), `src/lib/analysis/{events,
+  run-analysis, run-analysis.test, create-analysis-run,
+  create-analysis-run.integration.test}.ts`,
+  `src/lib/supabase/route-client.ts`, `src/lib/products/{describe-fact,
+  load-fact-records}.ts` (describe-fact extracted from the revision page,
+  now shared by the UI and the model-facing summary), `src/lib/ai/
+  provider.ts` (`MissingProviderApiKeyError` + the call-time key check),
+  `src/app/api/analysis-runs/{route,route.test,
+  route.integration.test}.ts`, `vitest.integration.config.ts` +
+  `vitest.integration.setup.ts` (env for tests that build a Supabase client,
+  using the same well-known local demo keys already hardcoded elsewhere —
+  never read from `.env.local`).
+- Decisions (reversible, made per CLAUDE.md autonomy rules):
+  - SSE via `ai`'s `JsonToSseTransformStream` (`TransformStream<unknown,
+    string>`, just JSON-frames whatever you write to it) rather than
+    `createUIMessageStream`/chat-protocol helpers — satisfies "use the
+    current Vercel AI SDK APIs" for the transport layer without adopting
+    UIMessage/role semantics that don't fit a non-chat typed-event feed.
+  - Split the route into a thin HTTP wrapper (`route.ts`: parse, auth, SSE
+    framing) and a DB-touching core (`create-analysis-run.ts`: loading,
+    persistence, orchestration) that takes an already-authenticated
+    Supabase client as a parameter. `next/headers`' `cookies()` only works
+    inside Next's own request lifecycle and throws when a route handler is
+    invoked directly (as a test would); `route.ts` instead builds its
+    client from the raw `Request`'s Cookie header
+    (`src/lib/supabase/route-client.ts`, using `@supabase/ssr`'s
+    documented `parseCookieHeader`). This let the DB-touching core be
+    integration-tested by constructing the same kind of authenticated
+    client integration tests already use elsewhere (sign in via
+    supabase-js), rather than fabricating `@supabase/ssr`'s internal
+    session-cookie serialization format in a test.
+  - `route.test.ts` covers only request-parsing (no Supabase client built
+    yet, so no DB needed); the one test that needs a real answer to "is
+    there a signed-in user" moved to `route.integration.test.ts`. Documented
+    inline in both files so the split doesn't look accidental.
+  - One measurement = one peak, matching MVP-05; `measurement_peaks[0]` is
+    used for the analysis (if absent, 400 rather than crashing on
+    `undefined`).
+  - The missing-API-key check lives inside `generateHypotheses()`, not at
+    adapter construction — so a run with zero correlation candidates
+    (nothing to reason about) still succeeds even with no key configured,
+    consistent with MVP-07's existing "don't call the model with nothing to
+    ground a hypothesis on" short-circuit.
+- Remaining: none for MVP-08. Not wired into any page — MVP-09 builds the
+  investigation workspace UI that calls this endpoint and renders the
+  stream. Local Supabase stack still running.
+- Next recommended ticket: MVP-09 (Investigation workspace UI) — the
+  three-region desktop layout (Product Context / Failure State / Evidence)
+  plus the composer, calling `POST /api/analysis-runs` and rendering the SSE
+  stream as progressive typed states. No blockers.
 - Commit: (see git log)

@@ -109,7 +109,7 @@
       "depends_on": [
         "MVP-07"
       ],
-      "passes": false,
+      "passes": true,
       "acceptance": [
         "analysis emits typed events",
         "events persist",

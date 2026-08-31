@@ -1,0 +1,151 @@
+// The analysis pipeline itself: ingest -> deterministic correlation
+// (MVP-06) -> AI hypothesis generation (MVP-07) -> typed events, exactly the
+// pipeline docs/ARCHITECTURE.md describes. Pure orchestration — no
+// database, no HTTP, no knowledge of Next.js. Persisting each event and
+// streaming it to the browser are the caller's job (see
+// src/lib/analysis/persist-and-stream.ts and src/app/api/analysis-runs/
+// route.ts), which is what makes this fully testable with a fake adapter
+// and no network/DB at all.
+import {
+  correlateMeasurementWithProductFacts,
+  type ProductFactRecord,
+} from "@/lib/correlation/harmonic-correlation";
+import {
+  generateHypothesesForMeasurement,
+  type ProductFactForHypotheses,
+} from "@/lib/hypotheses/generate-hypotheses";
+import type { HypothesisModelAdapter } from "@/lib/ai/provider";
+import type { AnalysisEvent, AnalysisEventType } from "./events";
+
+export interface AnalysisMeasurementInput {
+  id: string;
+  frequencyMhz: number;
+  marginDb: number;
+  operatingMode: string | null;
+}
+
+export interface RunAnalysisInput {
+  runId: string;
+  failureCaseId: string;
+  measurement: AnalysisMeasurementInput;
+  /** Facts in the discriminated-union shape the correlation engine needs. */
+  productFacts: readonly ProductFactRecord[];
+  /** The same facts, summarized, for the hypothesis service's context. */
+  productFactSummaries: readonly ProductFactForHypotheses[];
+}
+
+/**
+ * Turns any error into a short, safe, user-facing message. Never includes a
+ * raw stack trace, a provider error body, or anything that could carry a
+ * secret (an API key rejection message, for instance) — see CLAUDE.md
+ * "Never log raw secrets ... unnecessarily."
+ */
+export function sanitizeAnalysisError(error: unknown): string {
+  if (isMissingProviderApiKeyError(error)) {
+    return error.message;
+  }
+  return "Analysis failed unexpectedly. Please try again or contact support.";
+}
+
+// Narrow, name-based check rather than an `instanceof` import from
+// src/lib/ai/provider — this module has no reason to depend on that file at
+// all beyond the HypothesisModelAdapter type, and a name check is enough to
+// let this one specific, deliberately-safe message through.
+function isMissingProviderApiKeyError(error: unknown): error is Error {
+  return error instanceof Error && error.name === "MissingProviderApiKeyError";
+}
+
+/**
+ * Runs one analysis pass and yields typed events as they're produced.
+ * Never throws: a failure is reported as a `run.failed` event, the last
+ * event the generator will ever yield.
+ */
+export async function* runAnalysis(
+  input: RunAnalysisInput,
+  adapter: HypothesisModelAdapter,
+): AsyncGenerator<AnalysisEvent, void, void> {
+  let sequence = 0;
+  function emit<T extends AnalysisEventType>(
+    type: T,
+    payload: Extract<AnalysisEvent, { type: T }>["payload"],
+  ): AnalysisEvent {
+    return {
+      type,
+      runId: input.runId,
+      sequence: sequence++,
+      createdAt: new Date().toISOString(),
+      payload,
+    } as AnalysisEvent;
+  }
+
+  try {
+    yield emit("run.started", {
+      failureCaseId: input.failureCaseId,
+      measurementId: input.measurement.id,
+    });
+
+    yield emit("measurement.loaded", {
+      measurementId: input.measurement.id,
+      frequencyMhz: input.measurement.frequencyMhz,
+      marginDb: input.measurement.marginDb,
+      operatingMode: input.measurement.operatingMode,
+    });
+
+    const correlationCandidates = correlateMeasurementWithProductFacts(
+      input.measurement.frequencyMhz,
+      input.productFacts,
+    );
+
+    for (const candidate of correlationCandidates) {
+      yield emit("correlation.found", {
+        productFactId: candidate.productFactId,
+        productFactCategory: candidate.productFactCategory,
+        productFactLabel: candidate.productFactLabel,
+        sourceFrequencyMhz: candidate.sourceFrequencyMhz,
+        harmonicNumber: candidate.harmonicNumber,
+        expectedFrequencyMhz: candidate.expectedFrequencyMhz,
+        measuredFrequencyMhz: candidate.measuredFrequencyMhz,
+        deviationMhz: candidate.deviationMhz,
+        deviationRatio: candidate.deviationRatio,
+        description: candidate.description,
+      });
+    }
+
+    const hypothesisResult = await generateHypothesesForMeasurement(
+      {
+        measurement: {
+          frequencyMhz: input.measurement.frequencyMhz,
+          marginDb: input.measurement.marginDb,
+          operatingMode: input.measurement.operatingMode,
+        },
+        correlationCandidates,
+        productFacts: [...input.productFactSummaries],
+      },
+      adapter,
+    );
+
+    for (const hypothesis of hypothesisResult.hypotheses) {
+      yield emit("hypothesis.created", {
+        productFactId: hypothesis.productFactId,
+        title: hypothesis.title,
+        confidenceBand: hypothesis.confidenceBand,
+        recommendedNextStep: hypothesis.recommendedNextStep,
+        evidence: hypothesis.evidence,
+      });
+    }
+
+    if (hypothesisResult.clarificationQuestion) {
+      yield emit("clarification.required", {
+        question: hypothesisResult.clarificationQuestion,
+      });
+    }
+
+    yield emit("run.completed", {
+      correlationsFound: correlationCandidates.length,
+      hypothesesCreated: hypothesisResult.hypotheses.length,
+      clarificationRequired: hypothesisResult.clarificationQuestion !== null,
+    });
+  } catch (error) {
+    yield emit("run.failed", { message: sanitizeAnalysisError(error) });
+  }
+}

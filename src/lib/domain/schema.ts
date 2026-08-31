@@ -26,11 +26,17 @@ export const confidenceBandSchema = z.enum(["low", "medium", "high"]);
 export type ConfidenceBand = z.infer<typeof confidenceBandSchema>;
 
 // Matches the typed event list in docs/ARCHITECTURE.md and CLAUDE.md, and
-// the analysis_events.event_type check constraint.
+// the analysis_events.event_type check constraint (see
+// supabase/migrations/20260831035611_core_domain.sql and
+// .../*_analysis_events_measurement_loaded.sql). "measurement.parsed" is
+// reserved for a future document-extraction ticket (MVP-13); MVP-08's
+// analysis run reads an already-persisted measurement, hence
+// "measurement.loaded".
 export const analysisEventTypeSchema = z.enum([
   "run.started",
   "product.fact_detected",
   "measurement.parsed",
+  "measurement.loaded",
   "correlation.found",
   "clarification.required",
   "hypothesis.created",
