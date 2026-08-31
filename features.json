@@ -134,6 +134,25 @@
       "notes": "The bottom composer (\"Tell Crado what you measured, changed or observed\") is MVP-10's job — its own acceptance criteria are 'observation persists' / 'analysis can update evidence/hypothesis'. MVP-09's explicit scope (per the ticket instructions actually given) was the read/run/stream/reconstruct workspace, not the composer, so 'composer records observation' was dropped here and left to MVP-10 where it's the actual deliverable."
     },
     {
+      "id": "MVP-10A",
+      "priority": 9.5,
+      "title": "Engineering Knowledge Base (document storage, ingestion, hybrid retrieval)",
+      "depends_on": [
+        "MVP-09"
+      ],
+      "passes": true,
+      "acceptance": [
+        "workspace-isolated document storage with real RLS, private Supabase Storage",
+        "PDF/TXT/Markdown ingestion: extract -> chunk -> embed -> store -> mark indexed, with a PDF with no extractable text marked failed (not silently indexed)",
+        "every chunk retains provenance: documentId, filename, page or section, product/revision relationship",
+        "searchEngineeringDocuments() does hybrid (keyword + semantic) retrieval via Postgres/pgvector, no separate vector DB",
+        "Documents/Sources UI: real counts only, real status (UPLOADING/PROCESSING/INDEXED/FAILED), source preview with highlighted passage",
+        "pagination and workspace/product/revision filtering verified against a 120-document programmatic dataset, not just a handful",
+        "workspace isolation verified for documents, chunks, search, and Storage (download/list/upload/delete all rejected cross-workspace, including a guessed exact path)"
+      ],
+      "notes": "The Investigation Agent (MVP-10B) and citation/source drawer (MVP-10C) are separate follow-on tickets that build on this. The 'semantic' half of retrieval is a zero-dependency local hashed lexical embedding (src/lib/documents/embedding.ts), not a neural embedding model — no embeddings API key is configured, and adding a new third-party credential is a one-way-door decision per CLAUDE.md, not made unasked. Swapping in a real embedding provider later is a drop-in change behind the same EmbeddingAdapter-shaped function signature."
+    },
+    {
       "id": "MVP-10",
       "priority": 10,
       "title": "Observation updates hypothesis",

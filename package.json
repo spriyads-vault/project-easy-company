@@ -19,6 +19,7 @@
     "next": "16.3.3",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "unpdf": "^1.8.1",
     "zod": "^4.5.4"
   },
   "devDependencies": {
@@ -33,6 +34,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.3",
     "jsdom": "^30.0.1",
+    "pdf-lib": "^1.17.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.11"

@@ -171,6 +171,53 @@ export type Database = {
           },
         ]
       }
+      document_chunks: {
+        Row: {
+          chunk_index: number
+          content: string
+          content_tsv: unknown
+          created_at: string
+          document_id: string
+          embedding: string
+          id: string
+          page_number: number | null
+          section: string | null
+          workspace_id: string
+        }
+        Insert: {
+          chunk_index: number
+          content: string
+          content_tsv?: unknown
+          created_at?: string
+          document_id: string
+          embedding: string
+          id?: string
+          page_number?: number | null
+          section?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          chunk_index?: number
+          content?: string
+          content_tsv?: unknown
+          created_at?: string
+          document_id?: string
+          embedding?: string
+          id?: string
+          page_number?: number | null
+          section?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_chunks_document_id_workspace_id_fkey"
+            columns: ["document_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "engineering_documents"
+            referencedColumns: ["id", "workspace_id"]
+          },
+        ]
+      }
       engineering_changes: {
         Row: {
           created_at: string
@@ -220,6 +267,95 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "product_revisions"
             referencedColumns: ["id", "workspace_id"]
+          },
+        ]
+      }
+      engineering_documents: {
+        Row: {
+          byte_size: number
+          document_type: string
+          failure_reason: string | null
+          filename: string
+          id: string
+          indexed_at: string | null
+          is_current: boolean
+          mime_type: string
+          page_count: number | null
+          product_id: string | null
+          product_revision_id: string | null
+          source: string
+          status: string
+          storage_path: string
+          supersedes_document_id: string | null
+          uploaded_at: string
+          workspace_id: string
+        }
+        Insert: {
+          byte_size: number
+          document_type: string
+          failure_reason?: string | null
+          filename: string
+          id?: string
+          indexed_at?: string | null
+          is_current?: boolean
+          mime_type: string
+          page_count?: number | null
+          product_id?: string | null
+          product_revision_id?: string | null
+          source?: string
+          status?: string
+          storage_path: string
+          supersedes_document_id?: string | null
+          uploaded_at?: string
+          workspace_id?: string
+        }
+        Update: {
+          byte_size?: number
+          document_type?: string
+          failure_reason?: string | null
+          filename?: string
+          id?: string
+          indexed_at?: string | null
+          is_current?: boolean
+          mime_type?: string
+          page_count?: number | null
+          product_id?: string | null
+          product_revision_id?: string | null
+          source?: string
+          status?: string
+          storage_path?: string
+          supersedes_document_id?: string | null
+          uploaded_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "engineering_documents_product_id_workspace_id_fkey"
+            columns: ["product_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id", "workspace_id"]
+          },
+          {
+            foreignKeyName: "engineering_documents_product_revision_id_workspace_id_fkey"
+            columns: ["product_revision_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "product_revisions"
+            referencedColumns: ["id", "workspace_id"]
+          },
+          {
+            foreignKeyName: "engineering_documents_supersedes_document_id_workspace_id_fkey"
+            columns: ["supersedes_document_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "engineering_documents"
+            referencedColumns: ["id", "workspace_id"]
+          },
+          {
+            foreignKeyName: "engineering_documents_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -567,6 +703,27 @@ export type Database = {
     }
     Functions: {
       current_workspace_id: { Args: never; Returns: string }
+      search_document_chunks: {
+        Args: {
+          filter_product_id?: string
+          filter_product_revision_id?: string
+          match_limit?: number
+          query_embedding: string
+          query_text: string
+        }
+        Returns: {
+          chunk_id: string
+          combined_score: number
+          content: string
+          document_id: string
+          document_type: string
+          filename: string
+          keyword_score: number
+          page_number: number
+          section: string
+          semantic_score: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

@@ -126,6 +126,59 @@ export type OtherFact = z.infer<typeof otherFactSchema>;
 export const factSourceSchema = z.enum(["user_entered", "extracted"]);
 export type FactSource = z.infer<typeof factSourceSchema>;
 
+// ---- Engineering Knowledge Base (MVP-10A) ----
+
+export const documentTypeSchema = z.enum([
+  "schematic",
+  "pcb",
+  "test_report",
+  "datasheet",
+  "regulatory",
+  "mechanical",
+  "engineering_note",
+  "other",
+]);
+export type DocumentType = z.infer<typeof documentTypeSchema>;
+
+export const documentSourceSchema = z.enum(["user_upload", "external_reference"]);
+export type DocumentSource = z.infer<typeof documentSourceSchema>;
+
+export const documentStatusSchema = z.enum([
+  "uploading",
+  "processing",
+  "indexed",
+  "failed",
+]);
+export type DocumentStatus = z.infer<typeof documentStatusSchema>;
+
+// Narrow on purpose: extraction only, no OCR/CAD parsing (see
+// src/lib/documents/extract-text.ts).
+export const SUPPORTED_DOCUMENT_MIME_TYPES = [
+  "application/pdf",
+  "text/plain",
+  "text/markdown",
+] as const;
+export const documentMimeTypeSchema = z.enum(SUPPORTED_DOCUMENT_MIME_TYPES);
+export type SupportedDocumentMimeType = z.infer<typeof documentMimeTypeSchema>;
+
+export const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024; // 20MB — well under the
+// bucket's 50MiB config limit; keeps synchronous ingestion (no queue for
+// MVP) responsive.
+
+export const uploadDocumentInputSchema = z.object({
+  filename: z.string().trim().min(1).max(255),
+  mimeType: documentMimeTypeSchema,
+  byteSize: z
+    .number()
+    .int()
+    .positive()
+    .max(MAX_DOCUMENT_BYTES, "File is larger than the 20MB limit."),
+  documentType: documentTypeSchema,
+  productId: z.string().trim().min(1).optional(),
+  productRevisionId: z.string().trim().min(1).optional(),
+});
+export type UploadDocumentInput = z.infer<typeof uploadDocumentInputSchema>;
+
 // Discriminated on `category` so a clock fact can never be missing
 // frequencyMhz, a cable fact can never be missing shielded, etc.
 export const productFactInputSchema = z.discriminatedUnion("category", [

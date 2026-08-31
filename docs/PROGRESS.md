@@ -1,14 +1,17 @@
 # Claude Progress
 
 ## Current state
-MVP-01 through MVP-09 done. Auth, workspace isolation, the full core domain
-schema, product/revision/fact entry, failure-case + measurement entry, the
-deterministic harmonic correlation engine, the AI structured hypothesis
-service, a real streaming `POST /api/analysis-runs` endpoint, and now the
-real investigation workspace UI at `/cases/[caseId]/investigation` all work,
-tested, against a local Supabase instance (`supabase start`) and live-verified
-in a real browser against the real Anthropic provider. MVP-10 (composer +
-observation updating a hypothesis) is next.
+MVP-01 through MVP-09 plus MVP-10A done. Auth, workspace isolation, the full
+core domain schema, product/revision/fact entry, failure-case + measurement
+entry, the deterministic harmonic correlation engine, the AI structured
+hypothesis service, a real streaming `POST /api/analysis-runs` endpoint, the
+real investigation workspace UI, and now the Engineering Knowledge Base
+(private document storage, ingestion, hybrid retrieval, a Documents/Sources
+UI at `/documents`) all work, tested, against a local Supabase instance
+(`supabase start`) and live-verified in a real browser. MVP-10B (Investigation
+Agent, calling `searchEngineeringDocuments()`) is the natural next ticket;
+MVP-10 (composer + observation updating a hypothesis) remains open too —
+either is eligible next depending on which the user wants.
 
 ## Session handoff format
 Append one entry per completed/paused ticket:
@@ -722,4 +725,150 @@ architecture change.
   composer, persisting an observation, and updating evidence/hypothesis
   without ever promoting an inference to a fact without real evidence. No
   blockers.
+- Commit: (see git log)
+
+### 2026-09-01 — MVP-10A: Engineering Knowledge Base
+- Completed: workspace-isolated document storage, ingestion, and hybrid
+  retrieval — infrastructure only, no agent (MVP-10B is explicitly next,
+  not built here).
+  - **Schema** (`supabase/migrations/20260901000000_engineering_documents.sql`):
+    `engineering_documents` (filename, document_type, source, status,
+    storage_path, mime_type, byte_size, page_count, failure_reason,
+    is_current/supersedes_document_id for the current/historical
+    relationship, product/revision composite FKs, same
+    `current_workspace_id()`/RLS/trigger pattern as every other table) and
+    `document_chunks` (chunk_index, page_number, section, content, a
+    generated `tsvector` column, a `vector(512)` embedding column). Enabled
+    `pgvector` (0.8.0, already available in the local Supabase image) and
+    indexed `document_chunks` with `gin(content_tsv)` and
+    `hnsw(embedding vector_cosine_ops)` — HNSW because it builds
+    incrementally, unlike ivfflat which wants data present at creation.
+  - **Storage**: a private `engineering-documents` bucket (never public),
+    path convention `{workspaceId}/{documentId}/{filename}`
+    (`src/lib/documents/storage-path.ts`, strips path separators from the
+    filename), RLS on `storage.objects` keyed off the first path segment
+    matching `current_workspace_id()`.
+  - **The "semantic" embedding is a deliberate, documented MVP choice**:
+    Anthropic has no embeddings API, and Crado has no other model-provider
+    credential configured. Adding one (OpenAI, Voyage, etc.) purely for
+    embeddings would be a new third-party credential — a one-way-door
+    decision per CLAUDE.md, not something to add unasked. Instead,
+    `src/lib/documents/embedding.ts` implements the "hashing trick"
+    (Weinberger et al.): tokens hashed into a fixed 512-dim vector with a
+    randomized sign, L2-normalized. It's a real, well-known lexical
+    embedding technique — genuinely scores word-overlap similarity higher
+    than unrelated text (verified in a unit test) — but it is NOT a
+    neural/contextual embedding, and nothing in the UI or docs claims it
+    is. Zero cost, zero network call, fully deterministic, and a real
+    embedding provider is a drop-in swap behind the same function
+    signature once a key is approved.
+  - **Ingestion** (`src/lib/documents/{extract-text,chunk-text,
+    ingest-document}.ts`): PDF (via `unpdf`, a pdfjs-dist wrapper with no
+    native/canvas dependency needed for text-only extraction — confirmed
+    canvas is an optional peer, not pulled in), TXT, and Markdown only —
+    no OCR, no CAD. A PDF with no extractable text is marked `status:
+    failed` with a clear reason mentioning OCR, never silently indexed
+    with zero chunks. Chunking preserves page number (PDF) or the nearest
+    Markdown heading as `section`, greedily merging paragraphs up to
+    ~1000 chars per chunk. `ingestDocument` is idempotent on retry
+    (deletes any partial chunks before inserting the fresh set) and takes
+    an already-authenticated Supabase client (same shape as
+    `createAnalysisRunForFailureCase`), which is what makes it directly
+    integration-testable.
+  - **Retrieval** (`src/lib/documents/search.ts`): `searchEngineeringDocuments(supabase,
+    {query, productId?, productRevisionId?, limit?})` calls a single
+    Postgres function, `search_document_chunks`, that ranks
+    `0.5 * ts_rank_cd(keyword) + 0.5 * (1 - cosine_distance)` server-side
+    — no chunk is ever pulled into Node memory to be re-ranked in
+    application code. Workspace scoping is not a parameter at all: the
+    SQL function reads `current_workspace_id()` itself, so there's no
+    argument a caller could pass to search another workspace even by
+    accident. Every result carries `documentId`, `filename`,
+    `pageNumber`/`section`, and the exact `passage` — never a summary,
+    never fabricated.
+  - **UI** (`/documents`): "SOURCES" + a real `count: "exact"` total (never
+    a placeholder), a paginated document list with the four real statuses
+    (UPLOADING/PROCESSING/INDEXED/FAILED, with the failure reason shown
+    inline for FAILED), an upload form, and a search panel where selecting
+    a result shows document/page-or-section/passage with query terms
+    highlighted as real React `<mark>` nodes (never
+    `dangerouslySetInnerHTML` — uploaded document text is user-controlled
+    content in a multi-tenant app). Same scoped graphite/mono theme as the
+    MVP-09 investigation workspace, its own `theme.ts` (not shared —
+    each screen owns its theme file, not a premature design system).
+- **Genuine defect found and fixed**: `listEngineeringDocuments` initially
+  fell back to `totalCount: 0` whenever a requested page was past the end
+  of the data. Root cause: PostgREST errors (`PGRST103`, "Requested range
+  not satisfiable") rather than returning an empty page with a real count
+  when `.range()`'s offset exceeds the row count — confirmed directly
+  against local Postgres before fixing. Fixed by falling back to a
+  second, unranged `count: "exact", head: true` query (no rows fetched)
+  whenever the ranged query errors, so a stale/past-the-end page still
+  reports the real total instead of implying the workspace is empty.
+  Caught by the 120-document pagination integration test, not guessed at.
+- **Testability decision**: `listEngineeringDocuments` takes an
+  already-authenticated Supabase client as a parameter (like
+  `searchEngineeringDocuments` and `ingestDocument`) rather than building
+  its own via `next/headers`' `cookies()` the way the older
+  `src/lib/{cases,products}/queries.ts` do. Pagination is an explicit
+  required test in this ticket, and a `cookies()`-based client can't be
+  exercised outside Next's own request lifecycle — this module adopts the
+  more testable MVP-08 pattern; the older query modules are unchanged.
+- Tests: 154 unit / 32 integration, all passing, no real Anthropic call and
+  no real embedding API call anywhere (the embedder needs no network).
+  Unit: `embedding.test.ts` (determinism, normalization, dimension,
+  lexical-similarity ordering), `chunk-text.test.ts` (page/section
+  provenance, heading tracking, boundary chunk-splitting, whitespace-only
+  page), `extract-text.test.ts` (real PDF fixtures built with `pdf-lib`,
+  no-extractable-text failure, corrupt-PDF failure, empty-text-file
+  failure), `storage-path.test.ts` (path traversal stripped). Component:
+  `document-list.test.tsx` (all four statuses, pagination boundaries,
+  historical marker), `source-preview.test.tsx` (highlighting, page/section
+  combinations, regex-special-character query doesn't crash),
+  `search-panel.test.tsx` and `upload-form.test.tsx` (server actions
+  mocked via `vi.hoisted`, since they call `next/headers`-based
+  `createClient()`). Integration (real local Postgres/RLS/Storage):
+  `ingest-document.integration.test.ts` (PDF/Markdown indexing with real
+  provenance, failed-extraction case, idempotent re-ingest),
+  `search.integration.test.ts` (hybrid ranking, product filtering,
+  revision filtering, workspace isolation — an identical query as
+  Workspace A never surfaces Workspace B's chunk),
+  `queries.integration.test.ts` (the 120-document scale/pagination test
+  from CLAUDE.md section 9 — real programmatic rows, not real PDFs;
+  product filtering; workspace isolation on the list/count),
+  `storage-security.integration.test.ts` (own-file round-trip; another
+  workspace's file can't be downloaded even with its exact real path,
+  can't be listed by guessing the workspace UUID prefix, can't be
+  uploaded into, can't be deleted).
+- Browser walkthrough (chrome-devtools MCP, real local app, real signed-in
+  user): uploaded a real Markdown file through the actual `/documents`
+  page — real extraction, real chunking (headings captured as `section`:
+  "Suspected Source", "Radiated Emissions Summary", "Recommended Next
+  Step"), real embedding, ended at `INDEXED` with a real "SOURCES 1"
+  count. Searched "40 MHz clock harmonic" — the chunk actually about the
+  clock ranked first; selected it and the source preview showed the
+  correct section and passage with "40", "MHz", "clock" highlighted.
+  Smoke-test user deleted afterward.
+- Files/areas added: `supabase/migrations/20260901000000_engineering_documents.sql`,
+  `src/lib/domain/schema.ts` (document type/status/source/mime enums,
+  upload input schema), `src/lib/documents/{embedding,extract-text,
+  chunk-text,ingest-document,search,queries,storage-path,
+  integration-test-helpers}.ts` + matching `*.test.ts`/`*.integration.test.ts`,
+  `src/app/documents/{page,theme,upload-form,document-list,search-panel,
+  source-preview,actions}.tsx` + matching `*.test.tsx`, a "Sources" link
+  added to `src/app/workspace/page.tsx`. New dependencies: `unpdf`
+  (PDF text extraction, no native canvas needed for this use case) and
+  `pdf-lib` (devDependency, only used to build real PDF fixtures in
+  tests).
+- Remaining: no OCR, no CAD/STEP parsing (explicitly out of MVP-10A
+  scope). No real neural embedding provider configured — see the embedding
+  design note above. Not wired into any agent yet — MVP-10B builds the
+  Investigation Agent that calls `searchEngineeringDocuments()`; MVP-10C
+  builds the polished citation/source drawer this UI's source preview is
+  a first cut of.
+- Next recommended ticket: MVP-10B (Investigation Agent) — calls
+  `searchEngineeringDocuments()` as a tool, no LangGraph/ToolLoopAgent per
+  CLAUDE.md's explicit "do not" list for this phase. MVP-10 (composer +
+  observation updating a hypothesis) also remains open and has no
+  dependency on MVP-10A. No blockers either way.
 - Commit: (see git log)

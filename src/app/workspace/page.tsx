@@ -28,14 +28,22 @@ export default async function WorkspacePage() {
             {workspace.name}
           </h1>
         </div>
-        <form action={signOut}>
-          <button
-            type="submit"
+        <div className="flex items-center gap-3">
+          <Link
+            href="/documents"
             className="rounded-md border border-foreground/15 px-3 py-1.5 text-sm font-medium"
           >
-            Sign out
-          </button>
-        </form>
+            Sources
+          </Link>
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="rounded-md border border-foreground/15 px-3 py-1.5 text-sm font-medium"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
       </header>
 
       <div className="grid gap-8 md:grid-cols-2">
