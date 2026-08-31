@@ -65,7 +65,7 @@
       "depends_on": [
         "MVP-03"
       ],
-      "passes": false,
+      "passes": true,
       "acceptance": [
         "radiated emissions case can be created",
         "frequency/margin/operating mode stored",

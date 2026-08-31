@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -9,6 +10,10 @@ import {
 } from "@/lib/domain/schema";
 
 export interface FactFormState {
+  error?: string;
+}
+
+export interface FailureCaseFormState {
   error?: string;
 }
 
@@ -85,4 +90,36 @@ export async function createFact(
 
   revalidatePath(`/products/${productId}/revisions/${revisionId}`);
   return {};
+}
+
+export async function createFailureCase(
+  revisionId: string,
+  _prevState: FailureCaseFormState,
+  _formData: FormData,
+): Promise<FailureCaseFormState> {
+  const supabase = await createClient();
+
+  const { data: failureCase, error } = await supabase
+    .from("failure_cases")
+    .insert({ product_revision_id: revisionId })
+    .select("id")
+    .single();
+  if (error || !failureCase) {
+    // The composite FK rejects this if revisionId isn't in this workspace.
+    return { error: "Could not open a failure case." };
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    await supabase.from("investigation_events").insert({
+      failure_case_id: failureCase.id,
+      event_type: "case_opened",
+      description: "Radiated emissions case opened.",
+      created_by: user.id,
+    });
+  }
+
+  redirect(`/cases/${failureCase.id}`);
 }

@@ -1,9 +1,9 @@
 # Claude Progress
 
 ## Current state
-MVP-01 through MVP-04 done. Auth, workspace isolation, the full core domain
-schema, and product/revision/fact entry (clocks, radios, power, cables) work
-end-to-end against a local Supabase instance (`supabase start`).
+MVP-01 through MVP-05 done. Auth, workspace isolation, the full core domain
+schema, product/revision/fact entry, and failure-case + measurement entry
+work end-to-end against a local Supabase instance (`supabase start`).
 
 ## Session handoff format
 Append one entry per completed/paused ticket:
@@ -212,4 +212,62 @@ Append one entry per completed/paused ticket:
   radiated-emissions `failure_cases` + `measurements`/`measurement_peaks`
   entry against a product revision, with validation. No blockers; schema
   already supports it (MVP-03).
+- Commit: (see git log)
+
+### 2026-08-31 — MVP-05
+- Completed: revision page can now open a radiated-emissions failure case
+  (one click; records a `case_opened` `investigation_events` row) and
+  redirects to `/cases/[caseId]`. That page lists measurements (each with
+  its peak(s)) and has a form to add one: operating mode, frequency (MHz),
+  margin (dB relative to the regulatory limit, matching the schema/UI
+  decision from MVP-03), plus optional label/detector/limit-line/notes.
+  Recording a measurement also writes a `measurement_recorded`
+  investigation event. A margin > 0 renders in red (over the limit), ≤ 0 in
+  green — the beginning of the "OBSERVED" visual language MVP-09 will build
+  out fully.
+- Tests: `pnpm lint`, `pnpm typecheck`, `pnpm test` (12 tests, incl. 5 new
+  `measurementInputSchema` cases: positive, a passing-margin boundary
+  case using the scope's own -3.6 dB, missing operatingMode, a zero-
+  frequency boundary, and a missing-peak case), `pnpm build`, and
+  `pnpm test:integration` (unchanged, still 6/6 — schema didn't change) all
+  pass. Drove the full flow in a real browser: signed up → created
+  Gateway X/Rev17 → opened a failure case → recorded "200 MHz, +7.4 dB,
+  WiFi TX + display active" exactly as in docs/MVP_SCOPE.md's happy path →
+  confirmed it renders correctly (in red, since +7.4 dB is over the limit)
+  and survives a fresh navigation. Smoke-test user deleted afterward.
+- Files/areas changed: `src/lib/domain/schema.ts` (`measurementInputSchema`),
+  `src/lib/domain/schema.test.ts`, `src/lib/cases/queries.ts`
+  (listFailureCases, getFailureCase), `src/app/products/[productId]/
+  revisions/[revisionId]/{actions,page,open-case-button}.tsx` (createFailureCase
+  added), `src/app/cases/[caseId]/{page,actions,add-measurement-form}.tsx`.
+  Also: `eslint.config.mjs` now sets `argsIgnorePattern: "^_"` for
+  `no-unused-vars` — a no-input server action (like "open a case", which
+  needs neither the previous state nor form data) legitimately has unused
+  leading-underscore params, and the plain eslint-config-next rule was
+  flagging that pattern as warnings.
+- Decisions (reversible, made per CLAUDE.md autonomy rules):
+  - The failure case detail page lives at a top-level `/cases/[caseId]`
+    route, not nested under `/products/.../revisions/...` — per
+    docs/UX.md the failure case is the primary investigation surface, and
+    MVP-06 through MVP-12 all attach more state to it (hypotheses,
+    evidence, investigation timeline, engineering changes), so it earns its
+    own URL now rather than a deep nested path later.
+  - One measurement = one peak in this form (matches the MVP happy path:
+    "Enter 200 MHz, +7.4 dB..."). If a measurement insert succeeds but its
+    peak insert fails, the action deletes the measurement row rather than
+    leaving a peak-less orphan — a compensating action, not a DB
+    transaction, which is an acceptable simplification per CLAUDE.md's
+    "simplest reversible implementation" tie-breaker; revisit only if it
+    causes a real problem.
+  - Every "open a case" / "record a measurement" action also writes an
+    `investigation_events` row (already modeled in MVP-03), so the case
+    timeline MVP-09/10/11 render is populated from day one instead of
+    needing a backfill.
+- Remaining: none for MVP-05. Local Supabase stack still running.
+- Next recommended ticket: MVP-06 (Deterministic correlation engine) — a
+  pure TypeScript utility (not a DB or UI ticket) that takes a measured
+  frequency and the revision's clock/radio facts and finds harmonic
+  candidates (e.g. 40 MHz × 5 = 200 MHz), with positive/negative/missing-
+  data/boundary tests and provenance back to the input facts. No blockers;
+  both its dependencies (MVP-04, MVP-05) now pass.
 - Commit: (see git log)

@@ -56,12 +56,23 @@ export type InvestigationEventType = z.infer<
 >;
 
 export const measurementPeakInputSchema = z.object({
-  frequencyMhz: z.number().positive(),
+  frequencyMhz: z.number().positive("Frequency must be greater than 0 MHz."),
   marginDb: z.number(),
   detector: z.string().trim().min(1).optional(),
   limitLine: z.string().trim().min(1).optional(),
 });
 export type MeasurementPeakInput = z.infer<typeof measurementPeakInputSchema>;
+
+export const measurementInputSchema = z.object({
+  operatingMode: z
+    .string()
+    .trim()
+    .min(1, "Describe what the product was doing during this measurement."),
+  label: z.string().trim().min(1).optional(),
+  notes: z.string().trim().min(1).optional(),
+  peak: measurementPeakInputSchema,
+});
+export type MeasurementInput = z.infer<typeof measurementInputSchema>;
 
 // Per-category fact shapes. `fact` is stored as jsonb (see
 // supabase/migrations/20260831035611_core_domain.sql) so new categories or
