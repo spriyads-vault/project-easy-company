@@ -69,6 +69,24 @@ describe("containsProhibitedCertaintyLanguage", () => {
       ),
     ).toBe(false);
   });
+
+  it("does not flag confirm/verify used as a hedged verification action or negated claim (regression: found via live-testing rejecting well-hedged model output)", () => {
+    expect(
+      containsProhibitedCertaintyLanguage(
+        "This is a frequency coincidence and coupling hypothesis, not a confirmed cause.",
+      ),
+    ).toBe(false);
+    expect(
+      containsProhibitedCertaintyLanguage(
+        "Replicate the WiFi TX + display active mode to confirm signal presence at 200 MHz.",
+      ),
+    ).toBe(false);
+    expect(
+      containsProhibitedCertaintyLanguage(
+        "An engineer should verify the trace layout before ruling this out.",
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("buildObservedEvidence / buildKnownEvidence", () => {

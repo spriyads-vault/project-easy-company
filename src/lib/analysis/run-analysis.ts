@@ -124,6 +124,17 @@ export async function* runAnalysis(
       adapter,
     );
 
+    if (hypothesisResult.rejectedCount > 0) {
+      // Never surfaced to the client — this is purely so an operator can
+      // tell "the model complied and just had nothing to propose" apart
+      // from "the model tried something invalid and was filtered" (a
+      // hallucinated productFactId or certainty-claiming language; see
+      // generateHypothesesForMeasurement).
+      console.warn(
+        `[analysis:${input.runId}] rejected ${hypothesisResult.rejectedCount} model-proposed hypothesis(es) (hallucinated productFactId or certainty-claiming language)`,
+      );
+    }
+
     for (const hypothesis of hypothesisResult.hypotheses) {
       yield emit("hypothesis.created", {
         productFactId: hypothesis.productFactId,
@@ -146,6 +157,10 @@ export async function* runAnalysis(
       clarificationRequired: hypothesisResult.clarificationQuestion !== null,
     });
   } catch (error) {
+    // The client only ever sees the sanitized message (see
+    // sanitizeAnalysisError) — this is for operators, server-side only,
+    // and stdout/stderr here never crosses the network.
+    console.error(`[analysis:${input.runId}] run failed`, error);
     yield emit("run.failed", { message: sanitizeAnalysisError(error) });
   }
 }

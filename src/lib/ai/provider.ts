@@ -4,7 +4,7 @@
 // else — src/lib/hypotheses/generate-hypotheses.ts, API routes, tests —
 // depends only on the HypothesisModelAdapter interface below.
 import { generateObject } from "ai";
-import { anthropic } from "@ai-sdk/anthropic";
+import { anthropic, createAnthropic, type AnthropicProvider } from "@ai-sdk/anthropic";
 import {
   hypothesisGenerationInputSchema,
   hypothesisGenerationOutputSchema,
@@ -54,6 +54,26 @@ Propose up to 5 ranked investigation hypotheses, grounded ONLY in the candidates
 
 const DEFAULT_MODEL_ID = process.env.CRADO_HYPOTHESIS_MODEL ?? "claude-sonnet-5";
 
+/**
+ * Some Anthropic API keys are "identity-linked" (created via Console
+ * SSO/an individual's identity rather than scoped to one workspace) and
+ * the API rejects requests from them unless an `anthropic-workspace-id`
+ * header says which workspace the request acts in. A plain workspace API
+ * key doesn't need this at all, so the header is only added when
+ * `ANTHROPIC_WORKSPACE_ID` is actually set — pure, no SDK/network
+ * involved, so this is unit-testable on its own.
+ */
+export function buildAnthropicHeaders(
+  workspaceId: string | undefined,
+): Record<string, string> | undefined {
+  return workspaceId ? { "anthropic-workspace-id": workspaceId } : undefined;
+}
+
+function resolveAnthropicProvider(): AnthropicProvider {
+  const headers = buildAnthropicHeaders(process.env.ANTHROPIC_WORKSPACE_ID);
+  return headers ? createAnthropic({ headers }) : anthropic;
+}
+
 export function createAnthropicHypothesisAdapter(
   modelId: string = DEFAULT_MODEL_ID,
 ): HypothesisModelAdapter {
@@ -68,7 +88,7 @@ export function createAnthropicHypothesisAdapter(
 
       const validatedInput = hypothesisGenerationInputSchema.parse(input);
       const { object } = await generateObject({
-        model: anthropic(modelId),
+        model: resolveAnthropicProvider()(modelId),
         schema: hypothesisGenerationOutputSchema,
         system: SYSTEM_PROMPT,
         prompt: JSON.stringify(validatedInput),

@@ -509,3 +509,74 @@ Append one entry per completed/paused ticket:
   plus the composer, calling `POST /api/analysis-runs` and rendering the SSE
   stream as progressive typed states. No blockers.
 - Commit: (see git log)
+
+### 2026-08-31 — Live Gateway X test against the real Anthropic provider
+Ran a real end-to-end analysis (no fake adapter) against the configured
+Anthropic key, per explicit instruction to verify MVP-08 against a live
+model before starting MVP-09. Found and fixed two genuine defects; no
+architecture change.
+
+- Defect 1 — missing workspace header: the first live call failed with
+  `AI_APICallError: anthropic-workspace-id is required when authenticating
+  with an identity-linked API key...` (400). The configured key is
+  identity-linked (Console SSO), which the Anthropic API rejects without an
+  `anthropic-workspace-id` header; a plain workspace API key doesn't need
+  this. This was invisible until fixed, because `sanitizeAnalysisError`
+  deliberately hides raw error detail from the client and nothing logged it
+  server-side either — a second, related gap. Fixed both:
+  - `src/lib/ai/provider.ts`: added `buildAnthropicHeaders(workspaceId)`
+    (pure, unit-tested in new `provider.test.ts`) and
+    `resolveAnthropicProvider()`, which uses
+    `createAnthropic({ headers: {"anthropic-workspace-id": ...} })` when
+    `ANTHROPIC_WORKSPACE_ID` is set, else falls back to the default
+    `anthropic` singleton — fully backward compatible, no behavior change
+    for a plain workspace key.
+  - `.env.example`: documented the new optional `ANTHROPIC_WORKSPACE_ID`.
+  - `src/lib/analysis/run-analysis.ts`: added server-side-only
+    `console.error` in the `run.failed` catch (operators previously had no
+    way to see why a run failed — the client-safe message is unaffected).
+  - User added `ANTHROPIC_WORKSPACE_ID` to `.env.local` (never read by me);
+    retried, confirmed the model call succeeds.
+- Defect 2 — certainty-guard false positives: with the header fixed,
+  `hypothesis.created` events appeared but hypotheses were intermittently
+  dropped. `containsProhibitedCertaintyLanguage`'s bare-word regex matched
+  "confirm"/"verified" regardless of grammar, rejecting correctly-hedged
+  real model output: reasoning ending "...not a confirmed cause" (a
+  negation) and a `recommendedNextStep` using "to confirm signal presence"
+  (confirm as a legitimate verification-action verb — exactly the hedged
+  behavior the system prompt asks for). Narrowed
+  `PROHIBITED_CERTAINTY_PATTERN` (now `PROHIBITED_CERTAINTY_PATTERNS`, an
+  array) in `src/lib/hypotheses/generate-hypotheses.ts` to match the
+  grammatical certainty-CLAIM shape only — "is/are/was/were
+  confirmed/verified/proven" and "confirmed/verified/proven as/to be" —
+  while `root cause`, `definitely`, and `guarantee[sd]?` stay unconditional
+  (no comparable benign usage found). Added a regression test with the
+  exact live-observed false-positive strings. The temporary diagnostic
+  `console.warn` added mid-investigation (echoed rejected hypothesis title/
+  reasoning/recommendedNextStep) was removed — content must not be logged
+  server-side (product/measurement data is confidential); the existing
+  count-only `[analysis:runId] rejected N ...` warning in
+  `run-analysis.ts` is the permanent, safe observability signal.
+- Verification: `pnpm test` (65/65), `pnpm typecheck`, `pnpm lint` all pass.
+  Live re-run (real browser session via chrome-devtools MCP, real signed-in
+  smoke user, seeded Gateway X case — 40 MHz clock, 200 MHz / +7.4 dB
+  measurement during "WiFi TX + display active") produced the full sequence
+  `run.started → measurement.loaded → correlation.found → hypothesis.created
+  → clarification.required → run.completed`, zero rejected hypotheses.
+  Confirmed: `correlation.found` carries `sourceFrequencyMhz: 40,
+  harmonicNumber: 5, expectedFrequencyMhz: 200, deviationRatio: 0` with the
+  correlating `productFactId` intact (provenance preserved); the
+  hypothesis's `evidence` array is `[observed, known, inferred, missing x5]`
+  in that order; the hypothesis title/reasoning/recommendedNextStep contain
+  no root-cause or certainty claims ("plausible harmonic relationship worth
+  investigating", "worth investigating as a contributor"); the
+  `clarificationQuestion` is a genuine, well-hedged missing-fact question.
+  Persistence confirmed by direct Postgres query: all 6
+  `analysis_events` rows present in the same order, `analysis_runs.status =
+  'completed'`. Smoke-test user deleted afterward.
+- Files changed: `src/lib/ai/provider.ts`, `src/lib/ai/provider.test.ts`
+  (new), `.env.example`, `src/lib/analysis/run-analysis.ts`,
+  `src/lib/hypotheses/generate-hypotheses.ts`,
+  `src/lib/hypotheses/generate-hypotheses.test.ts`.
+- Remaining: none. MVP-09 not started per explicit instruction.
+- Commit: (see git log)

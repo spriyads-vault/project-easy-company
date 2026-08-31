@@ -45,15 +45,27 @@ export interface GenerateHypothesesResult {
   rejectedCount: number;
 }
 
-// Anything reading as a certainty/verdict claim, in title, reasoning,
-// recommendedNextStep, or the clarification question. Belt-and-suspenders
-// on top of the system prompt and the schema's field-level constraints —
-// none of these are trusted alone.
-const PROHIBITED_CERTAINTY_PATTERN =
-  /\b(root[\s-]?cause|confirm(ed|s)?|definitely|proven|guarantee[sd]?|verified)\b/i;
+// Overclaim = a grammatical certainty CLAIM about the hypothesis itself
+// ("is confirmed", "confirmed as the cause"), not the bare word. Live-testing
+// found the original bare-word version rejecting well-hedged, correct model
+// output: "not a confirmed cause" (a negation) and "to confirm signal
+// presence" (confirm used as a legitimate verification-action verb, exactly
+// the hedged recommendedNextStep behavior this exists to encourage) were
+// both getting discarded purely because they contained "confirm". "root
+// cause", "definitely", "proven"/"guarantee[sd]" have no comparable benign
+// usage in this context, so those stay as unconditional blocks.
+// Belt-and-suspenders on top of the system prompt and the schema's
+// field-level constraints — none of these are trusted alone.
+const PROHIBITED_CERTAINTY_PATTERNS: readonly RegExp[] = [
+  /\broot[\s-]?cause\b/i,
+  /\bdefinitely\b/i,
+  /\bguarantee[sd]?\b/i,
+  /\b(?:is|are|was|were)\s+(?:confirmed|verified|proven)\b/i,
+  /\b(?:confirmed|verified|proven)\s+(?:as|to\s+be)\b/i,
+];
 
 export function containsProhibitedCertaintyLanguage(text: string): boolean {
-  return PROHIBITED_CERTAINTY_PATTERN.test(text);
+  return PROHIBITED_CERTAINTY_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 export function buildObservedEvidence(
@@ -137,6 +149,9 @@ export async function generateHypothesesForMeasurement(
       containsProhibitedCertaintyLanguage(modelHypothesis.recommendedNextStep);
 
     if (!candidate || overclaims) {
+      // Content is deliberately not logged here — hypothesis text can
+      // reference confidential product facts. run-analysis.ts logs a
+      // count-only warning per run for operator observability instead.
       rejectedCount += 1;
       continue;
     }
