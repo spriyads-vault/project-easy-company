@@ -10,10 +10,16 @@ const eslintConfig = defineConfig([
       // Server actions passed to useActionState always take (prevState,
       // formData) even when a given action ignores one or both — e.g. an
       // action with no form fields, or one that doesn't need the previous
-      // state. Leading-underscore params mark that intentionally.
+      // state. Leading-underscore params/vars mark that intentionally, and
+      // destructuring-to-omit-a-property (`const { x: _x, ...rest } = y`)
+      // is a legitimate unused binding too.
       "@typescript-eslint/no-unused-vars": [
         "warn",
-        { argsIgnorePattern: "^_" },
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
       ],
     },
   },

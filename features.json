@@ -94,7 +94,7 @@
       "depends_on": [
         "MVP-06"
       ],
-      "passes": false,
+      "passes": true,
       "acceptance": [
         "Zod-validated output",
         "observed/known/inferred/missing separated",

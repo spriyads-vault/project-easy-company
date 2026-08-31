@@ -1,10 +1,12 @@
 # Claude Progress
 
 ## Current state
-MVP-01 through MVP-06 done. Auth, workspace isolation, the full core domain
-schema, product/revision/fact entry, failure-case + measurement entry, and
-the deterministic harmonic correlation engine work end-to-end against a
-local Supabase instance (`supabase start`).
+MVP-01 through MVP-07 done. Auth, workspace isolation, the full core domain
+schema, product/revision/fact entry, failure-case + measurement entry, the
+deterministic harmonic correlation engine, and the AI structured hypothesis
+service all work, tested, against a local Supabase instance
+(`supabase start`). MVP-07's service is not yet wired into a UI/route —
+that's MVP-08 (streaming) and MVP-09 (workspace UI).
 
 ## Session handoff format
 Append one entry per completed/paused ticket:
@@ -325,4 +327,80 @@ Append one entry per completed/paused ticket:
   this module's correlation output plus product/measurement context,
   generates ranked hypotheses with every statement labeled OBSERVED/KNOWN/
   INFERRED/MISSING, behind a provider adapter, Zod-validated. No blockers.
+- Commit: (see git log)
+
+### 2026-08-31 — MVP-07
+- Completed: `src/lib/ai/provider.ts` — the one file allowed to know Crado
+  uses Anthropic (`@ai-sdk/anthropic` + Vercel AI SDK `generateObject`).
+  Exposes only `HypothesisModelAdapter` (one method,
+  `generateHypotheses(input): Promise<output>`); every other module depends
+  on that interface, never on the SDK. `src/lib/hypotheses/schema.ts` — Zod
+  contracts for both directions of the model boundary. The load-bearing
+  design choice: `modelHypothesisSchema` has no field for OBSERVED or KNOWN
+  evidence at all — only `reasoning` (→ INFERRED) and `missingEvidence`
+  (→ MISSING). The model structurally cannot claim something is observed or
+  known; there's no field to put it in, not just a prompt asking it not to.
+  `src/lib/hypotheses/generate-hypotheses.ts` — orchestrates: builds
+  OBSERVED evidence from the real measurement and KNOWN evidence from real
+  product facts (both deterministic, no model involved), calls the adapter
+  for INFERRED reasoning + MISSING evidence per hypothesis, then two
+  independent guards before anything is trusted: (1) a hypothesis's
+  `productFactId` must match one of the correlation candidates it was
+  actually given — a hallucinated id is dropped; (2) title/reasoning/
+  recommendedNextStep/clarificationQuestion are scanned for certainty
+  language ("root cause", "confirmed", "definitely", "proven", "guarantee",
+  "verified") — a match gets dropped/nulled regardless of what the schema
+  or prompt allowed through. Zero correlation candidates short-circuits
+  before ever calling the model (nothing legitimate to ground a hypothesis
+  on).
+- Tests: `pnpm lint`, `pnpm typecheck`, `pnpm test` (51 total, 22 new across
+  `schema.test.ts` and `generate-hypotheses.test.ts`), `pnpm build` all
+  pass. No live model call in any test — a fake `HypothesisModelAdapter`
+  (the same interface a real caller uses) drives every case: positive
+  (full OBSERVED→KNOWN→INFERRED→MISSING assembly, evidence in that exact
+  order), the hallucinated-productFactId guard, the certainty-language
+  guard (title, reasoning, and a would-be clarification question all
+  tested separately), missing-data (empty candidates never call the
+  adapter at all — asserted via a spy), and boundary cases (a passing vs.
+  failing margin's OBSERVED wording, a hypothesis assembled with no
+  matching product fact loaded). `schema.test.ts` separately proves the
+  model's Zod shape has exactly 6 fields (none of them evidence/category)
+  and that a smuggled `category` field is stripped by `.parse()` rather
+  than trusted.
+- Files/areas changed: `src/lib/ai/provider.ts`,
+  `src/lib/hypotheses/{schema,schema.test,generate-hypotheses,
+  generate-hypotheses.test}.ts`, `package.json` (added `ai`,
+  `@ai-sdk/anthropic`). `eslint.config.mjs`: added `varsIgnorePattern: "^_"`
+  and `ignoreRestSiblings: true` alongside the existing `argsIgnorePattern`
+  (needed for a `const { x: _omit, ...rest } = obj` pattern in a test).
+- Decisions (reversible, made per CLAUDE.md autonomy rules):
+  - Model id defaults to `claude-sonnet-5`, overridable via
+    `CRADO_HYPOTHESIS_MODEL` — per the session's own guidance to default to
+    the latest Claude models, and kept out of application code so changing
+    it is a one-line env var, not a code change.
+  - This service takes already-loaded data (measurement, correlation
+    candidates, product facts) and returns a result — no Supabase client,
+    no fetching. Whatever calls it (an API route in MVP-08) owns loading
+    data and persisting/streaming the result, matching MVP-06's same
+    "one job, no I/O" shape and keeping this fully unit-testable without a
+    live database or model key.
+  - Rejected hypotheses aren't silently dropped from observability:
+    `rejectedCount` is returned so a caller can log/monitor "the model
+    proposed N hypotheses that violated the certainty/grounding rules"
+    without ever surfacing them to a user.
+  - Not wired into any route/page yet — there's nothing for MVP-07's
+    acceptance criteria to attach to in the UI until MVP-08 (streaming
+    events) and MVP-09 (the investigation workspace) exist. Wiring it in
+    now would mean building throwaway UI just to prove the service works,
+    when the fake-adapter unit tests already prove that directly.
+- Remaining: none for MVP-07.
+- Next recommended ticket: MVP-08 (Typed streaming analysis events) — an
+  AnalysisRun/AnalysisEvent-backed API route that runs ingest → correlation
+  (MVP-06) → hypothesis generation (MVP-07) → persistence, streaming typed
+  events via the Vercel AI SDK data stream, with events persisted so a
+  refresh can reconstruct partial/completed state. Needs a real
+  `ANTHROPIC_API_KEY` in `.env.local` to exercise the live model path handoff
+  — Claude has not been given one; ask before assuming it's available, or
+  test the wiring against the fake adapter and note the live-model path as
+  unverified until a key is supplied.
 - Commit: (see git log)
