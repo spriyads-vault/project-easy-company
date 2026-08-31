@@ -80,7 +80,7 @@
         "MVP-04",
         "MVP-05"
       ],
-      "passes": false,
+      "passes": true,
       "acceptance": [
         "40MHz x5 identifies 200MHz candidate",
         "negative/missing-data/boundary tests pass",

@@ -1,9 +1,10 @@
 # Claude Progress
 
 ## Current state
-MVP-01 through MVP-05 done. Auth, workspace isolation, the full core domain
-schema, product/revision/fact entry, and failure-case + measurement entry
-work end-to-end against a local Supabase instance (`supabase start`).
+MVP-01 through MVP-06 done. Auth, workspace isolation, the full core domain
+schema, product/revision/fact entry, failure-case + measurement entry, and
+the deterministic harmonic correlation engine work end-to-end against a
+local Supabase instance (`supabase start`).
 
 ## Session handoff format
 Append one entry per completed/paused ticket:
@@ -270,4 +271,58 @@ Append one entry per completed/paused ticket:
   candidates (e.g. 40 MHz × 5 = 200 MHz), with positive/negative/missing-
   data/boundary tests and provenance back to the input facts. No blockers;
   both its dependencies (MVP-04, MVP-05) now pass.
+- Commit: (see git log)
+
+### 2026-08-31 — MVP-06
+- Completed: `src/lib/correlation/harmonic-correlation.ts` — pure TypeScript,
+  zero I/O, zero model calls, no DB dependency. `extractFrequencySources`
+  reduces raw `ProductFact` records (the discriminated union from MVP-04) to
+  the subset that carry a characteristic frequency (clocks always; radios
+  and switching power rails only if one was entered — cables/other never
+  do). `findHarmonicCorrelations(measuredFrequencyMhz, sources, options)`
+  finds, for each source, the single closest-matching integer harmonic N
+  such that `sourceFrequencyMhz x N ≈ measuredFrequencyMhz` within a
+  configurable tolerance (default 1% of the measured frequency, 25 max
+  harmonic), and `correlateMeasurementWithProductFacts` chains both in one
+  call. Every candidate carries `productFactId`/`productFactCategory`/
+  `productFactLabel` (provenance) and a `description` phrased as "consistent
+  with", never "caused by"/"confirmed"/"proves" — enforced by a test, not
+  just a comment.
+- Tests: `pnpm lint`, `pnpm typecheck`, `pnpm test` (29 total, 17 new in
+  `harmonic-correlation.test.ts`), `pnpm build` all pass. Coverage:
+  positive (Gateway X's 40 MHz clock → 200 MHz via the 5th harmonic, the
+  exact case CLAUDE.md calls out), negative (137 MHz matches nothing),
+  missing-data (no facts at all; facts present but none carry a frequency —
+  cable/power-without-switching-frequency correctly excluded), and boundary
+  cases (fundamental match at N=1, a match just outside the 1% tolerance
+  rejected, one just inside accepted, a harmonic number above the 25 cap
+  rejected even though the arithmetic works, a non-positive measured
+  frequency throws `RangeError`, a malformed zero-frequency source is
+  skipped rather than throwing, one candidate per source rather than one
+  per near-hit, and stable sort order across three simultaneous matches).
+  No DB/integration test needed — this ticket has no persistence surface.
+- Files/areas changed: `src/lib/correlation/harmonic-correlation.ts`,
+  `src/lib/correlation/harmonic-correlation.test.ts`.
+- Decisions (reversible, made per CLAUDE.md autonomy rules):
+  - 1% default tolerance and 25 max harmonic number are documented,
+    overridable constants (`CorrelationOptions`), not hardcoded — a real
+    EMC engineer's tolerance judgment (MVP-07 or later product feedback) can
+    override them without touching this module's logic.
+  - Only the single closest-matching harmonic per source is returned, not
+    every N within tolerance — avoids near-duplicate, confusing entries for
+    the same fact at slightly different harmonic numbers.
+  - No "confidence" or ranking score on a candidate — only the raw
+    harmonic number, expected frequency, and deviation. Semantic labeling
+    (INFERRED, confidence band, ranked hypothesis) is MVP-07's job; this
+    layer stays strictly deterministic and un-opinionated about likelihood,
+    per the user's explicit instruction not to imply root-cause proof here.
+  - Kept this DB-free by design: it operates on plain `ProductFactRecord[]`
+    (id + the same discriminated fact shape from MVP-04's Zod schema), so
+    MVP-07 (or a future caller) is responsible for loading facts and
+    persisting/streaming the result — this utility has one job.
+- Remaining: none for MVP-06.
+- Next recommended ticket: MVP-07 (AI structured hypothesis service) — takes
+  this module's correlation output plus product/measurement context,
+  generates ranked hypotheses with every statement labeled OBSERVED/KNOWN/
+  INFERRED/MISSING, behind a provider adapter, Zod-validated. No blockers.
 - Commit: (see git log)
