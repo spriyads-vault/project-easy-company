@@ -1,7 +1,8 @@
 # Claude Progress
 
 ## Current state
-MVP-01 and MVP-02 done. Auth + workspace isolation work end-to-end against a
+MVP-01, MVP-02, MVP-03 done. Auth, workspace isolation, and the full core
+domain schema (Product through EngineeringChange) work end-to-end against a
 local Supabase instance (`supabase start`).
 
 ## Session handoff format
@@ -106,4 +107,61 @@ Append one entry per completed/paused ticket:
   `workspaces` table with Product/ProductRevision/FailureCase/Measurement/
   AnalysisRun/AnalysisEvent/Hypothesis/InvestigationEvent/EngineeringChange,
   all workspace-scoped with the same RLS pattern. No blockers.
+- Commit: (see git log)
+
+### 2026-08-31 — MVP-03
+- Completed: One migration adding the full core domain schema from CLAUDE.md
+  ("Core domain objects"), minus RegulatoryRequirement/RegulatoryEvidenceLink
+  which are deferred to MVP-12 (their shape isn't clear yet and building them
+  now would be speculative): products, product_revisions, product_facts,
+  failure_cases, measurements, measurement_peaks, analysis_runs,
+  analysis_events (event_type constrained to the exact typed-event list in
+  docs/ARCHITECTURE.md), diagnostic_hypotheses, evidence_items (the
+  OBSERVED/KNOWN/INFERRED/MISSING categories), investigation_events, and
+  engineering_changes. Generated `src/lib/supabase/database.types.ts` from the
+  live schema and wired it into the browser/server Supabase client factories.
+  Added `src/lib/domain/schema.ts` with the Zod enums/schemas that mirror the
+  DB check constraints for model- and form-facing validation.
+- Tests: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` all pass.
+  `pnpm test:integration` (8 tests total now) additionally proves: the full
+  chain Product → ProductRevision → ProductFact/FailureCase → Measurement →
+  MeasurementPeak → AnalysisRun → AnalysisEvent → DiagnosticHypothesis →
+  EvidenceItem, plus InvestigationEvent and EngineeringChange, all persist for
+  one user; a second user cannot read the first user's `products` row (RLS);
+  and a user cannot create a `product_revisions` row under another user's
+  `products` row even by guessing its id — rejected by the composite foreign
+  key, not just RLS.
+- Files/areas changed:
+  `supabase/migrations/20260831035611_core_domain.sql`,
+  `src/lib/supabase/database.types.ts` (generated), `src/lib/supabase/{client,
+  server}.ts` (typed with `Database`), `src/lib/domain/schema.ts`,
+  `src/lib/domain/core-domain.integration.test.ts`.
+- Decisions (reversible, made per CLAUDE.md autonomy rules):
+  - Workspace isolation, extended: every table carries `workspace_id`, forced
+    server-side by a `BEFORE INSERT` trigger (`set_workspace_id()`, ignores
+    whatever the client sends) plus `default current_workspace_id()` so the
+    generated TypeScript Insert types don't require callers to pass it. RLS
+    (`for all using/with check workspace_id = current_workspace_id()`) gates
+    reads/writes; composite foreign keys `(child_id, workspace_id) ->
+    parent(id, workspace_id)` gate cross-workspace references that RLS alone
+    wouldn't catch (a guessed parent UUID). This is the standard Postgres
+    multi-tenancy pattern, not a custom invention.
+  - `measurement_peaks.margin_db` is dB relative to the regulatory limit
+    (positive = over/fail, negative = under/pass), matching
+    docs/MVP_SCOPE.md's "+7.4 dB" / "-3.6 dB" happy path and making the
+    before/after delta (MVP-11) a plain subtraction.
+  - `failure_cases.test_type` is DB-constrained to exactly
+    `'radiated_emissions'` — the product-truth rule against implying broad
+    EMC family coverage is enforced in schema, not just UI copy.
+  - `product_facts.fact` and `evidence_items.source_ref` are `jsonb`,
+    validated by Zod at the application layer (`src/lib/domain/schema.ts`)
+    rather than more DB columns, so new fact/evidence shapes in MVP-04/07
+    don't need a migration.
+  - `investigation_events` (durable, engineer-facing case timeline) is
+    deliberately separate from `analysis_events` (the AI pipeline's own typed
+    stream) — they answer different questions and have different consumers.
+- Remaining: none for MVP-03. Local Supabase stack still running.
+- Next recommended ticket: MVP-04 (Product context entry) — UI + server
+  actions for creating a product/revision and entering structured
+  clocks/radios/power/cables facts against `product_facts`. No blockers.
 - Commit: (see git log)
