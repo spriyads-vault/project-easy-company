@@ -24,7 +24,7 @@
       "depends_on": [
         "MVP-01"
       ],
-      "passes": false,
+      "passes": true,
       "acceptance": [
         "sign in/out works",
         "workspace-owned tables use RLS",
