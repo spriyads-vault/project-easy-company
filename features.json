@@ -1,0 +1,236 @@
+{
+  "rules": {
+    "edit_policy": "Only change passes after acceptance criteria genuinely pass. Never delete a feature to make progress look better.",
+    "priority_policy": "Work lowest priority number first when dependencies pass."
+  },
+  "features": [
+    {
+      "id": "MVP-01",
+      "priority": 1,
+      "title": "Project skeleton and quality gates",
+      "depends_on": [],
+      "passes": true,
+      "acceptance": [
+        "Next.js TypeScript app runs",
+        "lint/typecheck/test/build commands exist",
+        "env example exists",
+        "baseline commit clean"
+      ]
+    },
+    {
+      "id": "MVP-02",
+      "priority": 2,
+      "title": "Supabase auth and workspace isolation",
+      "depends_on": [
+        "MVP-01"
+      ],
+      "passes": false,
+      "acceptance": [
+        "sign in/out works",
+        "workspace-owned tables use RLS",
+        "cross-user access test fails safely"
+      ]
+    },
+    {
+      "id": "MVP-03",
+      "priority": 3,
+      "title": "Core domain schema",
+      "depends_on": [
+        "MVP-02"
+      ],
+      "passes": false,
+      "acceptance": [
+        "Product/ProductRevision/FailureCase/Measurement/AnalysisRun/AnalysisEvent/Hypothesis/InvestigationEvent/EngineeringChange persist",
+        "migrations versioned"
+      ]
+    },
+    {
+      "id": "MVP-04",
+      "priority": 4,
+      "title": "Product context entry",
+      "depends_on": [
+        "MVP-03"
+      ],
+      "passes": false,
+      "acceptance": [
+        "user can create product revision",
+        "structured clocks/radios/power/cables facts can be entered",
+        "facts persist"
+      ]
+    },
+    {
+      "id": "MVP-05",
+      "priority": 5,
+      "title": "Failure case and measurement entry",
+      "depends_on": [
+        "MVP-03"
+      ],
+      "passes": false,
+      "acceptance": [
+        "radiated emissions case can be created",
+        "frequency/margin/operating mode stored",
+        "validation exists"
+      ]
+    },
+    {
+      "id": "MVP-06",
+      "priority": 6,
+      "title": "Deterministic correlation engine",
+      "depends_on": [
+        "MVP-04",
+        "MVP-05"
+      ],
+      "passes": false,
+      "acceptance": [
+        "40MHz x5 identifies 200MHz candidate",
+        "negative/missing-data/boundary tests pass",
+        "result contains provenance to input facts"
+      ]
+    },
+    {
+      "id": "MVP-07",
+      "priority": 7,
+      "title": "AI structured hypothesis service",
+      "depends_on": [
+        "MVP-06"
+      ],
+      "passes": false,
+      "acceptance": [
+        "Zod-validated output",
+        "observed/known/inferred/missing separated",
+        "unsupported certainty prevented",
+        "provider hidden behind adapter"
+      ]
+    },
+    {
+      "id": "MVP-08",
+      "priority": 8,
+      "title": "Typed streaming analysis events",
+      "depends_on": [
+        "MVP-07"
+      ],
+      "passes": false,
+      "acceptance": [
+        "analysis emits typed events",
+        "events persist",
+        "refresh can reconstruct completed/partial state",
+        "failure event handled"
+      ]
+    },
+    {
+      "id": "MVP-09",
+      "priority": 9,
+      "title": "Investigation workspace UI",
+      "depends_on": [
+        "MVP-08"
+      ],
+      "passes": false,
+      "acceptance": [
+        "three-region workspace works on desktop",
+        "responsive mobile layout",
+        "hypothesis evidence visible",
+        "composer records observation"
+      ]
+    },
+    {
+      "id": "MVP-10",
+      "priority": 10,
+      "title": "Observation updates hypothesis",
+      "depends_on": [
+        "MVP-09"
+      ],
+      "passes": false,
+      "acceptance": [
+        "observation persists",
+        "analysis can update evidence/hypothesis",
+        "does not convert inference to fact without evidence"
+      ]
+    },
+    {
+      "id": "MVP-11",
+      "priority": 11,
+      "title": "Engineering change and second measurement",
+      "depends_on": [
+        "MVP-10"
+      ],
+      "passes": false,
+      "acceptance": [
+        "change tied to revision",
+        "new measurement stored",
+        "before/after delta calculated and shown"
+      ]
+    },
+    {
+      "id": "MVP-12",
+      "priority": 12,
+      "title": "Basic Regulatory State evidence linkage",
+      "depends_on": [
+        "MVP-11"
+      ],
+      "passes": false,
+      "acceptance": [
+        "measurement evidence tied to product revision",
+        "older revision evidence retained as historical",
+        "no broad compliance verdict"
+      ]
+    },
+    {
+      "id": "MVP-13",
+      "priority": 13,
+      "title": "Pilot file upload",
+      "depends_on": [
+        "MVP-05"
+      ],
+      "passes": false,
+      "acceptance": [
+        "private upload works",
+        "type/size validation",
+        "metadata saved",
+        "manual fallback remains available"
+      ]
+    },
+    {
+      "id": "MVP-14",
+      "priority": 14,
+      "title": "Gateway X demo case",
+      "depends_on": [
+        "MVP-12"
+      ],
+      "passes": false,
+      "acceptance": [
+        "seed case reproduces documented happy path",
+        "no developer DB editing required"
+      ]
+    },
+    {
+      "id": "MVP-15",
+      "priority": 15,
+      "title": "Critical E2E and security test",
+      "depends_on": [
+        "MVP-14",
+        "MVP-13"
+      ],
+      "passes": false,
+      "acceptance": [
+        "happy path passes end-to-end",
+        "cross-user access blocked",
+        "stream refresh/recovery verified"
+      ]
+    },
+    {
+      "id": "MVP-16",
+      "priority": 16,
+      "title": "Production deployment",
+      "depends_on": [
+        "MVP-15"
+      ],
+      "passes": false,
+      "acceptance": [
+        "production build healthy",
+        "smoke check passes",
+        "private data remains private",
+        "demo accessible to invited pilot user"
+      ]
+    }
+  ]
+}
