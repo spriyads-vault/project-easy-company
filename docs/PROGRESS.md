@@ -1,9 +1,9 @@
 # Claude Progress
 
 ## Current state
-MVP-01, MVP-02, MVP-03 done. Auth, workspace isolation, and the full core
-domain schema (Product through EngineeringChange) work end-to-end against a
-local Supabase instance (`supabase start`).
+MVP-01 through MVP-04 done. Auth, workspace isolation, the full core domain
+schema, and product/revision/fact entry (clocks, radios, power, cables) work
+end-to-end against a local Supabase instance (`supabase start`).
 
 ## Session handoff format
 Append one entry per completed/paused ticket:
@@ -164,4 +164,52 @@ Append one entry per completed/paused ticket:
 - Next recommended ticket: MVP-04 (Product context entry) — UI + server
   actions for creating a product/revision and entering structured
   clocks/radios/power/cables facts against `product_facts`. No blockers.
+- Commit: (see git log)
+
+### 2026-08-31 — MVP-04
+- Completed: `/workspace` lists products and has a "new product" form
+  (creates a `products` row + its first `product_revisions` row in one
+  action, then redirects into the new revision). `/products/[productId]`
+  lists revisions and has a "new revision" form. `/products/[productId]/
+  revisions/[revisionId]` shows structured facts and a category-aware "add a
+  fact" form (clock/radio/power/cable/other), each with the real fields for
+  that category rather than a generic key/value box.
+- Tests: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`,
+  `pnpm test:integration` all pass. Added `src/lib/domain/schema.test.ts`:
+  positive case (valid clock fact), negative case (missing frequencyMhz),
+  boundary case (frequencyMhz = 0 rejected), a discriminated-shape case
+  (cable's `shielded` field must not satisfy clock's shape), a second
+  positive case (cable fact), and the default-source case. Also drove the
+  full flow in a real browser (chrome-devtools MCP against `pnpm dev`):
+  signed up → created "Gateway X" / Rev17 → added a 40 MHz clock fact →
+  switched the form to "Cable / connector" (fields re-rendered correctly) →
+  added a shielded display-ribbon-cable fact → both facts survived a fresh
+  navigation. Smoke-test user deleted afterward via the admin API.
+- Files/areas changed: `src/lib/domain/schema.ts` (clock/radio/power/cable/
+  other fact schemas as a `discriminatedUnion` on `category`, replacing the
+  earlier open `z.record`), `src/lib/domain/schema.test.ts`,
+  `src/lib/products/queries.ts` (list/get product, get revision + facts),
+  `src/app/products/actions.ts` (createProduct), `src/app/products/
+  [productId]/{page,actions,new-revision-form}.tsx`, `src/app/products/
+  [productId]/revisions/[revisionId]/{page,actions,add-fact-form}.tsx`,
+  `src/app/workspace/{page,new-product-form}.tsx`.
+- Decisions (reversible, made per CLAUDE.md autonomy rules):
+  - Product facts are a real discriminated union (clock has `frequencyMhz`,
+    cable has `shielded`, etc.), not a generic bag of properties — matches
+    "structured clocks/radios/power/cables facts" in the acceptance
+    criteria and keeps the extraction pipeline (MVP-07+) grounded in a fixed
+    contract rather than free-form JSON.
+  - Creating a product always creates its first revision in the same action
+    (one form, one redirect into the revision page) — a product with zero
+    revisions isn't a useful state for anything downstream, so there's no
+    reason to make it a separate step.
+  - Kept the UI to plain HTML form elements (native `<select>`, checkbox) at
+    this stage rather than a component library — nothing here needs more
+    than that yet, and CLAUDE.md rules out generic component-library
+    sprawl over restrained, purpose-built UI.
+- Remaining: none for MVP-04. Local Supabase stack still running.
+- Next recommended ticket: MVP-05 (Failure case and measurement entry) —
+  radiated-emissions `failure_cases` + `measurements`/`measurement_peaks`
+  entry against a product revision, with validation. No blockers; schema
+  already supports it (MVP-03).
 - Commit: (see git log)

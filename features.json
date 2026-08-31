@@ -51,7 +51,7 @@
       "depends_on": [
         "MVP-03"
       ],
-      "passes": false,
+      "passes": true,
       "acceptance": [
         "user can create product revision",
         "structured clocks/radios/power/cables facts can be entered",

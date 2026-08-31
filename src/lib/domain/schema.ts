@@ -63,9 +63,79 @@ export const measurementPeakInputSchema = z.object({
 });
 export type MeasurementPeakInput = z.infer<typeof measurementPeakInputSchema>;
 
-export const productFactInputSchema = z.object({
-  category: productFactCategorySchema,
-  fact: z.record(z.string(), z.unknown()),
-  source: z.enum(["user_entered", "extracted"]).default("user_entered"),
+// Per-category fact shapes. `fact` is stored as jsonb (see
+// supabase/migrations/20260831035611_core_domain.sql) so new categories or
+// fields don't need a migration, but every category the app actually
+// supports gets a real, validated shape here rather than an open bag of
+// properties.
+export const clockFactSchema = z.object({
+  label: z.string().trim().min(1, "Give this clock a label."),
+  frequencyMhz: z.number().positive("Frequency must be greater than 0."),
 });
+export type ClockFact = z.infer<typeof clockFactSchema>;
+
+export const radioFactSchema = z.object({
+  label: z.string().trim().min(1, "Give this radio a label."),
+  technology: z
+    .string()
+    .trim()
+    .min(1, "e.g. WiFi 2.4GHz, BLE, LoRa."),
+  frequencyMhz: z.number().positive().optional(),
+});
+export type RadioFact = z.infer<typeof radioFactSchema>;
+
+export const powerFactSchema = z.object({
+  label: z.string().trim().min(1, "Give this power rail a label."),
+  topology: z
+    .string()
+    .trim()
+    .min(1, "e.g. switching regulator, linear regulator."),
+  switchingFrequencyMhz: z.number().positive().optional(),
+});
+export type PowerFact = z.infer<typeof powerFactSchema>;
+
+export const cableFactSchema = z.object({
+  label: z.string().trim().min(1, "Give this cable/connector a label."),
+  shielded: z.boolean(),
+});
+export type CableFact = z.infer<typeof cableFactSchema>;
+
+export const otherFactSchema = z.object({
+  label: z.string().trim().min(1, "Give this fact a label."),
+  notes: z.string().trim().min(1).optional(),
+});
+export type OtherFact = z.infer<typeof otherFactSchema>;
+
+export const factSourceSchema = z.enum(["user_entered", "extracted"]);
+export type FactSource = z.infer<typeof factSourceSchema>;
+
+// Discriminated on `category` so a clock fact can never be missing
+// frequencyMhz, a cable fact can never be missing shielded, etc.
+export const productFactInputSchema = z.discriminatedUnion("category", [
+  z.object({
+    category: z.literal("clock"),
+    fact: clockFactSchema,
+    source: factSourceSchema.default("user_entered"),
+  }),
+  z.object({
+    category: z.literal("radio"),
+    fact: radioFactSchema,
+    source: factSourceSchema.default("user_entered"),
+  }),
+  z.object({
+    category: z.literal("power"),
+    fact: powerFactSchema,
+    source: factSourceSchema.default("user_entered"),
+  }),
+  z.object({
+    category: z.literal("cable"),
+    fact: cableFactSchema,
+    source: factSourceSchema.default("user_entered"),
+  }),
+  z.object({
+    category: z.literal("other"),
+    fact: otherFactSchema,
+    source: factSourceSchema.default("user_entered"),
+  }),
+]);
 export type ProductFactInput = z.infer<typeof productFactInputSchema>;
