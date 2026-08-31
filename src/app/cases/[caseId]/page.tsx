@@ -30,6 +30,12 @@ export default async function CasePage({ params }: CasePageProps) {
           {failureCase.productName} · {failureCase.revisionLabel} ·{" "}
           {failureCase.status}
         </p>
+        <Link
+          href={`/cases/${failureCase.id}/investigation`}
+          className="mt-2 self-start rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background"
+        >
+          Open investigation workspace
+        </Link>
       </div>
 
       <div className="grid gap-8 md:grid-cols-2">

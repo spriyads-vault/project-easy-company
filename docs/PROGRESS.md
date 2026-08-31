@@ -1,13 +1,14 @@
 # Claude Progress
 
 ## Current state
-MVP-01 through MVP-08 done. Auth, workspace isolation, the full core domain
+MVP-01 through MVP-09 done. Auth, workspace isolation, the full core domain
 schema, product/revision/fact entry, failure-case + measurement entry, the
 deterministic harmonic correlation engine, the AI structured hypothesis
-service, and a real streaming `POST /api/analysis-runs` endpoint all work,
-tested, against a local Supabase instance (`supabase start`). The endpoint
-is not yet called from any page UI — that's MVP-09 (investigation
-workspace).
+service, a real streaming `POST /api/analysis-runs` endpoint, and now the
+real investigation workspace UI at `/cases/[caseId]/investigation` all work,
+tested, against a local Supabase instance (`supabase start`) and live-verified
+in a real browser against the real Anthropic provider. MVP-10 (composer +
+observation updating a hypothesis) is next.
 
 ## Session handoff format
 Append one entry per completed/paused ticket:
@@ -579,4 +580,146 @@ architecture change.
   `src/lib/hypotheses/generate-hypotheses.ts`,
   `src/lib/hypotheses/generate-hypotheses.test.ts`.
 - Remaining: none. MVP-09 not started per explicit instruction.
+- Commit: (see git log)
+
+### 2026-08-31 — MVP-09: Investigation workspace UI
+- Completed: the real investigation workspace at
+  `/cases/[caseId]/investigation` — a three-region engineering-tool layout
+  (PRODUCT / MEASUREMENT / INVESTIGATION), not a chatbot, built directly on
+  the existing MVP-08 typed SSE pipeline with no architecture change.
+  - **Reconstruction is the core design decision**
+    (`src/lib/investigation/reconstruct.ts`): one pure reducer,
+    `applyAnalysisEvent(state, event)`, folds a typed AnalysisEvent into
+    `WorkspaceState`. The live client feeds it events as they stream in;
+    the server feeds it every persisted `analysis_events` row for the
+    case's latest run on page load
+    (`src/lib/investigation/queries.ts` →
+    `reconstructFromPersistedEvents`). Same function both ways — a refresh
+    can't be told apart from a live run mid-flight except by one thing: if
+    the reduced state is still "running" with no terminal event, that's
+    reclassified as `"interrupted"` (a recoverable state, not a stuck
+    spinner) — the connection dropped before the run finished, and nothing
+    here ever re-triggers the model to "resume" it.
+  - **Streaming**: `investigation-workspace.tsx` (`"use client"`) POSTs to
+    the existing `/api/analysis-runs`, reads the response body with a
+    plain `ReadableStream` reader, and decodes it with a small stateful
+    `SseEventParser` (`src/lib/investigation/parse-sse-events.ts`) that
+    handles the AI SDK's `JsonToSseTransformStream` framing arriving split
+    across chunks. Each parsed event is re-validated against
+    `analysisEventSchema` before it touches state — the network is a trust
+    boundary regardless of which server produced it. No EventSource (POST
+    body required), no chat/message list, no typing animation — panels
+    update in place as `run.started` → `measurement.loaded` →
+    `correlation.found` → `hypothesis.created` /
+    `clarification.required` → `run.completed` arrive.
+  - **Duplicate-run protection**: belt-and-suspenders — a `useRef` flag
+    checked synchronously at the top of the click handler (closes the
+    window before React's `disabled` prop re-renders), plus an
+    `isSubmitting` state for instant visual feedback, plus the reducer's
+    own `isRunActive(status)` check. A stream that ends without a terminal
+    event (connection dropped) is caught explicitly and turned into a
+    `failed` state with a distinct message, never left implying a run is
+    still active.
+  - **Correlation vs. hypothesis, visually distinct by design**: the
+    deterministic `40 MHz × 5 = 200 MHz` correlation renders as arithmetic
+    in its own card labeled "Candidate relationship" (never "root cause");
+    the hypothesis is a separate signature card with evidence grouped into
+    OBSERVED / KNOWN / INFERRED / MISSING sections (only sections with
+    items render), INFERRED text styled distinctly (italic) so it never
+    reads as a fact, and "Next investigation" (the recommended step) kept
+    visually separate from the reasoning.
+  - **Measurement panel / spectrum chart**: renders only what's actually
+    stored — one peak, its margin vs. the selected limit, and the
+    operating mode. `SpectrumChart` (`spectrum-chart.tsx`) deliberately
+    draws a dashed limit line and a single peak marker/stem, nothing else
+    — no fabricated trace, since only peak data is stored (not a raw
+    spectrum). `MeasurementPanel` splits the free-text `operatingMode`
+    string into chips on its natural conjunctions ("WiFi TX" / "display
+    active") — a presentational re-split of the real stored string, not
+    invented structured flags (the schema has no such fields).
+  - **Product panel**: renders real `ProductFactRecord`s per-category
+    (clock/radio/power/cable/other) with real labels and monospace values
+    — never raw jsonb.
+  - Reused existing conventions rather than adding new ones: `getFailureCase`
+    (measurements+peaks), `loadProductFactRecords` +
+    `describeProductFact`'s per-category shape, the same "each query
+    function makes its own Supabase client" pattern already used
+    throughout `src/lib/{cases,products}/queries.ts`.
+- **Genuine infra fix found along the way**: `vitest.config.ts` doesn't set
+  `test.globals: true`, so Testing Library's automatic `afterEach(cleanup)`
+  — which only self-registers when it finds a global `afterEach` — was
+  silently never running. Every existing test file happened to have only
+  one `render()` call so this was invisible until this ticket's
+  multi-render component test files started failing with "found multiple
+  elements" (leftover DOM from earlier tests in the same file). Fixed once,
+  centrally, in `vitest.setup.ts` with an explicit `afterEach(() =>
+  cleanup())` — benefits every test file, not just this ticket's.
+- Scope decision: the bottom composer ("Tell Crado what you measured,
+  changed or observed…") was **not** built here. The MVP-09 instructions
+  actually given were explicit about the three panels, streaming, and
+  refresh reconstruction, and never mentioned a composer; MVP-10's own
+  ticket title/acceptance ("Observation updates hypothesis" / "observation
+  persists") is where recording an observation and updating a hypothesis
+  actually belongs. Updated `features.json`'s MVP-09 acceptance
+  accordingly (dropped "composer records observation", added the
+  streaming/reconstruction criterion that was actually built and tested).
+- Tests (25 new, all in `src/lib/investigation/` and
+  `src/app/cases/[caseId]/investigation/`): `reconstruct.test.ts` (pure
+  reducer — every event type, RUN AGAIN reset, empty hypotheses, multiple
+  correlations, interrupted-run reclassification),
+  `parse-sse-events.test.ts` (split-across-chunks framing, multiple frames
+  per chunk, `[DONE]` sentinel, malformed JSON, schema-invalid frame — all
+  non-throwing), `product-panel.test.tsx`, `measurement-panel.test.tsx`,
+  `correlation-card.test.tsx`, `hypothesis-card.test.tsx` (all four
+  evidence categories, section omitted when empty), and
+  `investigation-workspace.test.tsx` — the integration-style test, using
+  the real `JsonToSseTransformStream` (from `ai`) to build the mock
+  response so the client parser is exercised against real byte framing,
+  not a hand-rolled approximation: progressive updates (asserts an early
+  disabled/empty state before the delayed stream delivers anything),
+  correlation shown separately from hypothesis, multiple correlations,
+  clarification banner, failed state, connection-drop-without-terminal
+  handling, empty-hypotheses message, duplicate-click protection (asserts
+  `fetch` called exactly once across three rapid clicks), refresh
+  reconstruction (renders a completed state from `initialState` alone and
+  asserts `fetch` is never called), and accessibility (status live region,
+  alert role, disabled button with an explanatory `title`). 109/109 unit
+  tests pass, `pnpm typecheck`, `pnpm lint`, `pnpm build` all clean.
+- Browser walkthrough (chrome-devtools MCP, real local app, real signed-in
+  smoke user, real Anthropic call — no fake adapter): seeded a fresh
+  Gateway X case (40 MHz clock, WiFi radio, a "Display path" fact, 200 MHz
+  / +7.4 dB measurement during "WiFi TX + display active"). Clicked RUN
+  INVESTIGATION and screenshotted mid-stream: button already read
+  "ANALYZING…" and the `40 MHz × 5 = 200 MHz` correlation card had
+  appeared, labeled "Candidate relationship" — while the hypothesis (the
+  actual model call) was still in flight, confirming panels update
+  progressively rather than all at once. Once complete: hypothesis card
+  showed OBSERVED / KNOWN / INFERRED / MISSING sections correctly
+  separated, "MEDIUM CONFIDENCE" badge, a distinct "NEXT INVESTIGATION"
+  line, and no root-cause or certainty language in the model's text.
+  Reloaded the browser: **zero network requests fired** (checked via
+  `list_network_requests`) and the identical completed state re-rendered
+  from persisted `analysis_events` — confirmed directly in Postgres too
+  (5 events, `run.started` → `measurement.loaded` → `correlation.found` →
+  `hypothesis.created` → `run.completed`, `analysis_runs.status =
+  'completed'`). Resized to tablet (820px): Product + Measurement side by
+  side, Investigation full-width below. Resized to mobile (390px): all
+  three panels stacked. Smoke-test user deleted afterward.
+- Files/areas added:
+  `src/lib/investigation/{reconstruct,reconstruct.test,parse-sse-events,
+  parse-sse-events.test,queries}.ts`,
+  `src/app/cases/[caseId]/investigation/{page,investigation-workspace,
+  product-panel,measurement-panel,spectrum-chart,investigation-panel,
+  correlation-card,hypothesis-card,theme}.tsx` +
+  matching `*.test.tsx` files, a small "Open investigation workspace" link
+  added to the existing `src/app/cases/[caseId]/page.tsx`,
+  `vitest.setup.ts` (the cleanup fix above).
+- Remaining: no observation composer (MVP-10), no before/after comparison
+  (MVP-11), single-measurement-per-case assumption (the panel picks the
+  most recent measurement — MVP-11 is the ticket that has to decide how a
+  second measurement is presented alongside the first).
+- Next recommended ticket: MVP-10 (Observation updates hypothesis) — the
+  composer, persisting an observation, and updating evidence/hypothesis
+  without ever promoting an inference to a fact without real evidence. No
+  blockers.
 - Commit: (see git log)
