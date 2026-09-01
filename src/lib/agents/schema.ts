@@ -9,7 +9,7 @@
 // ID never returned by a tool call, is dropped before it ever reaches a
 // user — see validate-agent-output.ts.
 import { z } from "zod";
-import { confidenceBandSchema } from "@/lib/domain/schema";
+import { confidenceBandSchema, hypothesisUpdateStatusSchema } from "@/lib/domain/schema";
 
 // ---- What a tool call can be cited back to ----
 
@@ -69,6 +69,22 @@ export const agentHypothesisSchema = z.object({
     .max(500)
     .describe(
       "A suggestion for the next physical measurement or check a qualified engineer could perform — never an instruction to certify, ship, or declare compliance.",
+    ),
+  // MVP-11: only set when this hypothesis is a follow-up run's continuation
+  // of one returned by getPreviousHypotheses this run. Both null (not both
+  // set) if this is a fresh hypothesis with no earlier counterpart.
+  previousHypothesisId: z
+    .string()
+    .trim()
+    .min(1)
+    .nullable()
+    .describe(
+      "Set only if this hypothesis updates one returned by getPreviousHypotheses this run — its exact id. Never invent one; null if this is not a continuation of an earlier hypothesis.",
+    ),
+  hypothesisUpdateStatus: hypothesisUpdateStatusSchema
+    .nullable()
+    .describe(
+      "Set together with previousHypothesisId only: whether the new evidence gathered this run supports, weakens, leaves unchanged, or still needs more evidence for that previous hypothesis. A qualitative judgment only — never a probability, confidence score, or certainty claim.",
     ),
 });
 export type AgentHypothesis = z.infer<typeof agentHypothesisSchema>;

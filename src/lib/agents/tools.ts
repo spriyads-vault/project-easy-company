@@ -17,6 +17,8 @@ import type { Database } from "@/lib/supabase/database.types";
 import type { HarmonicCorrelationCandidate } from "@/lib/correlation/harmonic-correlation";
 import type { ProductFactForHypotheses } from "@/lib/hypotheses/generate-hypotheses";
 import type { MeasurementPeakRow } from "@/lib/cases/queries";
+import type { ConfidenceBand } from "@/lib/domain/schema";
+import { analysisEventSchema } from "@/lib/analysis/events";
 import {
   searchEngineeringDocuments,
   type EngineeringDocumentPassage,
@@ -51,9 +53,27 @@ export interface PreviousInvestigationSummary {
   createdAt: string;
 }
 
+// MVP-11: a hypothesis proposed in an earlier *completed* run of this same
+// failure case (never the run currently in flight — see the `status =
+// "completed"` filter below, which is what excludes it without needing to
+// know this run's own id). `id` is synthetic (`${runId}:${sequence}`) since
+// hypotheses have no dedicated table/primary key yet (they live only in
+// analysis_events payloads — see docs/PROGRESS.md's MVP-10B entry); it's
+// stable and derivable identically here and in
+// src/lib/agents/validate-agent-output.ts's registry.
+export interface PreviousHypothesisSummary {
+  id: string;
+  title: string;
+  confidenceBand: ConfidenceBand;
+  recommendedNextStep: string;
+  createdAt: string;
+}
+
 const MAX_DOCUMENT_SEARCH_RESULTS = 8;
 const MAX_PREVIOUS_REVISIONS = 5;
 const MAX_PREVIOUS_INVESTIGATIONS = 10;
+const MAX_PREVIOUS_HYPOTHESES = 10;
+const MAX_PREVIOUS_RUNS_FOR_HYPOTHESES = 5;
 
 const emptyInputSchema = z.object({});
 
@@ -173,6 +193,58 @@ export function createInvestigationTools(context: InvestigationToolsContext) {
           createdAt: row.created_at,
         }));
         return { events };
+      },
+    }),
+
+    getPreviousHypotheses: tool({
+      description:
+        "Returns hypotheses proposed in previous completed investigation runs for this failure case (most recent first) — their title, confidence, and recommended next step. Use this together with getPreviousInvestigations to judge whether new evidence supports, weakens, or leaves each one unchanged.",
+      inputSchema: emptyInputSchema,
+      execute: async (): Promise<{ hypotheses: PreviousHypothesisSummary[] }> => {
+        // status = "completed" is what excludes the run currently in
+        // flight (it's still "running" at the moment the agent calls this
+        // tool) without needing to know its own runId.
+        const { data: runRows } = await context.supabase
+          .from("analysis_runs")
+          .select("id")
+          .eq("failure_case_id", context.failureCase.id)
+          .eq("status", "completed")
+          .order("created_at", { ascending: false })
+          .limit(MAX_PREVIOUS_RUNS_FOR_HYPOTHESES);
+        const runIds = (runRows ?? []).map((row) => row.id);
+        if (runIds.length === 0) return { hypotheses: [] };
+
+        const { data: eventRows } = await context.supabase
+          .from("analysis_events")
+          .select("analysis_run_id, sequence, created_at, payload")
+          .in("analysis_run_id", runIds)
+          .eq("event_type", "hypothesis.created")
+          .order("created_at", { ascending: false })
+          .limit(MAX_PREVIOUS_HYPOTHESES);
+
+        const hypotheses: PreviousHypothesisSummary[] = [];
+        for (const row of eventRows ?? []) {
+          // Re-validated against the same schema used to stream/reconstruct
+          // this event elsewhere — the network isn't the only trust
+          // boundary; a row this app itself wrote earlier is still
+          // revalidated, not assumed.
+          const parsed = analysisEventSchema.safeParse({
+            type: "hypothesis.created",
+            runId: row.analysis_run_id,
+            sequence: row.sequence,
+            createdAt: row.created_at,
+            payload: row.payload,
+          });
+          if (!parsed.success || parsed.data.type !== "hypothesis.created") continue;
+          hypotheses.push({
+            id: `${row.analysis_run_id}:${row.sequence}`,
+            title: parsed.data.payload.title,
+            confidenceBand: parsed.data.payload.confidenceBand,
+            recommendedNextStep: parsed.data.payload.recommendedNextStep,
+            createdAt: row.created_at,
+          });
+        }
+        return { hypotheses };
       },
     }),
   };

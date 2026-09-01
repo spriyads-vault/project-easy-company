@@ -42,6 +42,8 @@ function baseAgentOutput(overrides: Partial<AgentOutput["hypotheses"][number]> =
         evidenceRefs: [],
         missingEvidence: ["Measurement with the clock disabled."],
         nextInvestigation: "Re-measure with the clock disconnected.",
+        previousHypothesisId: null,
+        hypothesisUpdateStatus: null,
         ...overrides,
       },
     ],
@@ -243,6 +245,115 @@ describe("validateAgentOutput", () => {
     expect(result.droppedCitationCount).toBe(1);
   });
 
+  it("classifies an engineer observation citation as OBSERVED, distinguishable from KNOWN (MVP-11)", () => {
+    const registry = createEmptyRegistry(0);
+    registry.investigationEventsById.set("event-1", {
+      id: "event-1",
+      eventType: "observation",
+      description: "Display path disconnected. 200 MHz peak dropped 9 dB.",
+    });
+    const result = validateAgentOutput({
+      agentOutput: baseAgentOutput({
+        evidenceRefs: [{ sourceType: "previous_investigation", investigationEventId: "event-1" }],
+      }),
+      registry,
+      correlationCandidates: [candidate],
+      productFacts,
+      measurement,
+    });
+
+    const observationEvidence = result.hypotheses[0].evidence.find((e) =>
+      e.description.includes("Display path disconnected"),
+    );
+    expect(observationEvidence?.category).toBe("observed");
+    expect(observationEvidence?.description).toBe(
+      "Engineer observation: Display path disconnected. 200 MHz peak dropped 9 dB.",
+    );
+    expect(result.droppedCitationCount).toBe(0);
+  });
+
+  it("keeps a non-observation investigation event (e.g. a note) as KNOWN, not OBSERVED", () => {
+    const registry = createEmptyRegistry(0);
+    registry.investigationEventsById.set("event-2", {
+      id: "event-2",
+      eventType: "note",
+      description: "Engineer suspects the ribbon cable.",
+    });
+    const result = validateAgentOutput({
+      agentOutput: baseAgentOutput({
+        evidenceRefs: [{ sourceType: "previous_investigation", investigationEventId: "event-2" }],
+      }),
+      registry,
+      correlationCandidates: [candidate],
+      productFacts,
+      measurement,
+    });
+
+    const noteEvidence = result.hypotheses[0].evidence.find((e) =>
+      e.description.includes("ribbon cable"),
+    );
+    expect(noteEvidence?.category).toBe("known");
+  });
+
+  it("attaches a hypothesis-update status when previousHypothesisId matches one actually retrieved this run (MVP-11)", () => {
+    const registry = createEmptyRegistry(0);
+    registry.previousHypothesesById.set("run-1:0", {
+      id: "run-1:0",
+      title: "5th harmonic of the system clock, coupling via the display path",
+    });
+    const result = validateAgentOutput({
+      agentOutput: baseAgentOutput({
+        previousHypothesisId: "run-1:0",
+        hypothesisUpdateStatus: "supported_by_new_evidence",
+      }),
+      registry,
+      correlationCandidates: [candidate],
+      productFacts,
+      measurement,
+    });
+
+    expect(result.hypotheses[0].update).toEqual({
+      status: "supported_by_new_evidence",
+      previousHypothesisTitle: "5th harmonic of the system clock, coupling via the display path",
+    });
+  });
+
+  it("drops a hallucinated previousHypothesisId (never actually returned by getPreviousHypotheses this run)", () => {
+    const result = validateAgentOutput({
+      agentOutput: baseAgentOutput({
+        previousHypothesisId: "run-invented:0",
+        hypothesisUpdateStatus: "supported_by_new_evidence",
+      }),
+      registry: createEmptyRegistry(0),
+      correlationCandidates: [candidate],
+      productFacts,
+      measurement,
+    });
+
+    expect(result.hypotheses).toHaveLength(1);
+    expect(result.hypotheses[0].update).toBeUndefined();
+    expect(result.droppedCitationCount).toBe(1);
+  });
+
+  it("never claims a Bayesian/probability update — the status is one of the four qualitative labels only", () => {
+    const registry = createEmptyRegistry(0);
+    registry.previousHypothesesById.set("run-1:0", { id: "run-1:0", title: "Prior hypothesis" });
+    const result = validateAgentOutput({
+      agentOutput: baseAgentOutput({
+        previousHypothesisId: "run-1:0",
+        hypothesisUpdateStatus: "weakened_by_new_evidence",
+      }),
+      registry,
+      correlationCandidates: [candidate],
+      productFacts,
+      measurement,
+    });
+
+    expect(["supported_by_new_evidence", "weakened_by_new_evidence", "unchanged", "needs_more_evidence"]).toContain(
+      result.hypotheses[0].update?.status,
+    );
+  });
+
   it("clears a clarificationQuestion that contains certainty language", () => {
     const result = validateAgentOutput({
       agentOutput: {
@@ -297,6 +408,8 @@ describe("validateAgentOutput", () => {
           evidenceRefs: [],
           missingEvidence: [],
           nextInvestigation: "Check something.",
+          previousHypothesisId: null,
+          hypothesisUpdateStatus: null,
         },
       ],
       clarificationQuestion: null,

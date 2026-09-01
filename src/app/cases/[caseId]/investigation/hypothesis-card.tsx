@@ -8,6 +8,7 @@
 import type { HypothesisCreatedPayload } from "@/lib/analysis/events";
 import type { EvidenceCategory } from "@/lib/domain/schema";
 import type { EvidenceCitation } from "@/lib/hypotheses/schema";
+import { HYPOTHESIS_UPDATE_LABEL, HYPOTHESIS_UPDATE_STYLE } from "./describe-hypothesis-update";
 import { surface, text } from "./theme";
 
 interface HypothesisCardProps {
@@ -52,9 +53,19 @@ export function HypothesisCard({ hypothesis, index, onOpenCitation }: Hypothesis
           </span>
           <h3 className="text-base font-medium leading-snug">{hypothesis.title}</h3>
         </div>
-        <span className="shrink-0 border border-[#3a3d34] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#c8c6bb]">
-          {CONFIDENCE_LABEL[hypothesis.confidenceBand]}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span className="border border-[#3a3d34] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#c8c6bb]">
+            {CONFIDENCE_LABEL[hypothesis.confidenceBand]}
+          </span>
+          {hypothesis.update ? (
+            <span
+              className={`border px-2 py-0.5 text-[10px] uppercase tracking-wide ${HYPOTHESIS_UPDATE_STYLE[hypothesis.update.status]}`}
+              title={`Continues: ${hypothesis.update.previousHypothesisTitle}`}
+            >
+              {HYPOTHESIS_UPDATE_LABEL[hypothesis.update.status]}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

@@ -12,6 +12,7 @@ import type { MeasurementRow } from "@/lib/cases/queries";
 import type { ProductFactRecord } from "@/lib/correlation/harmonic-correlation";
 import type { EvidenceCategory } from "@/lib/domain/schema";
 import type { EvidenceCitation } from "@/lib/hypotheses/schema";
+import type { TimelineEntry } from "@/lib/investigation/timeline";
 import {
   applyAnalysisEvent,
   isRunActive,
@@ -21,6 +22,7 @@ import { SseEventParser } from "@/lib/investigation/parse-sse-events";
 import { ProductPanel } from "./product-panel";
 import { MeasurementPanel } from "./measurement-panel";
 import { InvestigationPanel } from "./investigation-panel";
+import { InvestigationTimeline } from "./investigation-timeline";
 import { AgentActivityPanel } from "./agent-activity-panel";
 import { AgentMetricsPanel } from "./agent-metrics-panel";
 import { SourcesPanel } from "./sources-panel";
@@ -41,6 +43,9 @@ interface InvestigationWorkspaceProps {
   productFacts: ProductFactRecord[];
   measurement: MeasurementRow | null;
   initialState: WorkspaceState;
+  /** Optional — defaults to empty so every pre-MVP-11 test call site (no
+   * timeline data to pass) keeps working unmodified. */
+  timelineEntries?: TimelineEntry[];
 }
 
 export function InvestigationWorkspace({
@@ -50,6 +55,7 @@ export function InvestigationWorkspace({
   productFacts,
   measurement,
   initialState,
+  timelineEntries = [],
 }: InvestigationWorkspaceProps) {
   const [state, setState] = useState<WorkspaceState>(initialState);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -147,11 +153,11 @@ export function InvestigationWorkspace({
       <div
         className={`grid flex-1 grid-cols-1 content-start gap-4 p-4 md:grid-cols-2 lg:grid-cols-[minmax(260px,320px)_minmax(320px,1fr)_minmax(380px,1.2fr)] ${surface.page}`}
       >
-        {/* Mobile order: Measurement, Investigation, Agent activity, What
-            Crado handled, Sources, Product — desktop reflows into the
-            three-column PRODUCT|MEASUREMENT|INVESTIGATION row plus
-            full-width rows below it. */}
-        <div className="order-6 md:order-1 lg:order-1">
+        {/* Mobile order: Measurement, Investigation, Timeline, Agent
+            activity, What Crado handled, Sources, Product — desktop
+            reflows into the three-column PRODUCT|MEASUREMENT|INVESTIGATION
+            row plus full-width rows below it. */}
+        <div className="order-7 md:order-1 lg:order-1">
           <ProductPanel productId={productId} revisionId={revisionId} facts={productFacts} />
         </div>
         <div className="order-1 md:order-2 lg:order-2">
@@ -159,6 +165,7 @@ export function InvestigationWorkspace({
         </div>
         <div className="order-2 md:col-span-2 md:order-3 lg:col-span-1 lg:order-3">
           <InvestigationPanel
+            caseId={caseId}
             state={state}
             canRunAnalysis={canRunAnalysis}
             isSubmitting={isSubmitting}
@@ -168,14 +175,17 @@ export function InvestigationWorkspace({
           />
         </div>
         <div className="order-3 md:order-4 md:col-span-2 lg:col-span-3 lg:order-4">
+          <InvestigationTimeline entries={timelineEntries} />
+        </div>
+        <div className="order-4 md:order-5 md:col-span-2 lg:col-span-3 lg:order-5">
           <AgentActivityPanel activity={state.agentActivity} active={state.agentActive} />
         </div>
         {state.agentMetrics ? (
-          <div className="order-4 md:order-5 md:col-span-2 lg:col-span-3 lg:order-5">
+          <div className="order-5 md:order-6 md:col-span-2 lg:col-span-3 lg:order-6">
             <AgentMetricsPanel metrics={state.agentMetrics} />
           </div>
         ) : null}
-        <div className="order-5 md:order-6 md:col-span-2 lg:col-span-3 lg:order-6">
+        <div className="order-6 md:order-7 md:col-span-2 lg:col-span-3 lg:order-7">
           <SourcesPanel hypotheses={state.hypotheses} metrics={state.agentMetrics} />
         </div>
       </div>

@@ -203,12 +203,17 @@
       "depends_on": [
         "MVP-09"
       ],
-      "passes": false,
+      "passes": true,
       "acceptance": [
-        "observation persists",
-        "analysis can update evidence/hypothesis",
-        "does not convert inference to fact without evidence"
-      ]
+        "a structured 'Record result' action (Observation / Measurement change if known / Operating mode / Notes — never a chatbot textarea) persists an engineer observation as a real investigation_events row, workspace-isolated by RLS",
+        "an engineer-entered observation is classified OBSERVED evidence in the next investigation run, distinguishable from KNOWN/INFERRED/MISSING — verified both by unit test and a real live Anthropic run",
+        "the model can never silently promote the observation's text into a new KNOWN/OBSERVED claim beyond what was entered: OBSERVED/KNOWN evidence stays assembled deterministically from stored rows, exactly like MVP-07/MVP-10B's existing structural guarantee",
+        "the Investigation Agent can inspect prior hypotheses from earlier completed runs of the same case (new getPreviousHypotheses tool) alongside the new observation (existing getPreviousInvestigations tool) and, only when it judges one continues an earlier hypothesis, tags it with a qualitative-only status: supported_by_new_evidence / weakened_by_new_evidence / unchanged / needs_more_evidence — no Bayesian/probability claim implemented or exposed",
+        "the previous hypothesis is never rewritten or deleted — a chronological investigation timeline (measurement -> hypothesis -> observation -> updated investigation) proves old and updated hypotheses both remain visible and auditable",
+        "refresh reconstructs the observation, updated hypothesis status, and full timeline from persisted rows alone, without rerunning the model",
+        "duplicate submission of the observation form is prevented"
+      ],
+      "notes": "Built and delivered in the session tracked as 'MVP-11' in docs/PROGRESS.md's dated entry (the user's own session-level ticket numbering ran ahead of this file); this entry is the one whose original acceptance criteria it actually satisfies and supersedes. The pre-existing MVP-11 entry below (engineering change / second measurement, before/after comparison) was explicitly NOT started, per that session's own instruction not to begin it."
     },
     {
       "id": "MVP-11",

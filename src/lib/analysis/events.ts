@@ -6,7 +6,7 @@
 // text token, never model chain-of-thought.
 import { z } from "zod";
 import { confidenceBandSchema, productFactCategorySchema } from "@/lib/domain/schema";
-import { finalEvidenceItemSchema } from "@/lib/hypotheses/schema";
+import { finalEvidenceItemSchema, hypothesisUpdateSchema } from "@/lib/hypotheses/schema";
 
 const runStartedPayloadSchema = z.object({
   failureCaseId: z.string(),
@@ -45,6 +45,9 @@ const hypothesisCreatedPayloadSchema = z.object({
   confidenceBand: confidenceBandSchema,
   recommendedNextStep: z.string(),
   evidence: z.array(finalEvidenceItemSchema),
+  // MVP-11, optional/additive: set only when this hypothesis is a follow-up
+  // run's continuation of one proposed earlier for the same case.
+  update: hypothesisUpdateSchema.optional(),
 });
 
 const clarificationRequiredPayloadSchema = z.object({

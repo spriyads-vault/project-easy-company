@@ -20,7 +20,11 @@ import {
   type MeasurementForHypotheses,
   type ProductFactForHypotheses,
 } from "@/lib/hypotheses/generate-hypotheses";
-import type { FinalEvidenceItem, FinalHypothesis } from "@/lib/hypotheses/schema";
+import type {
+  FinalEvidenceItem,
+  FinalHypothesis,
+  HypothesisUpdate,
+} from "@/lib/hypotheses/schema";
 import type { HarmonicCorrelationCandidate } from "@/lib/correlation/harmonic-correlation";
 import type { AgentCompletedPayload } from "@/lib/analysis/events";
 import type { AgentOutput } from "./schema";
@@ -41,6 +45,11 @@ export interface RetrievedInvestigationEvent {
   description: string;
 }
 
+export interface RetrievedPreviousHypothesis {
+  id: string;
+  title: string;
+}
+
 /**
  * Everything a tool call actually handed back during this one run, keyed
  * for O(1) lookup. Built by investigation-agent.ts from the same
@@ -53,6 +62,10 @@ export interface RetrievedRegistry {
   productFactIds: Set<string>;
   documentPassagesByChunkId: Map<string, RetrievedDocumentPassage>;
   investigationEventsById: Map<string, RetrievedInvestigationEvent>;
+  /** MVP-11: hypotheses from earlier completed runs the agent actually
+   * received back from getPreviousHypotheses this run, keyed by that same
+   * synthetic id (see src/lib/agents/tools.ts). */
+  previousHypothesesById: Map<string, RetrievedPreviousHypothesis>;
   documentSearchCount: number;
   passagesRetrievedCount: number;
   documentsAvailable: number;
@@ -63,6 +76,7 @@ export function createEmptyRegistry(documentsAvailable: number): RetrievedRegist
     productFactIds: new Set(),
     documentPassagesByChunkId: new Map(),
     investigationEventsById: new Map(),
+    previousHypothesesById: new Map(),
     documentSearchCount: 0,
     passagesRetrievedCount: 0,
     documentsAvailable,
@@ -122,6 +136,15 @@ function buildDocumentPassageEvidence(
 function buildInvestigationEventEvidence(
   event: RetrievedInvestigationEvent,
 ): FinalEvidenceItem {
+  // An engineer-entered observation is a real measured/observed result
+  // (MVP-11's "RECORD RESULT"), not background context — it belongs in
+  // OBSERVED, distinguishable from KNOWN product context, exactly like the
+  // run's own measurement. Every other investigation-event type (a note, an
+  // engineering change) stays KNOWN: background the agent is aware of, not
+  // itself a new physical observation.
+  if (event.eventType === "observation") {
+    return { category: "observed", description: `Engineer observation: ${event.description}` };
+  }
   return {
     category: "known",
     description: `Previous investigation (${event.eventType}): ${event.description}`,
@@ -202,12 +225,34 @@ export function validateAgentOutput(
       evidence.push({ category: "missing", description: missing });
     }
 
+    // MVP-11: only trusted together, and only when previousHypothesisId is
+    // one this exact run's getPreviousHypotheses call actually returned —
+    // same "never trust the model's own say-so" rule as every other
+    // citation above. An invalid/hallucinated id silently drops the update
+    // (this hypothesis is kept as a fresh one) rather than rejecting the
+    // whole hypothesis.
+    let update: HypothesisUpdate | undefined;
+    if (modelHypothesis.previousHypothesisId && modelHypothesis.hypothesisUpdateStatus) {
+      const previous = input.registry.previousHypothesesById.get(
+        modelHypothesis.previousHypothesisId,
+      );
+      if (previous) {
+        update = {
+          status: modelHypothesis.hypothesisUpdateStatus,
+          previousHypothesisTitle: previous.title,
+        };
+      } else {
+        droppedCitationCount += 1;
+      }
+    }
+
     hypotheses.push({
       productFactId: candidate.productFactId,
       title: modelHypothesis.title,
       confidenceBand: modelHypothesis.confidenceBand,
       recommendedNextStep: modelHypothesis.nextInvestigation,
       evidence,
+      ...(update ? { update } : {}),
     });
   }
 

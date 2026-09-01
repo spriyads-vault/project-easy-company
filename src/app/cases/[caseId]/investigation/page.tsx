@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 import { getInvestigationWorkspaceData } from "@/lib/investigation/queries";
+import { getInvestigationTimeline } from "@/lib/investigation/timeline";
 import { InvestigationWorkspace } from "./investigation-workspace";
 import { surface, text } from "./theme";
 
@@ -16,6 +18,8 @@ export default async function InvestigationPage({ params }: InvestigationPagePro
   }
 
   const { failureCase, productFacts, measurement, workspaceState } = data;
+  const supabase = await createClient();
+  const timelineEntries = await getInvestigationTimeline(supabase, caseId);
 
   return (
     <div className={`flex flex-1 flex-col ${surface.page}`}>
@@ -39,6 +43,7 @@ export default async function InvestigationPage({ params }: InvestigationPagePro
         productFacts={productFacts}
         measurement={measurement}
         initialState={workspaceState}
+        timelineEntries={timelineEntries}
       />
     </div>
   );

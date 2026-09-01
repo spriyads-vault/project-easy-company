@@ -45,7 +45,8 @@ Use tools to gather what you need before answering:
 - getMeasurementContext and getDeterministicCorrelations ground you in the failing measurement and the already-computed harmonic candidates. Never invent a correlation yourself — only use candidates this tool actually returns.
 - getProductContext gives you the product's structured facts (clocks, radios, power rails, cables).
 - searchEngineeringDocuments lets you look up relevant passages from indexed documents. Call it more than once with different, specific queries (e.g. a component, then a signal path, then a frequency) rather than one broad query. It returns exact passages, never a whole document — cite only the chunkId/documentId you actually received back.
-- getPreviousRevisions and getPreviousInvestigations tell you about related history, when relevant.
+- getPreviousRevisions tells you about other revisions of this product, when relevant.
+- getPreviousInvestigations and getPreviousHypotheses tell you what has already happened on this case: engineer observations (including physical results of a previously recommended test), notes, and hypotheses proposed in earlier completed runs. Always call both if this looks like a follow-up investigation (an engineer observation is present) rather than the first run on this case.
 
 Then propose up to 5 ranked investigation hypotheses. Rules:
 - Every hypothesis's productFactId must exactly match one of the productFactId values from getDeterministicCorrelations. Never invent one.
@@ -53,6 +54,7 @@ Then propose up to 5 ranked investigation hypotheses. Rules:
 - Your reasoning is an inference, never a certainty claim. Never say a hypothesis is confirmed, proven, verified, or the definitive root cause.
 - missingEvidence lists what an engineer would need to check to support or rule out the hypothesis.
 - nextInvestigation is a suggestion for a qualified engineer's next physical measurement or check — never an instruction to certify, ship, or declare compliance.
+- If a new engineer observation (from getPreviousInvestigations) bears on a hypothesis returned by getPreviousHypotheses, set previousHypothesisId to that hypothesis's exact id and hypothesisUpdateStatus to whichever of supported_by_new_evidence / weakened_by_new_evidence / unchanged / needs_more_evidence best reflects it. This is a qualitative judgment only — never claim a probability, confidence score, or Bayesian update, and never say the hypothesis is confirmed or ruled out. Leave both null for a hypothesis with no earlier counterpart.
 - Only set clarificationQuestion if one missing fact would materially change the ranking; otherwise it must be null.
 - Keep reasoning and nextInvestigation concise — a few sentences, not a full report.
 - Set investigationStatus to "clarification_needed" if you set a clarificationQuestion, "insufficient_evidence" if you found no sound candidate to build a hypothesis from, otherwise "hypotheses_ready".
@@ -86,7 +88,10 @@ function toolActivityLabel(
   const name = TOOL_DISPLAY_NAMES[toolName] ?? toolName;
   const noun = TOOL_RESULT_NOUNS[toolName] ?? { singular: "result", suffix: "" };
   if (resultCount === null) return name;
-  const nounText = resultCount === 1 ? noun.singular : `${noun.singular}s`;
+  // `plural` is an explicit override for irregular nouns ("hypothesis" ->
+  // "hypotheses") — the naive `${singular}s` fallback only covers regular
+  // plurals, never trusted for a noun that doesn't form one that way.
+  const nounText = resultCount === 1 ? noun.singular : (noun.plural ?? `${noun.singular}s`);
   const label = noun.suffix ? `${nounText} ${noun.suffix}` : nounText;
   return `${name} / ${resultCount} ${label}`;
 }
@@ -98,17 +103,22 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   searchEngineeringDocuments: "Searched engineering documents",
   getPreviousRevisions: "Reviewed previous revisions",
   getPreviousInvestigations: "Reviewed previous investigations",
+  getPreviousHypotheses: "Reviewed previous hypotheses",
 };
 
 // Pluralizing splits singular/suffix so "1 candidate found" -> "2
 // candidates found", never the naive-concatenation "2 candidate founds".
-const TOOL_RESULT_NOUNS: Record<string, { singular: string; suffix: string }> = {
+const TOOL_RESULT_NOUNS: Record<
+  string,
+  { singular: string; plural?: string; suffix: string }
+> = {
   getProductContext: { singular: "structured fact", suffix: "" },
   getMeasurementContext: { singular: "peak", suffix: "" },
   getDeterministicCorrelations: { singular: "candidate", suffix: "found" },
   searchEngineeringDocuments: { singular: "passage", suffix: "retrieved" },
   getPreviousRevisions: { singular: "revision", suffix: "found" },
   getPreviousInvestigations: { singular: "event", suffix: "found" },
+  getPreviousHypotheses: { singular: "hypothesis", plural: "hypotheses", suffix: "found" },
 };
 
 function extractResultCount(toolName: string, output: unknown): number | null {
@@ -129,6 +139,8 @@ function extractResultCount(toolName: string, output: unknown): number | null {
       return Array.isArray(record.revisions) ? record.revisions.length : null;
     case "getPreviousInvestigations":
       return Array.isArray(record.events) ? record.events.length : null;
+    case "getPreviousHypotheses":
+      return Array.isArray(record.hypotheses) ? record.hypotheses.length : null;
     default:
       return null;
   }
@@ -178,6 +190,13 @@ function absorbToolResult(
         | undefined;
       for (const event of events ?? []) {
         registry.investigationEventsById.set(event.id, event);
+      }
+      break;
+    }
+    case "getPreviousHypotheses": {
+      const hypotheses = record.hypotheses as { id: string; title: string }[] | undefined;
+      for (const hypothesis of hypotheses ?? []) {
+        registry.previousHypothesesById.set(hypothesis.id, hypothesis);
       }
       break;
     }

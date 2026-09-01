@@ -25,6 +25,19 @@ export type EvidenceCategory = z.infer<typeof evidenceCategorySchema>;
 export const confidenceBandSchema = z.enum(["low", "medium", "high"]);
 export type ConfidenceBand = z.infer<typeof confidenceBandSchema>;
 
+// Qualitative-only, deliberately (MVP-11): whether a follow-up investigation
+// run's evidence supports, weakens, leaves unchanged, or still needs more
+// evidence for a hypothesis proposed in an earlier run. No Bayesian/
+// probability claim is implemented, so none is exposed here — see
+// docs/PROGRESS.md's MVP-11 entry.
+export const hypothesisUpdateStatusSchema = z.enum([
+  "supported_by_new_evidence",
+  "weakened_by_new_evidence",
+  "unchanged",
+  "needs_more_evidence",
+]);
+export type HypothesisUpdateStatus = z.infer<typeof hypothesisUpdateStatusSchema>;
+
 // Matches the typed event list in docs/ARCHITECTURE.md and CLAUDE.md, and
 // the analysis_events.event_type check constraint (see
 // supabase/migrations/20260831035611_core_domain.sql and
@@ -82,6 +95,28 @@ export const measurementInputSchema = z.object({
   peak: measurementPeakInputSchema,
 });
 export type MeasurementInput = z.infer<typeof measurementInputSchema>;
+
+// The "RECORD RESULT" form (MVP-11): a structured engineer observation
+// following up on a hypothesis's recommended next investigation — never a
+// chatbot textarea. `observation` is the required "what was done/seen"
+// line; the rest are optional structured detail. Persisted to
+// investigation_events (event_type: "observation") and, on the next agent
+// run, surfaced back as new OBSERVED evidence (see
+// src/lib/agents/validate-agent-output.ts) — never silently promoted into a
+// KNOWN product fact or any other claim beyond what was literally entered.
+export const investigationObservationInputSchema = z.object({
+  observation: z
+    .string()
+    .trim()
+    .min(1, "Describe what was done or observed.")
+    .max(500),
+  measurementChange: z.string().trim().min(1).max(300).optional(),
+  operatingMode: z.string().trim().min(1).max(300).optional(),
+  notes: z.string().trim().min(1).max(1000).optional(),
+});
+export type InvestigationObservationInput = z.infer<
+  typeof investigationObservationInputSchema
+>;
 
 // Per-category fact shapes. `fact` is stored as jsonb (see
 // supabase/migrations/20260831035611_core_domain.sql) so new categories or

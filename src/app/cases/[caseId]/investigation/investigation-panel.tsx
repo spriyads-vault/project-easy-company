@@ -9,9 +9,11 @@ import type { EvidenceCategory } from "@/lib/domain/schema";
 import type { EvidenceCitation } from "@/lib/hypotheses/schema";
 import { CorrelationCard } from "./correlation-card";
 import { HypothesisCard } from "./hypothesis-card";
+import { RecordObservationForm } from "./record-observation-form";
 import { accent, surface, text } from "./theme";
 
 interface InvestigationPanelProps {
+  caseId: string;
   state: WorkspaceState;
   canRunAnalysis: boolean;
   /** True the instant the button is clicked, before the first run.started
@@ -51,6 +53,7 @@ function buttonLabel(status: RunStatus, busy: boolean): string {
 }
 
 export function InvestigationPanel({
+  caseId,
   state,
   canRunAnalysis,
   isSubmitting,
@@ -134,6 +137,13 @@ export function InvestigationPanel({
             />
           ))}
         </div>
+      ) : null}
+
+      {/* Follows a recommended investigation with new physical evidence —
+          only makes sense once there's at least one hypothesis to follow
+          up on. See src/app/cases/[caseId]/investigation/actions.ts. */}
+      {state.status !== "running" && state.hypotheses.length > 0 ? (
+        <RecordObservationForm caseId={caseId} />
       ) : null}
 
       {state.status === "completed" &&

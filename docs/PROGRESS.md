@@ -1,20 +1,30 @@
 # Claude Progress
 
 ## Current state
-MVP-01 through MVP-09, MVP-10A, MVP-10B, and MVP-10C done. Auth, workspace
-isolation, the full core domain schema, product/revision/fact entry,
-failure-case + measurement entry, the deterministic harmonic correlation
-engine, the AI structured hypothesis service, a real streaming
-`POST /api/analysis-runs` endpoint, the Engineering Knowledge Base (private
-document storage, ingestion, hybrid retrieval), the Investigation Agent (an
-AI SDK `ToolLoopAgent` that decides what product context/documents/history to
-gather before proposing evidence-labeled, source-cited hypotheses), and now
-the polished investigation workspace UI — a single connected workspace
-(Product/Measurement/Investigation/Agent Activity/Sources, with a clickable
-source-provenance drawer) rather than four separate dashboard cards — all
-work, tested, against a local Supabase instance (`supabase start`) and
-live-verified against a real Anthropic call. MVP-10 (composer + observation
-updating a hypothesis) is the next open ticket.
+MVP-01 through MVP-10C and MVP-10 (labeled "MVP-11" in the session that
+built it — see that dated entry and features.json's MVP-10 note for the
+mapping) are done. Auth, workspace isolation, the full core domain schema,
+product/revision/fact entry, failure-case + measurement entry, the
+deterministic harmonic correlation engine, the AI structured hypothesis
+service, a real streaming `POST /api/analysis-runs` endpoint, the
+Engineering Knowledge Base (private document storage, ingestion, hybrid
+retrieval), the Investigation Agent (an AI SDK `ToolLoopAgent` that decides
+what product context/documents/history to gather before proposing
+evidence-labeled, source-cited hypotheses), the polished investigation
+workspace UI (Product/Measurement/Investigation/Agent Activity/Sources, with
+a clickable source-provenance drawer), and now the physical investigation
+feedback loop — a structured "Record result" action that persists an
+engineer observation as new OBSERVED evidence, a 7th agent tool
+(`getPreviousHypotheses`) that lets the Investigation Agent see and
+qualitatively update earlier hypotheses (supported/weakened/unchanged/needs
+more evidence — never a probability claim) on the next run, and a
+chronological investigation timeline proving old hypotheses are never
+rewritten — all work, tested, against a local Supabase instance
+(`supabase start`) and live-verified against two real Anthropic calls (a
+first investigation and a follow-up after recording an observation). The
+next open ticket is engineering change + second measurement / before-after
+comparison (the pre-existing MVP-11 entry in features.json — explicitly not
+started).
 
 ## Session handoff format
 Append one entry per completed/paused ticket:
@@ -1190,4 +1200,197 @@ architecture change.
 - Next recommended ticket: MVP-10 (composer + observation updating a
   hypothesis) — the next open, unblocked ticket. Do not start it without
   further instruction (explicitly deferred by the user this session).
+- Commit: (see git log)
+
+### 2026-09-01 — MVP-11: the physical investigation feedback loop
+(The user's instructions this session called this ticket "MVP-11" and
+described exactly features.json's pre-existing MVP-10 — "observation
+persists" / "analysis can update evidence/hypothesis" / "does not convert
+inference to fact without evidence" — plus substantially more. features.json
+now records this against MVP-10, which is what it actually satisfies; the
+pre-existing MVP-11 entry there, engineering change + second measurement,
+was explicitly **not** started per this session's own instruction.)
+
+- Completed: an engineer can give Crado new physical evidence after
+  following a recommended investigation, and Crado updates the case without
+  losing any previous hypothesis/evidence history. No agent architecture
+  redesign — the existing `getPreviousInvestigations` tool already reads
+  whatever's newly persisted, so recording an observation needed zero agent
+  changes to become visible on the next run; one new bounded 7th tool
+  (`getPreviousHypotheses`) was added for the agent to see prior hypotheses,
+  matching the same small, single-purpose-tool pattern MVP-10B established.
+  - **1. Observation input** (`record-observation-form.tsx`, new): a
+    "Record result" action under the hypotheses, collapsed behind a plain
+    button until clicked — never an open chatbot textarea. Four structured
+    fields exactly as specified: Observation (required), Measurement change
+    if known, Operating mode, Notes. `useActionState` + `disabled={pending}`
+    is the duplicate-submission guard (verified by a real rapid-double-click
+    test: a disabled `<button>` genuinely doesn't dispatch a second click,
+    in jsdom and real Chrome both).
+  - **2. Persistence**: `src/lib/investigation/record-observation.ts`
+    (split out from the "use server" action the same way MVP-08 split
+    create-analysis-run.ts from route.ts, specifically so the DB-touching
+    core is directly integration-testable) inserts one
+    `investigation_events` row (`event_type: "observation"`), RLS-scoped
+    like every other table. Nothing is ever rewritten or deleted — every
+    prior `analysis_events`/`investigation_events` row stays exactly as it
+    was; "history" is the existing insert-only architecture, not new
+    machinery.
+  - **3. Evidence rule**: `buildInvestigationEventEvidence` in
+    `validate-agent-output.ts` now maps an `event_type: "observation"`
+    citation to `category: "observed"` (previously always `"known"` for
+    every investigation-event citation — a real gap the ticket's explicit
+    "must remain distinguishable" requirement exposed and this session
+    fixed). The model still cannot write OBSERVED/KNOWN text itself; this
+    is purely which deterministic bucket a real stored row's text lands in.
+  - **4. Agent update**: `getPreviousHypotheses` (`tools.ts`) returns
+    hypotheses from earlier **completed** runs of the same case (`status =
+    "completed"` is what excludes the run currently in flight, without
+    needing to know its own runId). `agentHypothesisSchema` gained two
+    required-but-nullable fields, `previousHypothesisId` and
+    `hypothesisUpdateStatus` (one of `supported_by_new_evidence` /
+    `weakened_by_new_evidence` / `unchanged` / `needs_more_evidence` — a
+    new domain enum, `hypothesisUpdateStatusSchema`) — matching the same
+    "always nullable, never silently optional" convention
+    `clarificationQuestion` already established. `validateAgentOutput`
+    trusts the pairing only when `previousHypothesisId` is one this exact
+    run's tool call actually returned (same "never trust the model's own
+    say-so" rule as every other citation); an invalid id silently drops the
+    update rather than rejecting the hypothesis. No Bayesian/probability
+    update is implemented, so none is exposed — four qualitative labels
+    only, styled distinctly (green/warn/neutral/dashed), never a score.
+  - **5. Gateway X live behavior**: confirmed live (see below) — an
+    observation showing a 9 dB drop after disconnecting the display path
+    produced exactly the qualitative shift the ticket describes: the
+    display-path hypothesis promoted to `SUPPORTED BY NEW EVIDENCE`, a
+    WiFi-TX hypothesis marked `WEAKENED BY NEW EVIDENCE` (correctly
+    reasoned: the 9 dB alone nearly accounts for the whole margin, leaving
+    little room for WiFi as an independent contributor), and a third
+    marked `NEEDS MORE EVIDENCE`. No "root cause confirmed" language
+    anywhere.
+  - **6. Investigation timeline** (`investigation-timeline.tsx` +
+    `src/lib/investigation/timeline.ts`, both new): a chronological,
+    read-only merge of every measurement, hypothesis (across **all** runs,
+    not just the latest — this is what makes it prove history, not just
+    reconstruct the current run), and observation for a case. Deliberately
+    given an explicit-Supabase-client signature (not the older cookie-based
+    `cases/queries.ts` convention) for the same reason MVP-10A did that for
+    `listEngineeringDocuments`: so "old hypothesis remains historical" is
+    directly integration-testable against real Postgres, not just a hand-
+    built fixture.
+  - **7. UI**: the existing polished workspace is unchanged in structure;
+    the timeline is a new full-width row (mobile/desktop) between
+    Investigation and Agent Activity, and the Record-result action sits
+    directly under the hypotheses list. A hypothesis-update badge
+    (`describe-hypothesis-update.ts`, shared between `hypothesis-card.tsx`
+    and the timeline so the two surfaces can't drift in wording) appears
+    beside the confidence badge on a continuing hypothesis.
+  - **8. Refresh**: the timeline is fetched server-side in `page.tsx` and
+    passed down, so a `revalidatePath` after recording a result refreshes
+    it without touching the client-only `WorkspaceState`/SSE machinery at
+    all; a full page reload reconstructs the observation, updated
+    hypothesis status, and the complete timeline purely from persisted
+    rows, never rerunning the model (verified live, see below).
+- Tests: 231 unit tests (23 new: `validate-agent-output.test.ts` gained
+  OBSERVED-classification and hypothesis-update-assembly cases including a
+  hallucinated-`previousHypothesisId` rejection; new
+  `investigation-timeline.test.tsx`, `record-observation-form.test.tsx`
+  including a real rapid-double-click duplicate-submission test; extended
+  `hypothesis-card.test.tsx` for the update badge; agent-schema test
+  literals updated for the two new required-nullable fields). 38 integration
+  tests (6 new, `src/lib/investigation/mvp11.integration.test.ts`): records
+  an observation with the exact structured fields; workspace isolation (a
+  second user can neither write into nor read someone else's case, proven
+  via both `insertInvestigationObservation` and `getInvestigationTimeline`);
+  `getPreviousInvestigations` sees a real newly-recorded observation;
+  `getPreviousHypotheses` returns a prior completed run's hypothesis and
+  excludes a same-case run that's still `"running"`; the timeline shows
+  both an original and an "updated investigation" entry with the right
+  status, in chronological order, after a follow-up run; a `run.failed`
+  second run adds nothing and removes nothing from the existing history.
+  `pnpm lint`, `pnpm typecheck`, `pnpm build` all pass.
+- Live Gateway X walkthrough (chrome-devtools MCP, real browser, the
+  existing seeded case from the MVP-10C session — its already-completed
+  run stood in as "run 1" rather than paying for a redundant first live
+  call): clicked "Record result", entered exactly the ticket's own example
+  ("Display path disconnected." / "200 MHz peak dropped 9 dB."), got
+  "Observation recorded." and an immediate timeline update (via
+  `revalidatePath`, no client-side wiring needed) — confirmed **live**, not
+  just via test. Clicked "Run again" for one real Anthropic call (**not**
+  a replay): the agent's Agent Activity panel showed "Reviewed previous
+  investigations / 1 event found" and "Reviewed previous hypotheses / 5
+  hypotheses found" (the new tool actually used, in a real run), and
+  produced three hypotheses with exactly the qualitative outcomes described
+  in item 5 above — real, freshly-generated reasoning, not scripted. Total
+  wall-clock time for this second (follow-up) run: **~57 seconds**.
+  Reloading the page afterward confirmed refresh reconstruction: the
+  timeline showed all 5 original hypotheses unchanged plus 3 new "UPDATED
+  INVESTIGATION" entries with their status badges, in correct chronological
+  order — proving both "old hypothesis remains historical" and "refresh
+  reconstructs without rerunning the model" against real persisted state,
+  not a fixture.
+- **UX issue discovered, not fixed here (out of this ticket's UI-only
+  scope)**: immediately after "Run again" completes, the Investigation
+  Timeline panel does **not** yet show the new run's hypotheses/status
+  badges — it only picks them up on the next full page load/revalidate,
+  because the timeline is fetched server-side in `page.tsx` while the live
+  agent run is pure client-side SSE state (`WorkspaceState`). The main
+  Investigation panel above it updates live and correctly; the timeline
+  lags one refresh behind. Worth a follow-up ticket (e.g. append a
+  synthetic timeline entry client-side from the same `hypothesis.created`
+  SSE events already being applied to `WorkspaceState`) rather than fixing
+  opportunistically here.
+- Files/areas added: `src/app/cases/[caseId]/investigation/{actions,
+  record-observation-form,investigation-timeline,
+  describe-hypothesis-update}.tsx` + matching `*.test.tsx` where
+  applicable, `src/lib/investigation/{record-observation,timeline,
+  mvp11.integration.test}.ts`. Files/areas changed:
+  `src/lib/domain/schema.ts` (`hypothesisUpdateStatusSchema`,
+  `investigationObservationInputSchema`), `src/lib/hypotheses/schema.ts`
+  (`hypothesisUpdateSchema`, optional `update` on `finalHypothesisSchema`),
+  `src/lib/analysis/events.ts` (optional `update` on
+  `hypothesisCreatedPayloadSchema`), `src/lib/analysis/run-analysis.ts`
+  (forwards `update` into the emitted event), `src/lib/agents/schema.ts`
+  (`previousHypothesisId`/`hypothesisUpdateStatus` on
+  `agentHypothesisSchema`), `src/lib/agents/tools.ts`
+  (`getPreviousHypotheses`), `src/lib/agents/investigation-agent.ts`
+  (system-prompt update, display name/pluralization/registry wiring for the
+  new tool), `src/lib/agents/validate-agent-output.ts` (OBSERVED
+  classification, `update` assembly, `previousHypothesesById` registry),
+  `src/app/cases/[caseId]/investigation/{hypothesis-card,
+  investigation-panel,investigation-workspace,page}.tsx` (update badge,
+  Record-result placement, timeline wiring).
+- Decisions (reversible, made per CLAUDE.md autonomy rules):
+  - `getPreviousHypotheses` as a new 7th tool rather than folding hypotheses
+    into `getPreviousInvestigations`'s return shape — keeps each tool
+    single-purpose (matching MVP-10B's own stated design) and keeps
+    `PreviousInvestigationSummary`'s existing contract/description
+    (investigation *events*) honest rather than silently widening it.
+    `MAX_AGENT_STEPS` (9) was deliberately left unchanged, per this
+    session's explicit "do not optimize MVP-10B latency yet" — the model
+    simply spends one of its existing 9 steps on this tool when relevant,
+    same budget as before.
+  - `previousHypothesisId`/`hypothesisUpdateStatus` are required-but-
+    nullable on the model output schema (not `.optional()`), matching
+    `clarificationQuestion`'s existing convention exactly, so "the model
+    must explicitly decide, never silently omit" stays consistent across
+    the whole agent output contract.
+  - `getInvestigationTimeline` takes an explicit `SupabaseClient` parameter
+    rather than building its own via the cookie-based
+    `@/lib/supabase/server` convention `cases/queries.ts` uses — the same
+    testability tradeoff MVP-10A made for `listEngineeringDocuments`, for
+    the same reason (a ticket-mandated behavior needed a real integration
+    test, not just a browser walkthrough).
+  - The "Record result" action lives once, panel-level, below all
+    hypotheses rather than duplicated per-hypothesis — an observation isn't
+    naturally scoped to one specific hypothesis in the data model
+    (`investigation_events` has no hypothesis foreign key), and one clear
+    action reads more like real engineering software than N identical
+    buttons.
+- Remaining: the timeline's one-refresh-behind lag after a live run
+  (documented above) is the only known gap; no blockers for the next
+  ticket.
+- Next recommended ticket: engineering change + second measurement /
+  before-after comparison (features.json's pre-existing MVP-11) — explicitly
+  **not** started this session per direct instruction. STOPPING here.
 - Commit: (see git log)

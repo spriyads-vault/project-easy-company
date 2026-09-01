@@ -11,7 +11,11 @@
 // real measurement/fact rows. This makes "the model converts an inference
 // into a fact" structurally impossible, not just discouraged by a prompt.
 import { z } from "zod";
-import { confidenceBandSchema, productFactCategorySchema } from "@/lib/domain/schema";
+import {
+  confidenceBandSchema,
+  hypothesisUpdateStatusSchema,
+  productFactCategorySchema,
+} from "@/lib/domain/schema";
 
 // ---- What the deterministic pipeline hands to the model ----
 
@@ -134,11 +138,28 @@ export const finalEvidenceItemSchema = z.object({
 });
 export type FinalEvidenceItem = z.infer<typeof finalEvidenceItemSchema>;
 
+// A hypothesis that continues one proposed in an earlier run of the same
+// case (MVP-11): a qualitative-only relationship, never a probability/
+// Bayesian claim (nothing here computes one). `previousHypothesisTitle` is
+// always the stored title of a hypothesis the agent actually received back
+// from getPreviousHypotheses this run — assembled deterministically in
+// src/lib/agents/validate-agent-output.ts, never the model's own
+// restatement.
+export const hypothesisUpdateSchema = z.object({
+  status: hypothesisUpdateStatusSchema,
+  previousHypothesisTitle: z.string(),
+});
+export type HypothesisUpdate = z.infer<typeof hypothesisUpdateSchema>;
+
 export const finalHypothesisSchema = z.object({
   productFactId: z.string(),
   title: z.string(),
   confidenceBand: confidenceBandSchema,
   recommendedNextStep: z.string(),
   evidence: z.array(finalEvidenceItemSchema),
+  /** Optional/additive — absent on every hypothesis persisted before
+   * MVP-11 and on any hypothesis that isn't a continuation of an earlier
+   * one. */
+  update: hypothesisUpdateSchema.optional(),
 });
 export type FinalHypothesis = z.infer<typeof finalHypothesisSchema>;

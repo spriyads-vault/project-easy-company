@@ -187,6 +187,7 @@ export async function* runAnalysis(
         confidenceBand: hypothesis.confidenceBand,
         recommendedNextStep: hypothesis.recommendedNextStep,
         evidence: hypothesis.evidence,
+        ...(hypothesis.update ? { update: hypothesis.update } : {}),
       });
     }
 

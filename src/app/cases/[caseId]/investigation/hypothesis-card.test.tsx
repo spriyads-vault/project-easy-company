@@ -122,4 +122,22 @@ describe("HypothesisCard", () => {
     render(<HypothesisCard hypothesis={hypothesis} index={0} onOpenCitation={noop} />);
     expect(screen.queryByRole("button", { name: /\.md|\.pdf/ })).not.toBeInTheDocument();
   });
+
+  it("shows a qualitative hypothesis-update badge when this hypothesis continues an earlier one (MVP-11)", () => {
+    const updated: HypothesisCreatedPayload = {
+      ...hypothesis,
+      update: {
+        status: "supported_by_new_evidence",
+        previousHypothesisTitle: "An earlier hypothesis on this case",
+      },
+    };
+    render(<HypothesisCard hypothesis={updated} index={0} onOpenCitation={noop} />);
+    expect(screen.getByText("Supported by new evidence")).toBeInTheDocument();
+  });
+
+  it("renders no update badge for a fresh hypothesis with no earlier counterpart", () => {
+    render(<HypothesisCard hypothesis={hypothesis} index={0} onOpenCitation={noop} />);
+    expect(screen.queryByText(/supported by new evidence/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/weakened by new evidence/i)).not.toBeInTheDocument();
+  });
 });
