@@ -139,6 +139,44 @@ existing file outside `src/lib/benchmarks`, `src/app/benchmarks`, and one
 nav link in `src/app/workspace/page.tsx` was touched, per direct
 instruction. The next open ticket is still MVP-12.
 
+UX-02 (Agent-First Crado Workspace) is now also done: the case +
+investigation flow (`src/app/cases/[caseId]/**` only — nothing else) moved
+from UX-01's near-black graphite theme to a light, spacious "agentic
+engineering workspace" (warm off-white canvas, white surfaces, charcoal
+text, one restrained green accent, amber reserved for a measurement
+actually above the limit), driven by a single systematic hex-value swap in
+`investigation/theme.ts` plus the same swap applied file-by-file so every
+existing component kept its logic untouched. On top of the re-theme,
+the investigation workspace's information architecture changed: a quiet
+top nav (product/revision/case ref + plain-text Investigation/Evidence/
+Timeline/Sources tabs, tab-switching as local state so a live SSE run
+never disconnects when the user looks at another tab) replaced the old
+three-column panel grid; a new agent-presence header ("CRADO INVESTIGATION
+AGENT · live status pill · one-line failure sentence") replaced the old
+giant-number-first hero, with the actual measurement numbers moved into
+their own Measurement artifact card; Agent Activity now renders as a
+progressive checklist while a run is active and compresses to "N actions
+completed · Xs · View activity" once it finishes; a new Evidence tab
+aggregates OBSERVED/KNOWN/INFERRED/MISSING across every hypothesis as its
+own central view, each item still opening the real source drawer; and a
+persistent bottom composer ("Tell Crado what changed, attach a result, or
+ask about this case…") replaced the standalone "Record result" form —
+free text is parsed by a new, deliberately non-model, non-paraphrasing
+deterministic utility (`parse-engineer-input.ts`) into an OBSERVATION +
+optional MEASUREMENT CHANGE confirmation object shown before anything
+persists, then submitted through the exact same, unmodified
+`recordInvestigationObservation` action the old form used — zero new
+database writes, zero new LLM calls. No change to the Investigation Agent,
+the deterministic correlation engine, the evidence model, the database
+schema, the benchmark harness, or the model provider. Verified live end to
+end against the real seeded Gateway X case (chrome-devtools MCP): signed
+in, ran a real ~34s RE-EVALUATE INVESTIGATION and watched the live
+checklist build and then compress, recorded an observation through the
+composer's confirmation flow and confirmed it appeared as new OBSERVED
+evidence and shifted a hypothesis's update status on the very next run,
+browsed all four tabs, and confirmed 1440/1280/1024/768/390 all render
+with no horizontal overflow. The next open ticket is still MVP-12.
+
 ## Session handoff format
 Append one entry per completed/paused ticket:
 
@@ -2065,4 +2103,125 @@ was explicitly **not** started per this session's own instruction.)
 - Next recommended ticket: MVP-12, Regulatory State evidence linkage —
   explicitly **not** started this session per direct instruction ("Do not
   start Regulatory State... Then STOP"). STOPPING here.
+- Commit: (see git log)
+
+### 2026-09-01 — UX-02
+- Completed: Agent-First Crado Workspace — a UI/interaction redesign of
+  `src/app/cases/[caseId]/**` only (case page + investigation workspace),
+  no other route touched, no Investigation Agent/deterministic
+  engine/evidence model/database/benchmark/model-provider change. Palette:
+  systematically remapped every hex color in that directory (verified via
+  grep before/after — zero old graphite hex codes remained) from
+  near-black graphite to a warm-off-white/white/charcoal/green/amber
+  palette, defined once in `investigation/theme.ts` and inherited by every
+  component through its existing token exports (no component's JSX/logic
+  needed touching for the recolor itself). Structure: `case-nav.tsx` (new
+  — quiet breadcrumb + Investigation/Evidence/Timeline/Sources tabs as
+  local client state, not routes), `investigation-hero.tsx` (rewritten
+  into an agent-presence header: identity, live status pill, one-line
+  failure sentence — the big measurement numbers moved to
+  `measurement-panel.tsx`, unchanged, now just repositioned as its own
+  artifact card), `agent-activity-panel.tsx` (rewritten to compress into
+  "N actions completed · Xs · View activity" once a run finishes, still
+  a full live checklist while active), `evidence-view.tsx` (new —
+  cross-hypothesis OBSERVED/KNOWN/INFERRED/MISSING aggregation),
+  `case-composer.tsx` + `parse-engineer-input.ts` (new — persistent bottom
+  NL input; the parser is a deliberately non-model, non-paraphrasing
+  deterministic utility that extracts a directional "N dB" figure only
+  when the wording is unambiguous, always shows the engineer's own words
+  back for confirmation, and submits through the pre-existing
+  `recordInvestigationObservation` action — no new database writes, no
+  new LLM call). Deleted `record-observation-form.tsx` (+ its test) as
+  dead code, fully superseded by the composer calling the same action.
+  `investigation-workspace.tsx` rewritten as the tab orchestrator (SSE
+  consumption/state ownership unchanged verbatim) around a single
+  scrolling canvas instead of the old three-column grid.
+- Tests: `pnpm typecheck`, `pnpm lint`, `pnpm test` (268 passing — updated
+  `agent-activity-panel.test.tsx` for the new compressed-summary contract,
+  updated 4 assertions in `investigation-workspace.test.tsx` to switch
+  tabs before asserting tab-specific content, added
+  `parse-engineer-input.test.ts` with positive/negative/missing-data/
+  boundary cases), `pnpm test:integration` (58 passing, untouched —
+  nothing here reaches the database differently), `pnpm build` — all
+  pass; all four `/cases/[caseId]*` routes still register. Live-verified
+  end to end (chrome-devtools MCP, `pnpm seed:gateway-x`, signed in as
+  `gateway-x-demo@crado.local`): ran a real ~34s RE-EVALUATE INVESTIGATION
+  and watched the live checklist build then compress; used the composer
+  on "I disconnected the display cable again and the peak dropped 2 dB
+  further." and confirmed the parser produced OBSERVATION (verbatim) +
+  MEASUREMENT CHANGE "-2 dB", confirmed it persisted, then re-ran the
+  investigation and confirmed the new observation appeared as OBSERVED
+  evidence and correctly shifted hypothesis update-status
+  (supported/weakened by new evidence); browsed all four tabs (Evidence
+  correctly aggregated both hypotheses' evidence with source attribution;
+  Timeline showed the full chronological chain; Sources showed the
+  honest zero-documents empty state for this seed case); verified
+  1440/1280/1024/768/390 with no horizontal overflow (`scrollWidth ===
+  clientWidth` confirmed at 390); zero console errors throughout.
+- Files/areas changed: `src/app/cases/[caseId]/investigation/theme.ts`
+  (repalette + new `nav` tokens), `investigation-hero.tsx` (rewritten),
+  `agent-activity-panel.tsx` + its test (rewritten), `case-nav.tsx` (new),
+  `evidence-view.tsx` (new), `case-composer.tsx` (new),
+  `parse-engineer-input.ts` + its test (new), `investigation-workspace.tsx`
+  (rewritten), `investigation-panel.tsx` (dropped the standalone
+  RecordObservationForm usage), `page.tsx` (comment update only),
+  `record-observation-form.tsx` + its test (deleted), every other
+  component file in the directory (`correlation-card.tsx`,
+  `hypothesis-card.tsx`, `measurement-panel.tsx`, `product-panel.tsx`,
+  `sources-panel.tsx`, `source-drawer.tsx`, `investigation-timeline.tsx`,
+  `revision-comparison-card.tsx`, `agent-metrics-panel.tsx`,
+  `record-engineering-change-form.tsx`, `describe-hypothesis-update.ts`,
+  `spectrum-chart.tsx`, `../page.tsx`, `../add-measurement-form.tsx`) —
+  recolor only, no logic changes; `investigation-workspace.test.tsx`
+  (4 assertions updated for tabs); `features.json` (added `UX-02`,
+  `passes: true`, priority 16.8, after `VALIDATION-01` and before
+  `MVP-16` — no existing entry renumbered), `docs/PROGRESS.md`.
+- Decisions (reversible, made per CLAUDE.md autonomy rules — no blockers
+  found):
+  - No reference screenshots were actually attached to the ticket message
+    despite it saying "study the attached Ontora screenshots" — flagged
+    this plainly rather than fabricating having studied images never
+    received, and proceeded from the ticket's own extremely detailed
+    written interaction/visual spec, which was sufficient to implement
+    confidently. Screenshots were shared in a later message and reviewed
+    before continuing; they confirmed rather than changed the direction
+    already taken (quiet text-tab top nav, minimal agent-status line,
+    stat-row/artifact card pattern) — green stayed the accent per the
+    ticket's explicit color spec, not Ontora's blue.
+  - The re-theme is scoped strictly to `src/app/cases/[caseId]/**`
+    (the ticket's one named target, "Redesign /cases/[caseId]/
+    investigation") — `/workspace`, `/products`, `/benchmarks`, `/login`,
+    and the `/` marketing placeholder were deliberately left on the
+    existing plain default theme; "Do not change the marketing website"
+    made this an easy, low-risk boundary rather than a site-wide overhaul.
+  - The bottom composer's NL parser is a small deterministic regex
+    utility, not a model call — per CLAUDE.md's "prefer a testable
+    deterministic utility before adding another agent/model call" and
+    "do not silently convert natural language into authoritative product
+    facts." It never rewrites what the engineer typed (no paraphrase like
+    the ticket's own "Display path disconnected" example implies); the
+    OBSERVATION shown for confirmation is always their verbatim words,
+    with only an unambiguous "N dB" figure mechanically split out. This
+    trades literal fidelity to the ticket's example copy for an honest,
+    zero-new-model-call, fully tested capability.
+  - The ticket's list of composer uses also included "questions about
+    evidence" and "requesting another investigation" — not wired into
+    free-text routing (reliably classifying intent from free text needs
+    either a new model call or unreliable keyword guessing, both
+    disclosed risks). The existing RE-EVALUATE INVESTIGATION button and
+    the new Evidence tab's citations already cover those two needs
+    explicitly; recording an observation (with a detected measurement
+    change) is the composer's one honestly-implemented capability.
+  - `record-observation-form.tsx` was deleted rather than left orphaned
+    once nothing rendered it — per CLAUDE.md's "delete/deprecate old
+    concepts that create conflicting product behavior," since the
+    composer now does the identical database write through a better-
+    integrated UI.
+- Remaining: none blocking for UX-02. Not built (deliberately out of
+  scope): a literal `/cases` index route (the ticket's mock's "← Cases"
+  breadcrumb target) — kept the existing, real "← {case title}" back-link
+  to the case page instead of inventing new architecture/navigation the
+  app doesn't otherwise have.
+- Next recommended ticket: MVP-12, Regulatory State evidence linkage —
+  not started this session (not requested).
 - Commit: (see git log)

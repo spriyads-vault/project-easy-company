@@ -32,13 +32,13 @@ export default async function CasePage({ params }: CasePageProps) {
       <div className="flex flex-col gap-2">
         <Link
           href={`/products/${failureCase.productId}/revisions/${failureCase.productRevisionId}`}
-          className={`text-xs ${text.muted} hover:text-[#f3f1e8] hover:underline`}
+          className={`text-xs ${text.muted} hover:text-[#1c1a15] hover:underline`}
         >
           ← {failureCase.productName} · {failureCase.revisionLabel}
         </Link>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">{failureCase.title}</h1>
-          <span className="border border-[#3a3d34] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#c8c6bb]">
+          <span className="border border-[#ddd7c8] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#6b6354]">
             Radiated emissions
           </span>
         </div>
@@ -47,7 +47,7 @@ export default async function CasePage({ params }: CasePageProps) {
         </p>
         <Link
           href={`/cases/${failureCase.id}/investigation`}
-          className="mt-2 self-start border border-[#3ecf6e]/50 bg-[#3ecf6e]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#5fdb87] transition-colors hover:bg-[#3ecf6e]/20"
+          className="mt-2 self-start border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#177a3f] transition-colors hover:bg-[#1f9d52]/20"
         >
           Open investigation workspace
         </Link>
@@ -61,7 +61,7 @@ export default async function CasePage({ params }: CasePageProps) {
           ) : (
             <ul className="flex flex-col gap-3">
               {failureCase.measurements.map((measurement) => (
-                <li key={measurement.id} className="border border-[#262922] px-3 py-2 text-sm">
+                <li key={measurement.id} className="border border-[#e7e2d6] px-3 py-2 text-sm">
                   <div className="font-medium">
                     <span className={`mr-2 font-normal ${text.muted}`}>
                       {measurement.revisionLabel}
@@ -75,11 +75,11 @@ export default async function CasePage({ params }: CasePageProps) {
                   </div>
                   <ul className="mt-1 flex flex-col gap-1">
                     {measurement.peaks.map((peak) => (
-                      <li key={peak.id} className="text-[#d8d6cb]">
+                      <li key={peak.id} className="text-[#6b6354]">
                         <span className={text.mono}>{peak.frequencyMhz} MHz</span> at{" "}
                         <span
                           className={`font-medium ${text.mono} ${
-                            peak.marginDb > 0 ? "text-[#e0916a]" : "text-[#5fdb87]"
+                            peak.marginDb > 0 ? "text-[#a15a17]" : "text-[#177a3f]"
                           }`}
                         >
                           {peak.marginDb > 0 ? "+" : ""}

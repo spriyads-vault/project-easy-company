@@ -252,18 +252,28 @@ describe("InvestigationWorkspace — streaming", () => {
     // appears must have come from the live SSE event, not the initial prop.
     render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} timelineEntries={[]} />);
 
+    // Timeline is its own tab (UX-02); an empty timeline renders nothing at
+    // all (see InvestigationTimeline's own empty-state guard).
+    fireEvent.click(screen.getByRole("button", { name: "Timeline" }));
     expect(screen.queryByText("Investigation timeline")).not.toBeInTheDocument();
 
+    // The run button only lives on the Investigation tab.
+    fireEvent.click(screen.getByRole("button", { name: "Investigation" }));
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Investigation timeline")).toBeInTheDocument();
-      const timelineSection = screen.getByText("Investigation timeline").closest("section")!;
-      expect(within(timelineSection).getByText("Hypothesis")).toBeInTheDocument();
-      expect(
-        within(timelineSection).getByText("5th harmonic of 40 MHz system clock"),
-      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /run again/i })).toBeInTheDocument();
     });
+
+    // The live-updated timeline state is already there without a refresh —
+    // switching to the Timeline tab just reveals it.
+    fireEvent.click(screen.getByRole("button", { name: "Timeline" }));
+    expect(screen.getByText("Investigation timeline")).toBeInTheDocument();
+    const timelineSection = screen.getByText("Investigation timeline").closest("section")!;
+    expect(within(timelineSection).getByText("Hypothesis")).toBeInTheDocument();
+    expect(
+      within(timelineSection).getByText("5th harmonic of 40 MHz system clock"),
+    ).toBeInTheDocument();
   });
 
   it("renders multiple correlations when more than one candidate is found (multiple correlations case)", async () => {
@@ -447,7 +457,11 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
     await waitFor(() => {
       expect(screen.getByText("What Crado handled")).toBeInTheDocument();
     });
-    expect(screen.getByText("Searched engineering documents")).toBeInTheDocument();
+    expect(screen.getByText(/Searched engineering documents/)).toBeInTheDocument();
+
+    // Sources are their own tab (UX-02) — not shown on the default
+    // Investigation tab.
+    fireEvent.click(screen.getByRole("button", { name: "Sources" }));
     expect(screen.getByText("Sources used")).toBeInTheDocument();
   });
 
@@ -470,6 +484,10 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
 
     expect(screen.getByText("Agent activity")).toBeInTheDocument();
     expect(screen.getByText("What Crado handled")).toBeInTheDocument();
+
+    // Sources are their own tab (UX-02) — not shown on the default
+    // Investigation tab.
+    fireEvent.click(screen.getByRole("button", { name: "Sources" }));
     expect(screen.getByText("EMC-Test-04.md")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -512,6 +530,7 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
     ]);
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
 
+    fireEvent.click(screen.getByRole("button", { name: "Sources" }));
     expect(
       screen.getByText("No document passages were used as evidence in this investigation."),
     ).toBeInTheDocument();

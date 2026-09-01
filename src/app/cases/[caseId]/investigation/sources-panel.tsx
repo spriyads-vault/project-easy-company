@@ -41,7 +41,7 @@ export function SourcesPanel({ hypotheses, metrics }: SourcesPanelProps) {
 
       {metrics.documentsAvailable === 0 ? (
         <div className="flex flex-col gap-0.5">
-          <span className={`${text.kicker} text-[10px] text-[#c8c6bb]`}>No sources</span>
+          <span className={`${text.kicker} text-[10px] text-[#6b6354]`}>No sources</span>
           <p className={`text-sm ${text.muted}`}>
             No engineering documents have been added for this product.
           </p>
@@ -57,7 +57,7 @@ export function SourcesPanel({ hypotheses, metrics }: SourcesPanelProps) {
           {sources.map((source) => (
             <li
               key={source.documentId}
-              className="flex items-center justify-between gap-3 border-b border-[#21231e] py-2 last:border-b-0"
+              className="flex items-center justify-between gap-3 border-b border-[#e7e2d6] py-2 last:border-b-0"
             >
               <div className="flex min-w-0 flex-col">
                 <span className="truncate text-sm">{source.filename}</span>
@@ -75,7 +75,7 @@ export function SourcesPanel({ hypotheses, metrics }: SourcesPanelProps) {
 
       <Link
         href="/documents"
-        className={`self-start text-xs ${text.muted} hover:text-[#f3f1e8] hover:underline`}
+        className={`self-start text-xs ${text.muted} hover:text-[#1c1a15] hover:underline`}
       >
         View all sources →
       </Link>

@@ -90,12 +90,12 @@ export function AgentMetricsPanel({ metrics, toolCallCount, sourcesUsedCount }: 
       {shownDetail.length > 0 ? (
         <details className="group">
           <summary
-            className={`cursor-pointer list-none text-xs ${text.muted} hover:text-[#f3f1e8]`}
+            className={`cursor-pointer list-none text-xs ${text.muted} hover:text-[#1c1a15]`}
           >
             <span className="group-open:hidden">Show technical detail</span>
             <span className="hidden group-open:inline">Hide technical detail</span>
           </summary>
-          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[#21231e] pt-3 sm:grid-cols-3 lg:grid-cols-4">
+          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[#e7e2d6] pt-3 sm:grid-cols-3 lg:grid-cols-4">
             {shownDetail.map(({ key, label, format }) => {
               const value = metrics[key] as number;
               return (

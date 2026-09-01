@@ -9,7 +9,6 @@ import type { EvidenceCategory } from "@/lib/domain/schema";
 import type { EvidenceCitation } from "@/lib/hypotheses/schema";
 import { CorrelationCard } from "./correlation-card";
 import { HypothesisCard } from "./hypothesis-card";
-import { RecordObservationForm } from "./record-observation-form";
 import { RecordEngineeringChangeForm } from "./record-engineering-change-form";
 import { accent, surface, text } from "./theme";
 
@@ -48,11 +47,11 @@ const STATUS_LABEL: Record<RunStatus, string> = {
 };
 
 const STATUS_DOT_COLOR: Record<RunStatus, string> = {
-  idle: "bg-[#4a4d43]",
-  running: "bg-[#3ecf6e] animate-pulse",
-  completed: "bg-[#3ecf6e]",
-  failed: "bg-[#e0916a]",
-  interrupted: "bg-[#e0916a]",
+  idle: "bg-[#c7c0ae]",
+  running: "bg-[#1f9d52] animate-pulse",
+  completed: "bg-[#1f9d52]",
+  failed: "bg-[#a15a17]",
+  interrupted: "bg-[#a15a17]",
 };
 
 function buttonLabel(status: RunStatus, busy: boolean, hasMultipleRevisions: boolean): string {
@@ -93,7 +92,7 @@ export function InvestigationPanel({
           onClick={onRunInvestigation}
           disabled={!canRunAnalysis || busy}
           title={disabledReason ?? undefined}
-          className="border border-[#3ecf6e]/50 bg-[#3ecf6e]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#5fdb87] transition-colors hover:bg-[#3ecf6e]/20 disabled:cursor-not-allowed disabled:border-[#3a3d34] disabled:bg-transparent disabled:text-[#6f6d65]"
+          className="border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#177a3f] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:border-[#ddd7c8] disabled:bg-transparent disabled:text-[#847c6a]"
         >
           {buttonLabel(state.status, busy, hasMultipleRevisions)}
         </button>
@@ -116,7 +115,7 @@ export function InvestigationPanel({
       ) : null}
 
       {state.status === "failed" || state.status === "interrupted" ? (
-        <div role="alert" className="flex flex-col gap-1 border border-[#e0916a]/40 bg-[#e0916a]/10 p-3">
+        <div role="alert" className="flex flex-col gap-1 border border-[#a15a17]/40 bg-[#a15a17]/10 p-3">
           <span className={`${text.kicker} text-[10px] ${accent.warnText}`}>Failed run</span>
           <p className={`text-sm ${accent.warnText}`}>{state.errorMessage}</p>
           {state.correlations.length > 0 || state.hypotheses.length > 0 ? (
@@ -137,7 +136,7 @@ export function InvestigationPanel({
       ) : null}
 
       {state.clarification ? (
-        <div className="flex flex-col gap-1 border border-[#3a3d34] p-3">
+        <div className="flex flex-col gap-1 border border-[#ddd7c8] p-3">
           <span className={text.kicker}>Additional information needed</span>
           <p className="text-sm">{state.clarification}</p>
         </div>
@@ -156,12 +155,15 @@ export function InvestigationPanel({
         </div>
       ) : null}
 
-      {/* Follows a recommended investigation with new physical evidence —
-          only makes sense once there's at least one hypothesis to follow
-          up on. See src/app/cases/[caseId]/investigation/actions.ts. */}
+      {/* Recording an observation now goes through the persistent bottom
+          composer (case-composer.tsx) — the same investigation_events write,
+          just reached via the "tell Crado what changed" input instead of a
+          second structured form. Recording an ENGINEERING CHANGE stays its
+          own explicit action here: it creates a new product revision, too
+          consequential a structured operation to infer from free text. Only
+          makes sense once there's at least one hypothesis to follow up on. */}
       {state.status !== "running" && state.hypotheses.length > 0 ? (
         <div className="flex flex-wrap gap-3">
-          <RecordObservationForm caseId={caseId} />
           <RecordEngineeringChangeForm
             caseId={caseId}
             productId={productId}

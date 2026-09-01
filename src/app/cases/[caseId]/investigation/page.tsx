@@ -31,16 +31,15 @@ export default async function InvestigationPage({ params }: InvestigationPagePro
 
   return (
     <div className={`flex flex-1 flex-col ${surface.page}`}>
-      {/* UX-01: kept slim deliberately — the InvestigationHero rendered as
-          the first row inside InvestigationWorkspace now owns the primary
-          product/revision/case identity, failure-type badge, headline
-          frequency/margin, and live status, so this stays a plain
-          breadcrumb back to the case page rather than repeating that
-          content in a second, differently-styled header. */}
-      <header className="flex items-center border-b border-[#262922] px-5 py-3">
+      {/* Kept slim deliberately — InvestigationWorkspace renders its own
+          agent-presence header and quiet case nav (product/revision/case
+          ref + Investigation/Evidence/Timeline/Sources tabs) as its first
+          two rows, so this stays a plain breadcrumb back to the case page
+          rather than repeating that identity in a second header. */}
+      <header className="flex items-center border-b border-[#e7e2d6] px-5 py-3">
         <Link
           href={`/cases/${caseId}`}
-          className={`text-xs ${text.muted} hover:text-[#f3f1e8] hover:underline`}
+          className={`text-xs ${text.muted} hover:text-[#1c1a15] hover:underline`}
         >
           ← {failureCase.title}
         </Link>

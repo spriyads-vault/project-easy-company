@@ -42,7 +42,7 @@ export function MeasurementPanel({ caseId, measurement }: MeasurementPanelProps)
         </div>
         <Link
           href={`/cases/${caseId}`}
-          className={`text-xs ${text.muted} hover:text-[#f3f1e8] hover:underline`}
+          className={`text-xs ${text.muted} hover:text-[#1c1a15] hover:underline`}
         >
           Add measurement
         </Link>
@@ -77,7 +77,7 @@ export function MeasurementPanel({ caseId, measurement }: MeasurementPanelProps)
               {operatingConditions(measurement.operatingMode).map((condition) => (
                 <li
                   key={condition}
-                  className="border border-[#2c2f27] px-2 py-1 text-xs uppercase tracking-wide text-[#c8c6bb]"
+                  className="border border-[#e7e2d6] px-2 py-1 text-xs uppercase tracking-wide text-[#6b6354]"
                 >
                   {condition}
                 </li>

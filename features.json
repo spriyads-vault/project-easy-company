@@ -359,6 +359,28 @@
       ]
     },
     {
+      "id": "UX-02",
+      "priority": 16.8,
+      "title": "Agent-First Crado Workspace",
+      "depends_on": [
+        "UX-01"
+      ],
+      "passes": true,
+      "acceptance": [
+        "case + investigation workspace re-themed from graphite dark to a light, spacious warm-off-white/white/charcoal palette with restrained green accent and amber reserved for a measurement above the limit — scoped to src/app/cases/[caseId]/** only, marketing page and other authenticated routes (workspace/products/benchmarks/login) untouched",
+        "quiet top nav (breadcrumb + product/revision/case ref) with plain-text Investigation/Evidence/Timeline/Sources tabs as four views onto one investigation, not four separate pages — tab switching is local state, never a navigation/fetch, so a live SSE run stays connected across tab changes",
+        "an agent-presence header (CRADO INVESTIGATION AGENT · live status pill · one-line failure-state sentence) leads the canvas, replacing the old giant-number-first hero",
+        "live agent work renders as a progressive checklist while a run is active, compresses to 'N actions completed · Xs · View activity' once complete, never shows chain-of-thought",
+        "structured artifacts (Measurement, Deterministic Relationship, Hypothesis w/ Evidence, Before/After) read in the order: what happened, what Crado found, why, what's missing, what's next",
+        "a persistent bottom composer parses free text deterministically (never a model call, never a paraphrase) into an OBSERVATION + optional MEASUREMENT CHANGE confirmation object, shown before anything is persisted, wired to the existing recordInvestigationObservation action — zero new database writes",
+        "Evidence tab aggregates OBSERVED/KNOWN/INFERRED/MISSING across every hypothesis as the central information architecture, each item still opening the real source drawer",
+        "OBSERVED/KNOWN/INFERRED/MISSING trust boundary, citation provenance, and certainty/confidence-band guards are unchanged from UX-01",
+        "no Investigation Agent, deterministic engine, evidence model, database schema, benchmark architecture, Regulatory State, or model-provider change",
+        "1440/1280/1024/768/390 verified live with no horizontal overflow",
+        "full Gateway X flow verified live: sign in, run/re-evaluate a real investigation, watch the live agent feed, record an observation through the composer end to end, browse all four tabs, confirm it feeds into the next run's evidence"
+      ]
+    },
+    {
       "id": "MVP-16",
       "priority": 16,
       "title": "Production deployment",
