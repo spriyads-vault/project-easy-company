@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getFailureCase } from "@/lib/cases/queries";
 import { getLatestRevisionInLineage } from "@/lib/products/revision-lineage";
 import { AddMeasurementForm } from "./add-measurement-form";
+import { surface, text } from "./investigation/theme";
 
 interface CasePageProps {
   params: Promise<{ caseId: string }>;
@@ -27,66 +28,59 @@ export default async function CasePage({ params }: CasePageProps) {
     };
 
   return (
-    <div className="flex flex-1 flex-col gap-6 px-8 py-10 text-foreground">
-      <div className="flex flex-col gap-1">
+    <div className={`flex flex-1 flex-col gap-8 px-6 py-8 sm:px-10 sm:py-10 ${surface.page}`}>
+      <div className="flex flex-col gap-2">
         <Link
           href={`/products/${failureCase.productId}/revisions/${failureCase.productRevisionId}`}
-          className="text-xs text-foreground/60 hover:underline"
+          className={`text-xs ${text.muted} hover:text-[#f3f1e8] hover:underline`}
         >
           ← {failureCase.productName} · {failureCase.revisionLabel}
         </Link>
-        <h1 className="text-lg font-semibold tracking-tight">
-          {failureCase.title}
-        </h1>
-        <p className="text-sm text-foreground/60">
-          {failureCase.productName} · {failureCase.revisionLabel} ·{" "}
-          {failureCase.status}
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">{failureCase.title}</h1>
+          <span className="border border-[#3a3d34] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#c8c6bb]">
+            Radiated emissions
+          </span>
+        </div>
+        <p className={`text-sm ${text.muted}`}>
+          {failureCase.productName} · {failureCase.revisionLabel} · {failureCase.status}
         </p>
         <Link
           href={`/cases/${failureCase.id}/investigation`}
-          className="mt-2 self-start rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background"
+          className="mt-2 self-start border border-[#3ecf6e]/50 bg-[#3ecf6e]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#5fdb87] transition-colors hover:bg-[#3ecf6e]/20"
         >
           Open investigation workspace
         </Link>
       </div>
 
-      <div className="grid gap-8 md:grid-cols-2">
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-foreground/50">
-            Measurements
-          </h2>
+      <div className="grid gap-6 md:grid-cols-2">
+        <section className={`flex flex-col gap-3 p-5 ${surface.panel}`}>
+          <h2 className={text.kicker}>Measurements</h2>
           {failureCase.measurements.length === 0 ? (
-            <p className="text-sm text-foreground/60">
-              No measurements recorded yet.
-            </p>
+            <p className={`text-sm ${text.muted}`}>No measurements recorded yet.</p>
           ) : (
             <ul className="flex flex-col gap-3">
               {failureCase.measurements.map((measurement) => (
-                <li
-                  key={measurement.id}
-                  className="rounded-md border border-foreground/10 px-3 py-2 text-sm"
-                >
+                <li key={measurement.id} className="border border-[#262922] px-3 py-2 text-sm">
                   <div className="font-medium">
-                    <span className="mr-2 font-normal text-foreground/50">
+                    <span className={`mr-2 font-normal ${text.muted}`}>
                       {measurement.revisionLabel}
                     </span>
                     {measurement.label ?? "Measurement"}
                     {measurement.operatingMode ? (
-                      <span className="ml-2 font-normal text-foreground/60">
+                      <span className={`ml-2 font-normal ${text.muted}`}>
                         {measurement.operatingMode}
                       </span>
                     ) : null}
                   </div>
                   <ul className="mt-1 flex flex-col gap-1">
                     {measurement.peaks.map((peak) => (
-                      <li key={peak.id} className="text-foreground/80">
-                        {peak.frequencyMhz} MHz at{" "}
+                      <li key={peak.id} className="text-[#d8d6cb]">
+                        <span className={text.mono}>{peak.frequencyMhz} MHz</span> at{" "}
                         <span
-                          className={
-                            peak.marginDb > 0
-                              ? "font-medium text-red-600"
-                              : "font-medium text-green-700"
-                          }
+                          className={`font-medium ${text.mono} ${
+                            peak.marginDb > 0 ? "text-[#e0916a]" : "text-[#5fdb87]"
+                          }`}
                         >
                           {peak.marginDb > 0 ? "+" : ""}
                           {peak.marginDb} dB
@@ -101,12 +95,10 @@ export default async function CasePage({ params }: CasePageProps) {
           )}
         </section>
 
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-foreground/50">
-            Add a measurement
-          </h2>
+        <section className={`flex flex-col gap-3 p-5 ${surface.panel}`}>
+          <h2 className={text.kicker}>Add a measurement</h2>
           {currentRevision.id !== failureCase.productRevisionId ? (
-            <p className="text-xs text-foreground/50">
+            <p className={`text-xs ${text.muted}`}>
               This will be recorded against {currentRevision.label}, the
               current revision following an engineering change.
             </p>

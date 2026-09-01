@@ -39,7 +39,14 @@ export function SourcesPanel({ hypotheses, metrics }: SourcesPanelProps) {
         </span>
       </div>
 
-      {sources.length === 0 ? (
+      {metrics.documentsAvailable === 0 ? (
+        <div className="flex flex-col gap-0.5">
+          <span className={`${text.kicker} text-[10px] text-[#c8c6bb]`}>No sources</span>
+          <p className={`text-sm ${text.muted}`}>
+            No engineering documents have been added for this product.
+          </p>
+        </div>
+      ) : sources.length === 0 ? (
         <p className={`text-sm ${text.muted}`}>
           {metrics.passagesRetrieved === 0
             ? "No relevant passages were retrieved for this investigation."

@@ -9,7 +9,7 @@ import type { HypothesisCreatedPayload } from "@/lib/analysis/events";
 import type { EvidenceCategory } from "@/lib/domain/schema";
 import type { EvidenceCitation } from "@/lib/hypotheses/schema";
 import { HYPOTHESIS_UPDATE_LABEL, HYPOTHESIS_UPDATE_STYLE } from "./describe-hypothesis-update";
-import { surface, text } from "./theme";
+import { evidence, motion, surface, text } from "./theme";
 
 interface HypothesisCardProps {
   hypothesis: HypothesisCreatedPayload;
@@ -45,7 +45,7 @@ export function HypothesisCard({ hypothesis, index, onOpenCitation }: Hypothesis
   const whyThisTest = hypothesis.evidence.find((item) => item.category === "inferred")?.description ?? null;
 
   return (
-    <article className={`flex flex-col gap-4 p-4 ${surface.panelElevated}`}>
+    <article className={`flex flex-col gap-4 p-4 ${motion.rise} ${surface.panelElevated}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex flex-col gap-0.5">
           <span className={`${text.kicker} text-[10px] text-[#6f6d65]`}>
@@ -74,9 +74,18 @@ export function HypothesisCard({ hypothesis, index, onOpenCitation }: Hypothesis
             (item) => item.category === section.category,
           );
           if (items.length === 0) return null;
+          const style = evidence[section.category];
           return (
-            <div key={section.category} className="flex flex-col gap-1.5">
-              <span className={text.kicker}>{section.heading}</span>
+            <div
+              key={section.category}
+              className={`flex flex-col gap-1.5 border-l-2 pl-2.5 ${style.borderColor}`}
+            >
+              <span className={text.kicker}>
+                <span aria-hidden="true" className={`mr-1.5 ${style.glyphColor}`}>
+                  {style.glyph}
+                </span>
+                {section.heading}
+              </span>
               <ul className="flex flex-col gap-1">
                 {items.map((item, itemIndex) => (
                   <li
@@ -85,7 +94,7 @@ export function HypothesisCard({ hypothesis, index, onOpenCitation }: Hypothesis
                       section.category === "inferred"
                         ? "text-sm italic text-[#d8d6cb]"
                         : section.category === "missing"
-                          ? `border-l-2 border-[#3a3d34] pl-2 text-sm ${text.muted}`
+                          ? `text-sm ${text.muted}`
                           : "text-sm"
                     }
                   >
@@ -98,10 +107,11 @@ export function HypothesisCard({ hypothesis, index, onOpenCitation }: Hypothesis
                           onClick={() =>
                             onOpenCitation(item.citation!, item.category, index, hypothesis.title)
                           }
-                          className="text-xs text-[#5fdb87] underline decoration-dotted underline-offset-2 hover:text-[#7fe6a0]"
+                          className="inline-flex items-center gap-1 border border-[#3ecf6e]/40 bg-[#3ecf6e]/5 px-1.5 py-0.5 align-middle text-[11px] text-[#5fdb87] transition-colors hover:border-[#3ecf6e]/70 hover:bg-[#3ecf6e]/15 hover:text-[#7fe6a0]"
                         >
-                          [{item.citation.filename}
-                          {item.citation.section ? ` · ${item.citation.section}` : item.citation.pageNumber ? ` · p.${item.citation.pageNumber}` : ""}]
+                          <span aria-hidden="true">⌗</span>
+                          {item.citation.filename}
+                          {item.citation.section ? ` · ${item.citation.section}` : item.citation.pageNumber ? ` · p.${item.citation.pageNumber}` : ""}
                         </button>
                       </>
                     ) : null}

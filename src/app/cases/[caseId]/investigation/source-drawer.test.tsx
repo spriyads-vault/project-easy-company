@@ -54,7 +54,7 @@ describe("SourceDrawer", () => {
       screen.getByText("Display interface is driven from the 40 MHz subsystem."),
     ).toBeInTheDocument();
     expect(screen.getByText(/Hypothesis 01/)).toBeInTheDocument();
-    expect(screen.getByText("known")).toBeInTheDocument();
+    expect(screen.getByText("Known evidence")).toBeInTheDocument();
   });
 
   it("shows the section (missing page/section case handled distinctly for Markdown-sourced passages)", () => {

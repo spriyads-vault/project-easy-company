@@ -61,9 +61,52 @@ Measured live on the same Gateway X case shape: 31.4s -> 18.7s total
 (-41%), 15 -> 3 tool calls (-80%), 8/8 zero-result document searches -> 0,
 same 1 well-grounded hypothesis both times, no provenance regression. A
 new idempotent `pnpm seed:gateway-x` script creates the canonical demo
-case without hand-building it through the UI. The next open ticket is
-MVP-12, Regulatory State evidence linkage — explicitly not started, per
-direct instruction to stop after PERF-01.
+case without hand-building it through the UI.
+
+UX-01 (pilot-quality investigation experience) is now also done: a live-
+updating investigation hero (product/revision/case reference, RADIATED
+EMISSIONS badge, headline frequency/margin, WAITING FOR EVIDENCE /
+INVESTIGATING / INVESTIGATION COMPLETE / ANALYSIS FAILED status) now leads
+the workspace; the deterministic correlation reads as the primary product
+moment (larger, first); OBSERVED/KNOWN/INFERRED/MISSING evidence sections
+each carry a distinct glyph and left-border treatment within the existing
+graphite/warm-white/green palette; Agent Activity is collapsed by default
+once a completed run already has a hypothesis on screen but always force-
+expands the moment a new run starts (a render-time "adjust state on prop
+change" pattern, not an effect — the codebase's lint rule rejects
+set-state-in-effect); "What Crado Handled" now leads with four truthful
+work-saved numbers (tools used, model steps, sources cited, next test),
+with document/passage/timing detail moved into a collapsed
+`<details>` section; the source drawer gained a "Used as" (Known
+evidence/Observed evidence/etc.) row and a slide-in entrance; the
+investigation timeline got a distinct glyph per step type and a visually
+highlighted RESULT entry; the before/after comparison card leads with a
+large delta and a Before → After row; deliberate copy now covers the
+no-documents, waiting-for-evidence, and failed-run states; the case page
+(`/cases/[caseId]`) and its measurement form are reskinned to the same
+graphite theme so the first impression is consistent from the case page
+onward; reduced-motion-safe CSS entrance animation (gated behind
+`prefers-reduced-motion: no-preference`, no library) was added to the
+correlation card, hypothesis card, timeline entries, comparison card, and
+source drawer. Verified live at 1440/1280/1024/768/390 with no horizontal
+overflow. The full Gateway X demo flow was run live twice end to end
+(seed → run → observation → hypothesis update → engineering change → Rev18
+→ second measurement → RE-EVALUATE → before/after comparison → refresh
+reconstruction) with real Anthropic calls, including a mixed-history
+RE-EVALUATE that produced two new hypotheses grounded in the recorded
+observation. Live QA caught and fixed a real bug along the way: Agent
+Activity's collapse state was captured once at mount and never resynced,
+so a live re-run silently stayed collapsed with no visible progress — now
+fixed. PERF-01's architecture held throughout every live run in this
+session (stepCount consistently 2, zero wasted document searches, tool
+duration under a quarter second) — confirmed directly against persisted
+`agent.completed` payloads, not just visually. The one known gap: citation
+inspection (clicking a document-sourced badge) could not be demoed live
+because this seed case has zero indexed engineering documents — MVP-13
+(pilot file upload) doesn't exist yet, so there's nothing to index; the
+source drawer itself is unit- and integration-tested. The next open
+ticket is MVP-12, Regulatory State evidence linkage — explicitly not
+started, per direct instruction to stop after UX-01.
 
 ## Session handoff format
 Append one entry per completed/paused ticket:
@@ -1752,6 +1795,156 @@ was explicitly **not** started per this session's own instruction.)
   history) — judged sufficient given that coverage; a live confirmation
   is a reasonable candidate to fold into the next ticket's live
   walkthrough if one is needed.
+- Next recommended ticket: MVP-12, Regulatory State evidence linkage —
+  explicitly **not** started this session per direct instruction. STOPPING
+  here.
+- Commit: (see git log)
+
+### 2026-09-01 — UX-01
+- Completed: A separate polish ticket (no renumbering, MVP-12 untouched,
+  no backend/agent code touched — see "PERF-01 latency" below). Reviewed
+  and reworked the full case → investigation flow for a pilot/investor-
+  ready first impression:
+  1. New `investigation-hero.tsx`, rendered as the first full-width row
+     inside `InvestigationWorkspace` (not the server-rendered page
+     header, so its STATUS badge can live-update from the same `state`
+     the rest of the workspace already tracks): product/revision, a
+     presentational `CASE-XXXXXX` reference derived from the case id (no
+     new stored field), a static RADIATED EMISSIONS badge (the DB's own
+     `test_type` check constraint already guarantees this), the headline
+     frequency/margin, and a status badge cycling WAITING FOR EVIDENCE /
+     READY TO INVESTIGATE / INVESTIGATING / INVESTIGATION COMPLETE /
+     ANALYSIS FAILED.
+  2. `theme.ts` gained an `evidence` map (glyph + border color per
+     OBSERVED/KNOWN/INFERRED/MISSING) applied in `hypothesis-card.tsx` as
+     a left border + inline glyph per section — instantly distinguishable
+     without leaving graphite/warm-white/green (no rainbow). Citation
+     buttons restyled as small bordered badges instead of underlined
+     inline links.
+  3. `agent-activity-panel.tsx`: a `defaultCollapsed` prop (lazy
+     `useState` seed) collapses the panel by default only when a
+     completed run already has a hypothesis on screen at first render;
+     separately, "adjusting state on prop change" during render (not an
+     effect — this repo's lint config makes set-state-in-effect a build
+     error) force-expands the instant a new run starts, one-directionally
+     (never force-collapses again on completion), so a run the user is
+     actively watching always shows live progress.
+  4. `agent-metrics-panel.tsx` split into an always-visible 4-metric
+     primary row (tools used, model steps, sources cited, next test —
+     `toolCallCount`/`sourcesUsedCount` now passed in from the workspace,
+     derived from `state.agentActivity.length` and the same
+     `deriveSourcesUsed` SourcesPanel uses) plus a `<details>`-based
+     collapsed "technical detail" section for the rest (document/passage
+     counts, PERF-01's per-phase durations) — infrastructure metrics
+     never compete with the investigation conclusion for attention.
+  5. `source-drawer.tsx` gained a "Used as" row (Known evidence/Observed
+     evidence/etc., replacing a bare lowercase category string) and a
+     reduced-motion-safe slide-in entrance.
+  6. `investigation-timeline.tsx` gained a distinct glyph per step type
+     and a visually highlighted (tinted background, ★ glyph, larger text)
+     RESULT entry — the strongest moment in the chain now reads as
+     visually distinct, confirmed live readable in well under 5 seconds.
+  7. `revision-comparison-card.tsx` reworked to lead with a large delta
+     number and a Before → After row with an arrow between them.
+  8. `sources-panel.tsx` gained a distinct "NO SOURCES / No engineering
+     documents have been added for this product" empty state (previously
+     only had the "zero passages retrieved" state); `investigation-
+     panel.tsx`'s failed-run alert gained a "Failed run" kicker plus an
+     "Existing evidence below is preserved" reassurance when there's
+     something to preserve.
+  9. Case page (`src/app/cases/[caseId]/page.tsx`) and
+     `add-measurement-form.tsx` reskinned to the same graphite theme as
+     the investigation workspace — `theme.ts`'s doc comment updated to
+     reflect it now scopes the whole case-detail flow, not just
+     `/investigation`.
+  10. Reduced-motion-safe CSS keyframes (`crado-rise`, `crado-slide-in`)
+      added to `globals.css`, gated behind
+      `@media (prefers-reduced-motion: no-preference)` — with reduced
+      motion requested, no rule applies and elements render in their
+      final resting state outright (nothing is ever hidden/offset outside
+      that media query). No animation library. Applied to the correlation
+      card, hypothesis card, timeline entries (staggered), comparison
+      card, and the source drawer.
+  11. Mobile-only mobile stacking order adjusted (Sources and Product
+      moved earlier, Agent Activity/Metrics moved later — only the base
+      `order-N` classes changed, `md:`/`lg:` breakpoints untouched) to
+      match Failure → Investigation → Evidence → Timeline → Product →
+      Agent activity.
+  Live QA (chrome-devtools MCP, signed in as the seeded demo user) caught
+  a real interaction bug beyond what any unit test could: Agent
+  Activity's collapse state, implemented first with a plain `useEffect`,
+  stayed collapsed through a live re-run because the effect only fired on
+  mount in the already-collapsed case — no visible live progress during a
+  run the user was actively watching. Fixed with the render-time
+  "adjusting state on a prop change" pattern instead (see item 3 above);
+  confirmed live afterward across two more real runs.
+- Live walkthrough (real Anthropic calls, local Supabase, `pnpm
+  seed:gateway-x`, `gateway-x-demo@crado.local`): opened the seeded
+  Gateway X case (already carrying PERF-01's original benchmark history —
+  1 prior completed run + 1 hypothesis); RUN AGAIN correctly stayed
+  collapsed-by-default on load then force-expanded on click; a
+  mixed-history RE-EVALUATE (`previousCompletedRunCount > 0`) correctly
+  offered and used `getPreviousHypotheses`, producing an UNCHANGED
+  qualitative update — this was also the live confirmation, deferred from
+  the PERF-01 session, that the optimized tool-omission logic behaves
+  correctly with real prior history; recorded an observation ("Display
+  path disconnected", "Peak dropped 9 dB"); recorded an engineering change
+  ("Display termination changed") which created Rev18 and live-updated
+  the hero to Rev18; added a second measurement (200 MHz, -3.6 dB) for
+  Rev18 from the case page; RE-EVALUATE INVESTIGATION on Rev18 produced
+  two new hypotheses (HIGH CONFIDENCE "Display cable/connector radiating…
+  SUPPORTED BY NEW EVIDENCE", plus a LOW CONFIDENCE alternate), explicitly
+  grounded in the recorded observation; the Before/After card showed
+  11.0 dB improvement (7.4 dB above → 3.6 dB below selected limit); the
+  timeline rendered the full chain (measurement → hypothesis → 2 updated
+  investigations → observation → engineering change → new revision →
+  measurement → highlighted RESULT → 2 more updated-investigation
+  entries) in the correct order; a full page reload reconstructed every
+  panel identically from Postgres with zero console errors and no
+  refetch. No manual DB editing was needed anywhere in the flow.
+- Tests: 261 unit tests (updated: `agent-metrics-panel.test.tsx` rewritten
+  for the primary/detail split, using `toBeVisible()`/`not.toBeVisible()`
+  for the collapsed-`<details>` assertions since `getByText` doesn't check
+  CSS visibility; `source-drawer.test.tsx` updated for the "Used as: Known
+  evidence" wording change). 50 integration tests, unchanged (no backend
+  code touched by this ticket, so no integration-test changes were
+  needed). `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm
+  test:integration`, `pnpm build` all pass.
+- Files/areas changed: `src/app/cases/[caseId]/investigation/theme.ts`
+  (evidence/motion/status-badge tokens), `globals.css` (motion keyframes),
+  new `investigation-hero.tsx`, `hypothesis-card.tsx`, `correlation-
+  card.tsx`, `agent-activity-panel.tsx`, `agent-metrics-panel.tsx`
+  (+ its test), `investigation-workspace.tsx` (hero wiring, mobile
+  reorder, new props threaded to metrics/activity panels),
+  `investigation-timeline.tsx`, `revision-comparison-card.tsx`,
+  `sources-panel.tsx`, `source-drawer.tsx` (+ its test),
+  `investigation-panel.tsx` (failed-run copy), `page.tsx` (investigation
+  route — slimmed header, `productName` prop threaded through), the case
+  page `src/app/cases/[caseId]/page.tsx`, and `add-measurement-form.tsx`.
+- Decisions (reversible, made per CLAUDE.md autonomy rules):
+  - Extended the graphite theme from `/investigation` to its parent
+    `/cases/[caseId]` case page — the ticket explicitly asks to review
+    the flow "beginning from the case page," and the previous plain-light
+    case page was a jarring inconsistency immediately before the themed
+    workspace. Did not touch `/products/[productId]/...` (facts editing)
+    — outside the ticket's named demo flow.
+  - "Sources used" (SourcesPanel's own heading) and the new compact
+    metric label collided verbatim when both render in the same tree —
+    renamed the metric to "Sources cited" rather than the section
+    heading, since the heading reads more naturally as a section title.
+  - No literal "REVISION" row was added to the source drawer (ticket's
+    "where available") — `EvidenceCitation` has no revision field at all,
+    and documents aren't currently associated with a specific product
+    revision; adding one would be a schema/capability change, out of
+    scope for a UX-only ticket. Left as a known, explicitly-deferred gap.
+  - `CASE-XXXXXX` in the hero is a presentational-only derivation from the
+    existing UUID, not a new sequential case-numbering capability.
+- Remaining: citation-badge inspection (source drawer opening from a
+  document-sourced KNOWN item) was not exercised live in this session's
+  walkthrough — the seeded Gateway X product has zero indexed engineering
+  documents, so no document citation ever appears to click; this is a
+  pre-existing gap (MVP-13, pilot file upload, doesn't exist yet), not a
+  regression, and the drawer itself has full unit/integration coverage.
 - Next recommended ticket: MVP-12, Regulatory State evidence linkage —
   explicitly **not** started this session per direct instruction. STOPPING
   here.

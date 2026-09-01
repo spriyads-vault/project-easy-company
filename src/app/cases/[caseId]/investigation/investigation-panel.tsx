@@ -116,9 +116,13 @@ export function InvestigationPanel({
       ) : null}
 
       {state.status === "failed" || state.status === "interrupted" ? (
-        <p role="alert" className={`border border-[#e0916a]/40 bg-[#e0916a]/10 p-3 text-sm ${accent.warnText}`}>
-          {state.errorMessage}
-        </p>
+        <div role="alert" className="flex flex-col gap-1 border border-[#e0916a]/40 bg-[#e0916a]/10 p-3">
+          <span className={`${text.kicker} text-[10px] ${accent.warnText}`}>Failed run</span>
+          <p className={`text-sm ${accent.warnText}`}>{state.errorMessage}</p>
+          {state.correlations.length > 0 || state.hypotheses.length > 0 ? (
+            <p className={`text-xs ${text.muted}`}>Existing evidence below is preserved.</p>
+          ) : null}
+        </div>
       ) : null}
 
       {state.correlations.length > 0 ? (

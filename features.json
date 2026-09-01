@@ -309,6 +309,33 @@
       ]
     },
     {
+      "id": "UX-01",
+      "priority": 16.6,
+      "title": "Pilot-quality investigation experience",
+      "depends_on": [
+        "MVP-10C",
+        "MVP-11",
+        "PERF-01"
+      ],
+      "passes": true,
+      "acceptance": [
+        "investigation header/hero shows product, revision, case reference, RADIATED EMISSIONS badge, headline frequency/margin, and a live WAITING FOR EVIDENCE / INVESTIGATING / INVESTIGATION COMPLETE / ANALYSIS FAILED status",
+        "deterministic relationship reads as the primary product moment, larger and above the hypothesis",
+        "OBSERVED/KNOWN/INFERRED/MISSING evidence sections carry distinct glyph + left-border treatment within the graphite/warm-white/green palette",
+        "agent activity is collapsed by default once a completed run already has a hypothesis on screen, and always force-expands the moment a run starts",
+        "What Crado Handled leads with four truthful work-saved metrics (tools used, model steps, sources cited, next test) with document/passage/timing counts moved into a collapsed technical-detail section",
+        "citation badges open the source drawer with Document/Type/Section-Page/Used as/Relevant passage, unchanged focus-trap and Escape/backdrop-close behavior",
+        "investigation timeline shows a distinct glyph per step type and visually highlights the measured-outcome (result) entry",
+        "before/after comparison leads with a large delta and a Before → After row",
+        "deliberate copy for empty/waiting/failed states (NO SOURCES, WAITING FOR EVIDENCE, FAILED RUN) — never a blank card or raw error",
+        "case page (/cases/[caseId]) reskinned to the same graphite theme as the investigation workspace for a consistent first impression",
+        "reduced-motion-safe entrance animation on the correlation card, hypothesis card, timeline entries, comparison card, and source drawer, inert under prefers-reduced-motion",
+        "1440/1280/1024/768/390 all verified live with no horizontal overflow; mobile stacking reorders toward Failure -> Investigation -> Evidence -> Timeline -> Product -> Agent activity",
+        "full Gateway X demo flow (seed, run, citation drawer where documents exist, observation, hypothesis update, engineering change, new revision, second measurement, before/after, refresh) verified live end to end, twice, with real Anthropic calls",
+        "PERF-01's step count (2), tool-omission behavior, and near-zero tool duration are unchanged across all live runs in this session"
+      ]
+    },
+    {
       "id": "MVP-16",
       "priority": 16,
       "title": "Production deployment",

@@ -10,7 +10,7 @@ import { useEffect, useRef } from "react";
 import type { EvidenceCitation } from "@/lib/hypotheses/schema";
 import type { EvidenceCategory } from "@/lib/domain/schema";
 import { describeDocumentType } from "@/lib/documents/describe-document-type";
-import { surface, text } from "./theme";
+import { motion, surface, text } from "./theme";
 
 interface SourceDrawerProps {
   citation: EvidenceCitation | null;
@@ -22,6 +22,16 @@ interface SourceDrawerProps {
 
 const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+// UX-01 (section 6): "USED AS / Known evidence" — the same four evidence
+// categories hypothesis-card.tsx labels, spelled out in the drawer rather
+// than shown as a bare lowercase enum value.
+const EVIDENCE_CATEGORY_LABEL: Record<EvidenceCategory, string> = {
+  observed: "Observed evidence",
+  known: "Known evidence",
+  inferred: "Inferred reasoning",
+  missing: "Missing evidence",
+};
 
 export function SourceDrawer({
   citation,
@@ -89,7 +99,7 @@ export function SourceDrawer({
         role="dialog"
         aria-modal="true"
         aria-labelledby="source-drawer-heading"
-        className={`relative flex h-full w-full flex-col gap-4 overflow-y-auto p-5 sm:w-[420px] ${surface.panelElevated}`}
+        className={`relative flex h-full w-full flex-col gap-4 overflow-y-auto p-5 sm:w-[420px] ${motion.slideIn} ${surface.panelElevated}`}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex flex-col gap-1">
@@ -109,8 +119,15 @@ export function SourceDrawer({
           </button>
         </div>
 
+        {evidenceCategory ? (
+          <div className="flex flex-col gap-1">
+            <span className={text.kicker}>Used as</span>
+            <p className="text-sm">{EVIDENCE_CATEGORY_LABEL[evidenceCategory]}</p>
+          </div>
+        ) : null}
+
         <div className={`flex flex-col gap-2 border-t border-b border-[#2c2f27] py-4`}>
-          <span className={text.kicker}>Retrieved passage</span>
+          <span className={text.kicker}>Relevant passage</span>
           <p className="text-sm leading-relaxed">{citation.passage}</p>
         </div>
 
@@ -120,13 +137,6 @@ export function SourceDrawer({
             <p className="text-sm">
               Hypothesis {String(hypothesisIndex + 1).padStart(2, "0")} — {hypothesisTitle}
             </p>
-          </div>
-        ) : null}
-
-        {evidenceCategory ? (
-          <div className="flex flex-col gap-1">
-            <span className={text.kicker}>Evidence type</span>
-            <p className="text-sm uppercase tracking-wide">{evidenceCategory}</p>
           </div>
         ) : null}
       </div>

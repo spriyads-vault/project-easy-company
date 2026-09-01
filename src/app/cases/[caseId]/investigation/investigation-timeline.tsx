@@ -10,7 +10,7 @@ import {
   HYPOTHESIS_UPDATE_LABEL,
   HYPOTHESIS_UPDATE_STYLE,
 } from "./describe-hypothesis-update";
-import { surface, text } from "./theme";
+import { motion, surface, text } from "./theme";
 
 interface InvestigationTimelineProps {
   entries: TimelineEntry[];
@@ -29,6 +29,36 @@ function entryKicker(entry: TimelineEntry): string {
   return entry.update ? "Updated investigation" : "Hypothesis";
 }
 
+// A restrained, distinct glyph per step type — plain characters, matching
+// the ✓/◌ vocabulary already used for agent activity, never a decorative
+// icon library. "result" (the measured outcome) gets its own filled marker
+// so the strongest moment in the chain reads as visually distinct at a
+// glance, per UX-01 section 7.
+function entryGlyph(entry: TimelineEntry): string {
+  switch (entry.type) {
+    case "measurement":
+      return "▮";
+    case "hypothesis":
+      return "◆";
+    case "observation":
+      return "●";
+    case "engineering_change":
+      return "▲";
+    case "new_revision":
+      return "▮";
+    case "result":
+      return "★";
+  }
+}
+
+// Staggers the entrance animation across the first several entries only —
+// a long timeline shouldn't force the viewer to wait out a cascading
+// reveal to see its bottom.
+const RISE_DELAY_CLASSES = [motion.rise, motion.riseDelay1, motion.riseDelay2, motion.riseDelay3];
+function riseDelayClass(index: number): string {
+  return RISE_DELAY_CLASSES[Math.min(index, RISE_DELAY_CLASSES.length - 1)];
+}
+
 export function InvestigationTimeline({ entries }: InvestigationTimelineProps) {
   if (entries.length === 0) return null;
 
@@ -45,14 +75,18 @@ export function InvestigationTimeline({ entries }: InvestigationTimelineProps) {
         {entries.map((entry, index) => (
           <li
             key={`${entry.type}-${entry.id}`}
-            className={`relative flex flex-col gap-1 py-3 pl-5 ${
+            className={`relative flex flex-col gap-1 py-3 pl-6 ${riseDelayClass(index)} ${
               index < entries.length - 1 ? "border-l border-[#31352c]" : "border-l border-transparent"
-            }`}
+            } ${entry.type === "result" ? "-ml-3 border-l-0 bg-[#3ecf6e]/[0.04] pl-9 pr-3" : ""}`}
           >
             <span
               aria-hidden="true"
-              className="absolute left-0 top-3.5 h-2 w-2 -translate-x-1/2 rounded-full border border-[#3ecf6e]/60 bg-[#0d0f0d]"
-            />
+              className={`absolute left-0 top-3 -translate-x-1/2 text-xs leading-none ${
+                entry.type === "result" ? "text-[#5fdb87]" : "text-[#6f6d65]"
+              }`}
+            >
+              {entryGlyph(entry)}
+            </span>
             <span className={`${text.kicker} text-[10px]`}>{entryKicker(entry)}</span>
 
             {entry.type === "measurement" ? (
@@ -113,7 +147,7 @@ export function InvestigationTimeline({ entries }: InvestigationTimelineProps) {
             ) : null}
 
             {entry.type === "result" ? (
-              <p className="text-sm">
+              <p className="text-base font-medium">
                 <span className={text.mono}>{entry.comparison.before.revisionLabel}</span>
                 {" → "}
                 <span className={text.mono}>{entry.comparison.after.revisionLabel}</span>

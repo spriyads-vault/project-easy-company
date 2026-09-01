@@ -22,12 +22,14 @@ import { SseEventParser } from "@/lib/investigation/parse-sse-events";
 import { ProductPanel } from "./product-panel";
 import { MeasurementPanel } from "./measurement-panel";
 import { InvestigationPanel } from "./investigation-panel";
+import { InvestigationHero } from "./investigation-hero";
 import { InvestigationTimeline } from "./investigation-timeline";
 import { RevisionComparisonCard } from "./revision-comparison-card";
 import { AgentActivityPanel } from "./agent-activity-panel";
 import { AgentMetricsPanel } from "./agent-metrics-panel";
 import { SourcesPanel } from "./sources-panel";
 import { SourceDrawer } from "./source-drawer";
+import { deriveSourcesUsed } from "./derive-sources-used";
 import { surface } from "./theme";
 
 interface OpenCitationState {
@@ -44,6 +46,10 @@ interface InvestigationWorkspaceProps {
   /** Optional — defaults to the empty-state label so every pre-MVP-11 test
    * call site keeps working unmodified. */
   currentRevisionLabel?: string;
+  /** UX-01: shown in the hero header. Optional/defaults to "" so every
+   * pre-UX-01 test call site keeps working unmodified — the real page.tsx
+   * always has this from getFailureCase. */
+  productName?: string;
   hasMultipleRevisions?: boolean;
   productFacts: ProductFactRecord[];
   measurement: MeasurementRow | null;
@@ -58,6 +64,7 @@ export function InvestigationWorkspace({
   productId,
   revisionId,
   currentRevisionLabel = "",
+  productName = "",
   hasMultipleRevisions = false,
   productFacts,
   measurement,
@@ -180,16 +187,31 @@ export function InvestigationWorkspace({
     }
   }
 
+  const sourcesUsedCount = deriveSourcesUsed(state.hypotheses).length;
+
   return (
     <>
       <div
         className={`grid flex-1 grid-cols-1 content-start gap-4 p-4 md:grid-cols-2 lg:grid-cols-[minmax(260px,320px)_minmax(320px,1fr)_minmax(380px,1.2fr)] ${surface.page}`}
       >
-        {/* Mobile order: Measurement, Investigation, Timeline, Agent
-            activity, What Crado handled, Sources, Product — desktop
-            reflows into the three-column PRODUCT|MEASUREMENT|INVESTIGATION
-            row plus full-width rows below it. */}
-        <div className="order-9 md:order-1 lg:order-1">
+        <div className="order-0 md:col-span-2 lg:col-span-3">
+          <InvestigationHero
+            caseId={caseId}
+            productName={productName}
+            revisionLabel={currentRevisionLabel}
+            measurement={measurement}
+            status={state.status}
+            busy={isSubmitting}
+          />
+        </div>
+        {/* Mobile order (UX-01 section 13): Measurement (the failure),
+            Investigation (hypothesis + next action), Comparison, Sources
+            (evidence/provenance), Timeline, Product context, Agent
+            activity, Agent metrics — background/infra content sinks to the
+            bottom. Desktop reflows into the three-column
+            PRODUCT|MEASUREMENT|INVESTIGATION row plus full-width rows
+            below it, unchanged from before. */}
+        <div className="order-6 md:order-1 lg:order-1">
           <ProductPanel productId={productId} revisionId={revisionId} facts={productFacts} />
         </div>
         <div className="order-1 md:order-2 lg:order-2">
@@ -215,20 +237,28 @@ export function InvestigationWorkspace({
             <RevisionComparisonCard comparison={comparisonEntry.comparison} />
           </div>
         ) : null}
+        <div className="order-4 md:order-8 md:col-span-2 lg:col-span-3 lg:order-8">
+          <SourcesPanel hypotheses={state.hypotheses} metrics={state.agentMetrics} />
+        </div>
         <div className="order-5 md:order-5 md:col-span-2 lg:col-span-3 lg:order-5">
           <InvestigationTimeline entries={timeline} />
         </div>
-        <div className="order-6 md:order-6 md:col-span-2 lg:col-span-3 lg:order-6">
-          <AgentActivityPanel activity={state.agentActivity} active={state.agentActive} />
+        <div className="order-7 md:order-6 md:col-span-2 lg:col-span-3 lg:order-6">
+          <AgentActivityPanel
+            activity={state.agentActivity}
+            active={state.agentActive}
+            defaultCollapsed={!state.agentActive && state.hypotheses.length > 0}
+          />
         </div>
         {state.agentMetrics ? (
-          <div className="order-7 md:order-7 md:col-span-2 lg:col-span-3 lg:order-7">
-            <AgentMetricsPanel metrics={state.agentMetrics} />
+          <div className="order-8 md:order-7 md:col-span-2 lg:col-span-3 lg:order-7">
+            <AgentMetricsPanel
+              metrics={state.agentMetrics}
+              toolCallCount={state.agentActivity.length}
+              sourcesUsedCount={sourcesUsedCount}
+            />
           </div>
         ) : null}
-        <div className="order-8 md:order-8 md:col-span-2 lg:col-span-3 lg:order-8">
-          <SourcesPanel hypotheses={state.hypotheses} metrics={state.agentMetrics} />
-        </div>
       </div>
 
       <SourceDrawer

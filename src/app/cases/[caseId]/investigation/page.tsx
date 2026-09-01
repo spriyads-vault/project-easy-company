@@ -31,17 +31,19 @@ export default async function InvestigationPage({ params }: InvestigationPagePro
 
   return (
     <div className={`flex flex-1 flex-col ${surface.page}`}>
-      <header className="flex flex-col gap-1 border-b border-[#262922] px-5 py-4">
+      {/* UX-01: kept slim deliberately — the InvestigationHero rendered as
+          the first row inside InvestigationWorkspace now owns the primary
+          product/revision/case identity, failure-type badge, headline
+          frequency/margin, and live status, so this stays a plain
+          breadcrumb back to the case page rather than repeating that
+          content in a second, differently-styled header. */}
+      <header className="flex items-center border-b border-[#262922] px-5 py-3">
         <Link
           href={`/cases/${caseId}`}
           className={`text-xs ${text.muted} hover:text-[#f3f1e8] hover:underline`}
         >
           ← {failureCase.title}
         </Link>
-        <h1 className="text-lg font-semibold uppercase tracking-wide">
-          {failureCase.productName} · {failureCase.revisionLabel}
-        </h1>
-        <p className={text.kicker}>Failure case · {failureCase.title}</p>
       </header>
 
       <InvestigationWorkspace
@@ -49,6 +51,7 @@ export default async function InvestigationPage({ params }: InvestigationPagePro
         productId={failureCase.productId}
         revisionId={currentRevisionId}
         currentRevisionLabel={currentRevisionLabel}
+        productName={failureCase.productName}
         hasMultipleRevisions={hasMultipleRevisions}
         productFacts={productFacts}
         measurement={measurement}

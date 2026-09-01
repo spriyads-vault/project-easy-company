@@ -6,7 +6,7 @@
 // PASS, FAIL, or CERTIFIED — margin is always phrased relative to the
 // selected limit line, matching the ticket's explicit constraint.
 import type { MeasurementComparison } from "@/lib/measurements/compare-measurements";
-import { surface, text } from "./theme";
+import { motion, surface, text } from "./theme";
 
 interface RevisionComparisonCardProps {
   comparison: MeasurementComparison;
@@ -27,11 +27,18 @@ export function RevisionComparisonCard({ comparison }: RevisionComparisonCardPro
   return (
     <section
       aria-labelledby="revision-comparison-heading"
-      className={`flex flex-col gap-4 p-5 ${surface.panel}`}
+      className={`flex flex-col gap-4 p-5 ${motion.rise} ${surface.panel}`}
     >
-      <h2 id="revision-comparison-heading" className={text.kicker}>
-        Before / after comparison
-      </h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="revision-comparison-heading" className={text.kicker}>
+          Before / after comparison
+        </h2>
+        <span
+          className={`text-2xl font-semibold sm:text-3xl ${text.mono} ${improved ? "text-[#5fdb87]" : "text-[#e0916a]"}`}
+        >
+          {deltaDb === 0 ? "No change" : `${improved ? "" : "-"}${Math.abs(deltaDb).toFixed(1)} dB`}
+        </span>
+      </div>
 
       {!sameFrequency ? (
         <p className={`text-xs ${text.muted}`}>
@@ -40,37 +47,32 @@ export function RevisionComparisonCard({ comparison }: RevisionComparisonCardPro
         </p>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="flex flex-col gap-1 border border-[#262922] p-3">
+      <div className="grid items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
+        <div className="flex flex-col gap-1 border border-[#262922] p-4">
           <span className={`${text.kicker} text-[10px]`}>Before · {before.revisionLabel}</span>
-          <span className={`${text.mono} text-lg`}>{before.frequencyMhz} MHz</span>
+          <span className={`${text.mono} text-2xl`}>{before.frequencyMhz} MHz</span>
           <span className={`text-sm ${text.muted}`}>{marginPhrase(before.marginDb)}</span>
         </div>
-        <div className="flex flex-col gap-1 border border-[#262922] p-3">
-          <span className={`${text.kicker} text-[10px]`}>After · {after.revisionLabel}</span>
-          <span className={`${text.mono} text-lg`}>{after.frequencyMhz} MHz</span>
-          <span className={`text-sm ${text.muted}`}>{marginPhrase(after.marginDb)}</span>
-        </div>
+        <span aria-hidden="true" className="hidden text-2xl text-[#6f6d65] sm:block">
+          →
+        </span>
         <div
-          className={`flex flex-col gap-1 border p-3 ${
+          className={`flex flex-col gap-1 border p-4 ${
             improved ? "border-[#3ecf6e]/40 bg-[#3ecf6e]/5" : "border-[#e0916a]/40 bg-[#e0916a]/5"
           }`}
         >
-          <span className={`${text.kicker} text-[10px]`}>Change</span>
-          <span className={`${text.mono} text-lg ${improved ? "text-[#5fdb87]" : "text-[#e0916a]"}`}>
-            {deltaDb === 0 ? "No change" : `${improved ? "" : "-"}${Math.abs(deltaDb).toFixed(1)} dB`}
-          </span>
-          <span className={`text-sm ${text.muted}`}>
-            {deltaDb === 0
-              ? "Margin unchanged."
-              : improved
-                ? `Margin improved by ${Math.abs(deltaDb).toFixed(1)} dB.`
-                : `Margin worsened by ${Math.abs(deltaDb).toFixed(1)} dB.`}
-          </span>
+          <span className={`${text.kicker} text-[10px]`}>After · {after.revisionLabel}</span>
+          <span className={`${text.mono} text-2xl`}>{after.frequencyMhz} MHz</span>
+          <span className={`text-sm ${text.muted}`}>{marginPhrase(after.marginDb)}</span>
         </div>
       </div>
 
-      <p className={`text-xs ${text.muted}`}>
+      <p className={`text-sm ${text.muted}`}>
+        {deltaDb === 0
+          ? "Margin unchanged. "
+          : improved
+            ? `Margin improved by ${Math.abs(deltaDb).toFixed(1)} dB. `
+            : `Margin worsened by ${Math.abs(deltaDb).toFixed(1)} dB. `}
         {after.revisionLabel} is {marginPhrase(after.marginDb)} — an
         investigation finding, not a pass or certification result.
       </p>
