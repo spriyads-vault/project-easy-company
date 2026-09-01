@@ -1,4 +1,4 @@
-// The Investigation Agent's six tools (MVP-10B) — small, bounded, and each
+// The Investigation Agent's seven tools (MVP-10B) — small, bounded, and each
 // scoped to a single already-authenticated Supabase client captured by
 // closure at creation time (see createInvestigationAgent in
 // investigation-agent.ts). No global state: a fresh tool set is built per
@@ -24,6 +24,24 @@ import {
   type EngineeringDocumentPassage,
 } from "@/lib/documents/search";
 
+// PERF-01: deterministic counts computed once by create-analysis-run.ts
+// (in parallel with the documentsAvailable count — see that file) and
+// handed to the agent so it never has to spend a tool call, let alone a
+// full model round-trip, "discovering" that a case has no history. Also
+// what investigation-agent.ts's selectActiveTools() uses to decide which
+// history tools are even worth offering this run.
+export interface PriorContextSummary {
+  /** Other revisions of this product, excluding the one under investigation. */
+  previousRevisionCount: number;
+  /** investigation_events recorded for this failure case (observations,
+   * notes, engineering changes) — what getPreviousInvestigations reads. */
+  previousInvestigationCount: number;
+  /** Earlier *completed* analysis runs for this case — a non-zero count is
+   * exactly the condition under which getPreviousHypotheses (itself
+   * filtered to completed runs) could return anything. */
+  previousCompletedRunCount: number;
+}
+
 export interface InvestigationToolsContext {
   supabase: SupabaseClient<Database>;
   product: { id: string; name: string };
@@ -37,6 +55,7 @@ export interface InvestigationToolsContext {
   };
   productFacts: ProductFactForHypotheses[];
   correlationCandidates: HarmonicCorrelationCandidate[];
+  priorContext: PriorContextSummary;
 }
 
 export interface PreviousRevisionSummary {
@@ -77,7 +96,20 @@ const MAX_PREVIOUS_RUNS_FOR_HYPOTHESES = 5;
 
 const emptyInputSchema = z.object({});
 
+// PERF-01: after this many *consecutive* zero-result searches, the tool's
+// own response starts telling the model to stop rather than relying on the
+// system prompt alone — a code-enforced nudge, not just an instruction the
+// model might not follow. Deliberately not a hard block: a workspace with
+// many documents can still have a later, differently-worded query succeed,
+// so this steers rather than forbids.
+const ZERO_RESULT_STREAK_BEFORE_GUIDANCE = 2;
+
 export function createInvestigationTools(context: InvestigationToolsContext) {
+  // Scoped to this one call's closure — createInvestigationTools is invoked
+  // fresh per run (see investigation-agent.ts), so this counter can never
+  // leak between runs or workspaces.
+  let consecutiveEmptySearches = 0;
+
   return {
     getProductContext: tool({
       description:
@@ -111,7 +143,7 @@ export function createInvestigationTools(context: InvestigationToolsContext) {
 
     searchEngineeringDocuments: tool({
       description:
-        "Searches this workspace's indexed engineering documents (schematics, test reports, datasheets, regulatory notes) and returns bounded, exact passages with their source (document, page/section) — never a whole document. Call it multiple times with different targeted queries to improve recall (e.g. a component name, then a signal path, then a frequency) rather than one broad query.",
+        "Searches this workspace's indexed engineering documents (schematics, test reports, datasheets, regulatory notes) and returns bounded, exact passages with their source (document, page/section) — never a whole document. Call it multiple times with different targeted queries to improve recall (e.g. a component name, then a signal path, then a frequency) rather than one broad query. If the result includes a `guidance` field, follow it — it means recent searches found nothing and it's time to stop or change strategy, not keep trying near-identical queries.",
       inputSchema: z.object({
         query: z
           .string()
@@ -120,14 +152,23 @@ export function createInvestigationTools(context: InvestigationToolsContext) {
           .max(200)
           .describe("A specific, targeted search query — not the whole case."),
       }),
-      execute: async ({ query }): Promise<{ passages: EngineeringDocumentPassage[] }> => {
+      execute: async ({
+        query,
+      }): Promise<{ passages: EngineeringDocumentPassage[]; guidance: string | null }> => {
         const passages = await searchEngineeringDocuments(context.supabase, {
           query,
           productId: context.product.id,
           productRevisionId: context.revision.id,
           limit: MAX_DOCUMENT_SEARCH_RESULTS,
         });
-        return { passages };
+        consecutiveEmptySearches = passages.length === 0 ? consecutiveEmptySearches + 1 : 0;
+        const guidance =
+          consecutiveEmptySearches >= ZERO_RESULT_STREAK_BEFORE_GUIDANCE
+            ? "No relevant passages found in the last " +
+              `${consecutiveEmptySearches} searches. Stop searching and proceed with the ` +
+              "evidence already gathered rather than issuing more similar queries."
+            : null;
+        return { passages, guidance };
       },
     }),
 

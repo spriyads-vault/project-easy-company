@@ -40,9 +40,30 @@ events driving the Investigation panel, no refresh needed — verified live).
 RUN AGAIN relabels itself RE-EVALUATE INVESTIGATION once a case spans more
 than one revision; it's the same run mechanism, not a new agent. All
 work, tested (unit + integration) against a local Supabase instance, and
-live-verified end to end including one real Anthropic RE-EVALUATE call. The
-next open ticket is MVP-12, Regulatory State evidence linkage — explicitly
-not started, per direct instruction to stop after MVP-11.
+live-verified end to end including one real Anthropic RE-EVALUATE call.
+
+PERF-01 (Investigation Agent latency/waste optimization) is now also done:
+the four conditional agent tools (`getPreviousRevisions`,
+`getPreviousInvestigations`, `getPreviousHypotheses`,
+`searchEngineeringDocuments`) are structurally removed from the agent's
+tool list — not just discouraged by prompt — whenever their backing
+prior-history/document count is zero, computed once via 4 parallel
+Postgres counts before the agent starts and also embedded as plain facts
+in its task prompt so it never spends a model round-trip rediscovering
+them. `searchEngineeringDocuments` now nudges the agent to stop after 2
+consecutive zero-result searches instead of letting it repeat similar
+queries. The system prompt encourages batching the always-on grounding
+tools into one turn (confirmed live: 3 tool calls landed in a single model
+step). New wall-clock instrumentation (`stepCount`,
+`totalDurationMs`/`modelDurationMs`/`toolDurationMs`/`retrievalDurationMs`)
+is persisted on `agent.completed` and shown in the Agent Activity panel.
+Measured live on the same Gateway X case shape: 31.4s -> 18.7s total
+(-41%), 15 -> 3 tool calls (-80%), 8/8 zero-result document searches -> 0,
+same 1 well-grounded hypothesis both times, no provenance regression. A
+new idempotent `pnpm seed:gateway-x` script creates the canonical demo
+case without hand-building it through the UI. The next open ticket is
+MVP-12, Regulatory State evidence linkage — explicitly not started, per
+direct instruction to stop after PERF-01.
 
 ## Session handoff format
 Append one entry per completed/paused ticket:
@@ -1596,6 +1617,141 @@ was explicitly **not** started per this session's own instruction.)
   seed script) doesn't exist yet, so every live walkthrough so far
   (including this one) has had to build its own case by hand through the
   UI — worth doing before more live walkthroughs are needed.
+- Next recommended ticket: MVP-12, Regulatory State evidence linkage —
+  explicitly **not** started this session per direct instruction. STOPPING
+  here.
+- Commit: (see git log)
+
+### 2026-09-01 — PERF-01
+- Completed: A separate optimization ticket (explicitly not renumbering or
+  touching MVP-12). First benchmarked the existing Investigation Agent live
+  against a real Gateway X case with no instrumentation of its own (read
+  exact numbers back from Postgres `analysis_runs`/`analysis_events`, since
+  pre-optimization code had no timing fields to self-report). Root cause
+  found empirically: tool execution itself is near-instant (in-memory
+  grounding tools measured at ~1ms total); the real cost is model
+  round-trip *count*. Optimized on that basis:
+  1. `selectActiveTools()` (new, exported from `investigation-agent.ts`)
+     structurally removes `getPreviousRevisions`/`getPreviousInvestigations`/
+     `getPreviousHypotheses`/`searchEngineeringDocuments` from the
+     `ToolLoopAgent`'s tool object — not merely discouraged by prompt —
+     whenever their backing prior-history/document count is zero, so the
+     model literally cannot call a tool with nothing to find.
+  2. `searchEngineeringDocuments` (`tools.ts`) tracks consecutive
+     zero-result searches via a per-run closure counter and returns a
+     `guidance` stop-nudge string once 2 in a row come back empty, rather
+     than letting the agent repeat 5+ similarly-worded queries.
+  3. No SDK change was needed for parallel/batched tool calls — AI SDK 7's
+     `ToolLoopAgent` already executes multiple tool-call parts returned in
+     one model turn concurrently; only the system prompt now explicitly
+     encourages batching the three always-on grounding calls into one
+     turn (confirmed live: 3 tool calls landed inside a single
+     `stepCount`).
+  4. `create-analysis-run.ts` now runs 4 parallel Postgres `COUNT` queries
+     (documents indexed, other revisions, previous investigation events,
+     previous completed runs) once before the agent starts, threading the
+     result into both `selectActiveTools` and a new `buildTaskPrompt()`
+     that states this metadata as known facts up front — the agent never
+     spends a tool call rediscovering product/measurement/history details
+     already on hand.
+  5. The deterministic harmonic correlation utility was already
+     LLM-free (MVP-06) — confirmed unchanged, not touched.
+  6. `ToolLoopAgent`'s step allowance (`MAX_AGENT_STEPS = 9`) was left
+     unchanged — live testing only ever needed 2 steps post-optimization,
+     which doesn't constitute evidence for safely lowering the ceiling on
+     harder/larger-history cases; the ticket only authorized reducing it
+     if testing *proved* a lower bound remains reliable, which it didn't
+     establish. Documented here as an intentional non-change.
+  7. Citations/provenance, OBSERVED/KNOWN/INFERRED/MISSING labeling,
+     previous-hypothesis comparison, certainty-language guards, and
+     workspace isolation are all untouched — the 3 always-on grounding
+     tools (`getMeasurementContext`/`getProductContext`/
+     `getDeterministicCorrelations`) remain mandatory specifically because
+     `RetrievedRegistry` (citation validation) is built from their actual
+     tool *outputs*, not from prompt text, so citations can't be verified
+     against facts the agent was merely told rather than tool-retrieved.
+  8. No agent activity is hidden from the UI — the new
+     `stepCount`/duration fields are additive to the existing Agent
+     Activity panel and Sources panel, never a replacement or filter of
+     what was already shown; all prior tool-call activity entries still
+     render exactly as before.
+  Added wall-clock instrumentation (`Date.now()` wrapping around
+  `agent.generate()`, summed per-tool `durationMs` for tool/retrieval
+  time) rather than the AI SDK's `onStepStart`/`onLanguageModelCallEnd`
+  callbacks — simpler, and doesn't depend on provider-specific timing
+  data. New fields (`stepCount`, `totalDurationMs`, `modelDurationMs`,
+  `toolDurationMs`, `retrievalDurationMs`) added to
+  `agentCompletedPayloadSchema` as `.optional()` (backward-compat for
+  pre-PERF-01 persisted rows only — new writes always fill them) and
+  surfaced in `agent-metrics-panel.tsx`.
+  Added `scripts/seed-gateway-x.mjs` (`pnpm seed:gateway-x`) — an
+  idempotent seed script (natural-key existence checks before insert,
+  safe to rerun) that creates one canonical demo case (product "Gateway
+  X" Rev17, a 40 MHz clock fact, a radiated-emissions failure case, a 200
+  MHz/+7.4 dB measurement) signed in as a real demo user (required:
+  `current_workspace_id()` resolves from `auth.uid()`, which a raw
+  service-role insert has none of). Verified idempotent by running it
+  twice and confirming exactly one row per table in Postgres both times.
+  Ran a real live before/after benchmark: BEFORE against the stashed
+  pre-optimization code on one seeded case, AFTER against fully-optimized
+  code on a second, independently-seeded case (deliberately not reusing
+  the BEFORE case, so the AFTER run's `previousCompletedRunCount` stayed
+  genuinely zero rather than inheriting history from the BEFORE run and
+  confounding the very comparison being measured).
+- Tests: 259 unit tests (new: `selectActiveTools` describe block — 4
+  cases covering all-omitted/mixed/all-present tool selection; a
+  zero-history `runInvestigationAgent` test confirming only the 3
+  always-on tools ever appear in `activity`; a `buildAgentCompletedPayload`
+  timing-passthrough test). 50 integration tests (new: "computes real
+  prior-context counts against Postgres and omits history tools
+  accordingly on a fresh case" in `create-analysis-run.integration.test.ts`,
+  using a scripted `MockLanguageModelV4` against real local Postgres,
+  asserting only `getMeasurementContext` is called and
+  `documentSearches`/`documentsAvailable` are both 0). `pnpm lint`,
+  `pnpm typecheck`, `pnpm test`, `pnpm test:integration`, `pnpm build` all
+  pass.
+- Files/areas changed: `src/lib/agents/tools.ts` (`PriorContextSummary`,
+  zero-result-streak guidance), `src/lib/agents/investigation-agent.ts`
+  (`selectActiveTools`, `buildTaskPrompt`, timing instrumentation),
+  `src/lib/agents/validate-agent-output.ts` (`AgentTimings`,
+  `buildAgentCompletedPayload` gained a required 5th param),
+  `src/lib/analysis/events.ts` (5 new optional fields on
+  `agentCompletedPayloadSchema`), `src/lib/analysis/create-analysis-run.ts`
+  (4 parallel prior-context counts), `src/app/cases/[caseId]/investigation/
+  agent-metrics-panel.tsx` (renders the new timing fields, filtering
+  undefined ones for backward compat), `scripts/seed-gateway-x.mjs` (new),
+  `package.json` (`seed:gateway-x` script). Test files: `src/lib/agents/
+  investigation-agent.test.ts`, `src/lib/agents/
+  validate-agent-output.test.ts`, `src/lib/analysis/
+  create-analysis-run.integration.test.ts`, `src/lib/investigation/
+  mvp11.integration.test.ts`.
+- Decisions (reversible, made per CLAUDE.md autonomy rules):
+  - Deterministic tool omission (SDK-level, via `selectActiveTools`)
+    chosen over prompt-only discouragement — matches this codebase's
+    existing "never trust the model's own say-so" ethos (citation
+    validation), and is the only way to *guarantee* zero reflexive calls
+    rather than merely reduce their likelihood.
+  - `searchEngineeringDocuments`'s zero-result guidance is a soft nudge
+    (a `guidance` string in the tool's own return value), never a hard
+    block on a 3rd search — a differently-targeted query after 2 misses
+    can still be legitimate; the ticket asked to "change strategy or
+    stop," not "never search again."
+  - Kept `MAX_AGENT_STEPS` unchanged (see item 6 above) rather than
+    lowering it opportunistically from one easy live run.
+  - Did not delete the two benchmark demo cases/workspace created during
+    live testing — the ticket didn't ask for cleanup of pilot data, and
+    they're useful as a second demonstrated Gateway-X-shaped case
+    alongside the canonical seeded one.
+- Remaining: the "mixed-history" path (agent correctly still offers/uses
+  `getPreviousHypotheses` when `previousCompletedRunCount > 0`) is
+  confirmed by the automated `selectActiveTools` unit tests and the
+  pre-existing MVP-11 integration suite, but was not separately re-run
+  live end-to-end against a real Anthropic call in this session beyond
+  the original BEFORE benchmark run itself (which did exercise it,
+  since it ran the full old code path against a case that later gained
+  history) — judged sufficient given that coverage; a live confirmation
+  is a reasonable candidate to fold into the next ticket's live
+  walkthrough if one is needed.
 - Next recommended ticket: MVP-12, Regulatory State evidence linkage —
   explicitly **not** started this session per direct instruction. STOPPING
   here.

@@ -7,6 +7,7 @@
 // wrapper's own tests). Run with `pnpm test:integration`.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { MockLanguageModelV4 } from "ai/test";
 import type { Database } from "@/lib/supabase/database.types";
 import type { HypothesisModelAdapter } from "@/lib/ai/provider";
 import type { HypothesisGenerationOutput } from "@/lib/hypotheses/schema";
@@ -330,5 +331,68 @@ describe("createAnalysisRunForFailureCase", () => {
     // correlation.found at 200 MHz — its absence proves REV18's own facts
     // were used, not REV17's.
     expect(events.some((e) => e.type === "correlation.found")).toBe(false);
+  });
+
+  it("PERF-01: computes real prior-context counts against Postgres and omits history tools accordingly on a fresh case", async () => {
+    const seed = await seedGatewayXCase(userA.client);
+
+    // A model that immediately tries a history tool this fresh case has
+    // nothing to offer — getPreviousRevisions/getPreviousInvestigations/
+    // getPreviousHypotheses/searchEngineeringDocuments should all be
+    // omitted (previousRevisionCount, previousInvestigationCount,
+    // previousCompletedRunCount, and documentsAvailable are all genuinely
+    // 0 for this brand-new case), so the model goes straight to the
+    // always-on grounding tools instead.
+    let call = 0;
+    const validOutput = {
+      hypotheses: [],
+      clarificationQuestion: null,
+      investigationStatus: "insufficient_evidence" as const,
+    };
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        call += 1;
+        const usage = {
+          inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+          outputTokens: { total: 10, text: 10, reasoning: undefined, toolCalls: undefined },
+        };
+        if (call === 1) {
+          return {
+            content: [
+              { type: "tool-call" as const, toolCallId: "c1", toolName: "getMeasurementContext", input: "{}" },
+            ],
+            finishReason: { unified: "tool-calls" as const, raw: undefined },
+            usage,
+            warnings: [],
+          };
+        }
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(validOutput) }],
+          finishReason: { unified: "stop" as const, raw: undefined },
+          usage,
+          warnings: [],
+        };
+      },
+    });
+
+    const result = await createAnalysisRunForFailureCase(
+      { failureCaseId: seed.failureCaseId, measurementId: seed.measurementId },
+      fakeAdapter({ hypotheses: [], clarificationQuestion: null }),
+      userA.client,
+      { agentModel: model },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const events = await collect(result.events);
+
+    const toolActivity = events.filter((e) => e.type === "agent.tool.completed");
+    expect(toolActivity.map((e) => e.payload.toolName)).toEqual(["getMeasurementContext"]);
+
+    const completed = events.find((e) => e.type === "agent.completed");
+    expect(completed?.payload).toMatchObject({ documentsAvailable: 0, documentSearches: 0 });
+    if (completed?.type === "agent.completed") {
+      expect(completed.payload.stepCount).toBe(2);
+      expect(completed.payload.totalDurationMs).toBeGreaterThanOrEqual(0);
+    }
   });
 });

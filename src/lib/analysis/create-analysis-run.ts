@@ -123,11 +123,40 @@ export async function createAnalysisRunForFailureCase(
   let agentRunner: InvestigationAgentRunner | undefined;
   if (options.agentModel && revision && product) {
     const agentModel = options.agentModel;
-    const { count: documentsAvailable } = await supabase
-      .from("engineering_documents")
-      .select("id", { count: "exact", head: true })
-      .eq("product_id", product.id)
-      .eq("status", "indexed");
+    // PERF-01: four independent counts, fetched together rather than
+    // sequentially — this is what "give the agent enough initial metadata"
+    // and "run independent tools in parallel" mean at the deterministic
+    // pre-fetch layer, before the agent's own tool loop even starts. Each
+    // becomes either a fact in the agent's task prompt or a reason to omit
+    // a whole tool from its tool list (see selectActiveTools in
+    // investigation-agent.ts) — never something the agent has to spend a
+    // model round-trip discovering for itself.
+    const [
+      { count: documentsAvailable },
+      { count: previousRevisionCount },
+      { count: previousInvestigationCount },
+      { count: previousCompletedRunCount },
+    ] = await Promise.all([
+      supabase
+        .from("engineering_documents")
+        .select("id", { count: "exact", head: true })
+        .eq("product_id", product.id)
+        .eq("status", "indexed"),
+      supabase
+        .from("product_revisions")
+        .select("id", { count: "exact", head: true })
+        .eq("product_id", product.id)
+        .neq("id", revision.id),
+      supabase
+        .from("investigation_events")
+        .select("id", { count: "exact", head: true })
+        .eq("failure_case_id", failureCase.id),
+      supabase
+        .from("analysis_runs")
+        .select("id", { count: "exact", head: true })
+        .eq("failure_case_id", failureCase.id)
+        .eq("status", "completed"),
+    ]);
 
     agentRunner = {
       investigate: async (correlationCandidates) =>
@@ -158,6 +187,11 @@ export async function createAnalysisRunForFailureCase(
               },
               productFacts: productFactSummaries,
               correlationCandidates,
+              priorContext: {
+                previousRevisionCount: previousRevisionCount ?? 0,
+                previousInvestigationCount: previousInvestigationCount ?? 0,
+                previousCompletedRunCount: previousCompletedRunCount ?? 0,
+              },
             },
           },
           documentsAvailable ?? 0,

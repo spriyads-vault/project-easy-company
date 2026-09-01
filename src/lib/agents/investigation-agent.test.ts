@@ -10,8 +10,8 @@ import { describe, expect, it } from "vitest";
 import { MockLanguageModelV4 } from "ai/test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { runInvestigationAgent } from "./investigation-agent";
-import type { InvestigationToolsContext } from "./tools";
+import { runInvestigationAgent, selectActiveTools } from "./investigation-agent";
+import { createInvestigationTools, type InvestigationToolsContext } from "./tools";
 import { agentOutputSchema } from "./schema";
 
 const USAGE = {
@@ -92,6 +92,17 @@ function buildCaseContext(
           '200 MHz is consistent with the 5th harmonic of "system clock" (40 MHz x 5 = 200.000 MHz).',
       },
     ],
+    // PERF-01: non-zero by default so every existing scripted tool call in
+    // this file (getPreviousRevisions/getPreviousInvestigations/
+    // getPreviousHypotheses aren't scripted here, but keeping these >0
+    // means this fixture doesn't silently start omitting tools other tests
+    // might later script calls to) stays offered. Tests that specifically
+    // exercise omission set their own zeroed priorContext instead.
+    priorContext: {
+      previousRevisionCount: 1,
+      previousInvestigationCount: 1,
+      previousCompletedRunCount: 1,
+    },
   };
 }
 
@@ -203,7 +214,7 @@ describe("runInvestigationAgent (fake model, no real Anthropic call)", () => {
     ).toBe(false);
 
     // Truthful, actually-computed metrics — never fabricated.
-    expect(result.metrics).toEqual({
+    expect(result.metrics).toMatchObject({
       documentsAvailable: 12,
       documentSearches: 1,
       passagesRetrieved: 1,
@@ -211,6 +222,13 @@ describe("runInvestigationAgent (fake model, no real Anthropic call)", () => {
       deterministicRelationshipsChecked: 1,
       nextInvestigationCount: 1,
     });
+    // PERF-01 timing instrumentation — real wall-clock numbers, so only
+    // shape/non-negativity is asserted here, not exact values.
+    expect(result.metrics.stepCount).toBe(4);
+    expect(result.metrics.totalDurationMs).toBeGreaterThanOrEqual(0);
+    expect(result.metrics.modelDurationMs).toBeGreaterThanOrEqual(0);
+    expect(result.metrics.toolDurationMs).toBeGreaterThanOrEqual(0);
+    expect(result.metrics.retrievalDurationMs).toBeGreaterThanOrEqual(0);
   });
 
   it("pluralizes the activity label correctly for more than one result (never \"passage retrieveds\")", async () => {
@@ -243,7 +261,10 @@ describe("runInvestigationAgent (fake model, no real Anthropic call)", () => {
 
     const result = await runInvestigationAgent(
       { supabase, model, caseContext },
-      0,
+      // PERF-01: searchEngineeringDocuments is only offered at all when
+      // documents are actually indexed — a non-zero count here is what
+      // makes this specific tool-call scenario reachable to test.
+      3,
       { frequencyMhz: 200, marginDb: 7.4, operatingMode: "WiFi TX + display active" },
     );
 
@@ -347,7 +368,10 @@ describe("runInvestigationAgent (fake model, no real Anthropic call)", () => {
 
     const result = await runInvestigationAgent(
       { supabase, model, caseContext },
-      0,
+      // PERF-01: non-zero so searchEngineeringDocuments is still offered —
+      // this test is specifically about a tool call that fails, not about
+      // the zero-documents omission case.
+      3,
       { frequencyMhz: 200, marginDb: 7.4, operatingMode: "WiFi TX + display active" },
     );
 
@@ -383,5 +407,103 @@ describe("runInvestigationAgent (fake model, no real Anthropic call)", () => {
     // Bounded well under the SDK's default 20-step allowance.
     expect(call).toBeLessThan(20);
     expect(call).toBeGreaterThan(0);
+  });
+});
+
+describe("selectActiveTools (PERF-01: avoid reflexively offering tools with nothing to find)", () => {
+  const tools = createInvestigationTools(buildCaseContext(fakeSupabase()));
+
+  it("keeps the three always-on grounding tools regardless of history", () => {
+    const active = selectActiveTools(
+      tools,
+      { previousRevisionCount: 0, previousInvestigationCount: 0, previousCompletedRunCount: 0 },
+      0,
+    );
+    expect(active.getMeasurementContext).toBeDefined();
+    expect(active.getDeterministicCorrelations).toBeDefined();
+    expect(active.getProductContext).toBeDefined();
+  });
+
+  it("omits all four history/document tools when nothing exists to find (fresh first-run case)", () => {
+    const active = selectActiveTools(
+      tools,
+      { previousRevisionCount: 0, previousInvestigationCount: 0, previousCompletedRunCount: 0 },
+      0,
+    );
+    expect(active.getPreviousRevisions).toBeUndefined();
+    expect(active.getPreviousInvestigations).toBeUndefined();
+    expect(active.getPreviousHypotheses).toBeUndefined();
+    expect(active.searchEngineeringDocuments).toBeUndefined();
+    expect(Object.keys(active)).toHaveLength(3);
+  });
+
+  it("offers exactly the tools whose backing count is non-zero (mixed case)", () => {
+    const active = selectActiveTools(
+      tools,
+      { previousRevisionCount: 2, previousInvestigationCount: 0, previousCompletedRunCount: 1 },
+      5,
+    );
+    expect(active.getPreviousRevisions).toBeDefined();
+    expect(active.getPreviousInvestigations).toBeUndefined();
+    expect(active.getPreviousHypotheses).toBeDefined();
+    expect(active.searchEngineeringDocuments).toBeDefined();
+    expect(Object.keys(active)).toHaveLength(6);
+  });
+
+  it("offers every tool (all 7) when every kind of history and documents exist", () => {
+    const active = selectActiveTools(
+      tools,
+      { previousRevisionCount: 1, previousInvestigationCount: 1, previousCompletedRunCount: 1 },
+      1,
+    );
+    expect(Object.keys(active)).toHaveLength(7);
+    expect(Object.values(active).every((tool) => tool !== undefined)).toBe(true);
+  });
+});
+
+describe("runInvestigationAgent — zero-history behavior (PERF-01)", () => {
+  it("never calls a history/document tool on a fresh case with no prior revisions, investigations, or documents, even fewer steps result", async () => {
+    const supabase = fakeSupabase();
+    const caseContext: InvestigationToolsContext = {
+      ...buildCaseContext(supabase),
+      priorContext: {
+        previousRevisionCount: 0,
+        previousInvestigationCount: 0,
+        previousCompletedRunCount: 0,
+      },
+    };
+    const output = agentOutputSchema.parse({
+      hypotheses: [],
+      clarificationQuestion: null,
+      investigationStatus: "insufficient_evidence",
+    });
+
+    let call = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        call += 1;
+        if (call === 1) return toolCallStep("call-1", "getMeasurementContext", {});
+        if (call === 2) return toolCallStep("call-2", "getDeterministicCorrelations", {});
+        if (call === 3) return toolCallStep("call-3", "getProductContext", {});
+        return textStep(JSON.stringify(output));
+      },
+    });
+
+    const result = await runInvestigationAgent(
+      { supabase, model, caseContext },
+      0,
+      { frequencyMhz: 200, marginDb: 7.4, operatingMode: "WiFi TX + display active" },
+    );
+
+    expect(result.activity.map((a) => a.toolName)).toEqual([
+      "getMeasurementContext",
+      "getDeterministicCorrelations",
+      "getProductContext",
+    ]);
+    expect(result.activity.some((a) => a.toolName === "getPreviousRevisions")).toBe(false);
+    expect(result.activity.some((a) => a.toolName === "getPreviousInvestigations")).toBe(false);
+    expect(result.activity.some((a) => a.toolName === "getPreviousHypotheses")).toBe(false);
+    expect(result.activity.some((a) => a.toolName === "searchEngineeringDocuments")).toBe(false);
+    expect(result.metrics.stepCount).toBe(4);
   });
 });

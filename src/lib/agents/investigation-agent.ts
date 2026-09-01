@@ -16,7 +16,9 @@ import type { Database } from "@/lib/supabase/database.types";
 import { agentOutputSchema } from "./schema";
 import {
   createInvestigationTools,
+  type InvestigationToolSet,
   type InvestigationToolsContext,
+  type PriorContextSummary,
 } from "./tools";
 import {
   createEmptyRegistry,
@@ -41,12 +43,13 @@ const MAX_AGENT_STEPS = 9;
 const SYSTEM_PROMPT = `
 You are assisting a hardware engineer investigating a radiated-emissions test failure. You have no access to the physical device — only the tools below, which read this workspace's own stored data.
 
+The task message tells you real, already-known facts about this case (the measurement, and how much prior history/documentation actually exists) — never spend a tool call rediscovering something already stated there.
+
 Use tools to gather what you need before answering:
-- getMeasurementContext and getDeterministicCorrelations ground you in the failing measurement and the already-computed harmonic candidates. Never invent a correlation yourself — only use candidates this tool actually returns.
-- getProductContext gives you the product's structured facts (clocks, radios, power rails, cables).
-- searchEngineeringDocuments lets you look up relevant passages from indexed documents. Call it more than once with different, specific queries (e.g. a component, then a signal path, then a frequency) rather than one broad query. It returns exact passages, never a whole document — cite only the chunkId/documentId you actually received back.
-- getPreviousRevisions tells you about other revisions of this product, when relevant.
-- getPreviousInvestigations and getPreviousHypotheses tell you what has already happened on this case: engineer observations (including physical results of a previously recommended test), notes, and hypotheses proposed in earlier completed runs. Always call both if this looks like a follow-up investigation (an engineer observation is present) rather than the first run on this case.
+- getMeasurementContext, getDeterministicCorrelations, and getProductContext ground you in the failing measurement, the already-computed harmonic candidates, and the product's structured facts (clocks, radios, power rails, cables). These three are independent of each other — call all three together in the same turn rather than one at a time. Never invent a correlation yourself — only use candidates this tool actually returns.
+- searchEngineeringDocuments (when offered — it's omitted entirely when this workspace has no indexed documents) lets you look up relevant passages from indexed documents. Call it with different, specific queries (e.g. a component, then a signal path, then a frequency) rather than one broad query, but stop after 1-2 searches that return nothing rather than trying several similar queries — if its result includes a "guidance" field, follow it. It returns exact passages, never a whole document — cite only the chunkId/documentId you actually received back.
+- getPreviousRevisions (when offered) tells you about other revisions of this product.
+- getPreviousInvestigations and getPreviousHypotheses (each offered only when this case actually has that kind of history) tell you what has already happened on this case: engineer observations (including physical results of a previously recommended test), notes, and hypotheses proposed in earlier completed runs. Call both together in the same turn if this looks like a follow-up investigation.
 
 Then propose up to 5 ranked investigation hypotheses. Rules:
 - Every hypothesis's productFactId must exactly match one of the productFactId values from getDeterministicCorrelations. Never invent one.
@@ -61,8 +64,70 @@ Then propose up to 5 ranked investigation hypotheses. Rules:
 - State conclusions and evidence, not your own step-by-step deliberation.
 `.trim();
 
-const TASK_PROMPT =
-  "Investigate this radiated-emissions failure. Start by loading the measurement context and the deterministic correlation candidates, then decide what else you need.";
+/**
+ * PERF-01: built per run instead of a static string, so the model starts
+ * with real case metadata already in hand rather than having to spend a
+ * tool call (and the full model round-trip that comes with it) discovering
+ * facts create-analysis-run.ts already computed deterministically. This is
+ * what makes "give the agent enough initial metadata" concrete rather than
+ * just a system-prompt aspiration.
+ */
+function buildTaskPrompt(
+  caseContext: InvestigationToolsContext,
+  documentsAvailable: number,
+): string {
+  const peak = caseContext.measurement.peaks[0];
+  const measurementLine = peak
+    ? `${peak.frequencyMhz} MHz at ${peak.marginDb > 0 ? "+" : ""}${peak.marginDb} dB margin` +
+      (caseContext.measurement.operatingMode ? ` during "${caseContext.measurement.operatingMode}"` : "")
+    : "no peak recorded on this measurement";
+  const { priorContext } = caseContext;
+
+  return [
+    "Investigate this radiated-emissions failure.",
+    "",
+    "Case metadata already known — do not spend a tool call rediscovering these:",
+    `- Product: ${caseContext.product.name}, revision ${caseContext.revision.label}.`,
+    `- Measurement: ${measurementLine}.`,
+    `- Indexed engineering documents in this workspace: ${documentsAvailable}.`,
+    `- Other revisions of this product: ${priorContext.previousRevisionCount}.`,
+    `- Previous investigation events recorded on this case: ${priorContext.previousInvestigationCount}.`,
+    `- Previous completed investigation runs on this case: ${priorContext.previousCompletedRunCount}.`,
+    "",
+    "Any tool with nothing to find for this case (zero documents indexed, zero other revisions, zero prior history) has already been left out of your tool list — you will not see it. Start by loading the measurement, correlation, and product context together, then decide what else you genuinely need.",
+  ].join("\n");
+}
+
+/**
+ * PERF-01: which of the six tools are even worth offering this run,
+ * decided deterministically from counts create-analysis-run.ts already
+ * computed — never left to the model's own judgment to "reflexively" call
+ * a tool that can only return empty. getMeasurementContext,
+ * getDeterministicCorrelations, and getProductContext are never omitted:
+ * their output is what populates the citation registry
+ * (validate-agent-output.ts) that every hypothesis's provenance is checked
+ * against, so skipping them would break citations, not just save a call.
+ */
+export function selectActiveTools(
+  tools: InvestigationToolSet,
+  priorContext: PriorContextSummary,
+  documentsAvailable: number,
+): Partial<InvestigationToolSet> {
+  const {
+    getPreviousRevisions,
+    getPreviousInvestigations,
+    getPreviousHypotheses,
+    searchEngineeringDocuments,
+    ...alwaysOn
+  } = tools;
+  return {
+    ...alwaysOn,
+    ...(priorContext.previousRevisionCount > 0 ? { getPreviousRevisions } : {}),
+    ...(priorContext.previousInvestigationCount > 0 ? { getPreviousInvestigations } : {}),
+    ...(priorContext.previousCompletedRunCount > 0 ? { getPreviousHypotheses } : {}),
+    ...(documentsAvailable > 0 ? { searchEngineeringDocuments } : {}),
+  };
+}
 
 export interface CreateInvestigationAgentParams {
   supabase: SupabaseClient<Database>;
@@ -205,12 +270,20 @@ function absorbToolResult(
   }
 }
 
-export function createInvestigationAgent(params: CreateInvestigationAgentParams) {
+export function createInvestigationAgent(
+  params: CreateInvestigationAgentParams,
+  documentsAvailable: number,
+) {
   const tools = createInvestigationTools(params.caseContext);
+  const activeTools = selectActiveTools(
+    tools,
+    params.caseContext.priorContext,
+    documentsAvailable,
+  );
   return new ToolLoopAgent({
     model: params.model,
     instructions: SYSTEM_PROMPT,
-    tools,
+    tools: activeTools,
     stopWhen: stepCountIs(MAX_AGENT_STEPS),
     output: Output.object({ schema: agentOutputSchema }),
   });
@@ -231,12 +304,13 @@ export async function runInvestigationAgent(
   documentsAvailable: number,
   measurement: MeasurementForHypotheses,
 ): Promise<RunInvestigationAgentResult> {
-  const agent = createInvestigationAgent(params);
+  const agent = createInvestigationAgent(params, documentsAvailable);
   const registry = createEmptyRegistry(documentsAvailable);
   const activity: AgentToolCompletedPayload[] = [];
 
+  const startedAt = Date.now();
   const result = await agent.generate({
-    prompt: TASK_PROMPT,
+    prompt: buildTaskPrompt(params.caseContext, documentsAvailable),
     onToolExecutionEnd: (event) => {
       const toolName = event.toolCall.toolName;
       const failed = event.toolOutput.type === "tool-error";
@@ -279,11 +353,33 @@ export async function runInvestigationAgent(
     );
   }
 
+  // PERF-01 instrumentation. Tool execution is near-free for the five
+  // in-memory/DB-read tools (see tools.ts) — the dominant cost is the
+  // model's own thinking/generation time per step, which is why
+  // modelDurationMs (wall time minus everything spent inside tool
+  // execute()) is what step-count reductions actually show up in, not
+  // toolDurationMs. Wall-clock, not token-derived — comparable across
+  // providers and doesn't need usage data this codebase doesn't otherwise
+  // depend on.
+  const totalDurationMs = Date.now() - startedAt;
+  const toolDurationMs = activity.reduce((sum, entry) => sum + entry.durationMs, 0);
+  const retrievalDurationMs = activity
+    .filter((entry) => entry.toolName === "searchEngineeringDocuments")
+    .reduce((sum, entry) => sum + entry.durationMs, 0);
+  const modelDurationMs = Math.max(0, totalDurationMs - toolDurationMs);
+
   const metrics = buildAgentCompletedPayload(
     registry,
     params.caseContext.correlationCandidates,
     validated.passagesUsedAsEvidence,
     validated.hypotheses.length,
+    {
+      stepCount: result.steps.length,
+      totalDurationMs,
+      modelDurationMs,
+      toolDurationMs,
+      retrievalDurationMs,
+    },
   );
 
   return {

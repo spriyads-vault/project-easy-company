@@ -443,10 +443,18 @@ describe("validateAgentOutput", () => {
   });
 });
 
+const zeroTimings = {
+  stepCount: 0,
+  totalDurationMs: 0,
+  modelDurationMs: 0,
+  toolDurationMs: 0,
+  retrievalDurationMs: 0,
+};
+
 describe("buildAgentCompletedPayload", () => {
   it("reports truthful, actually-computed counts — never a placeholder", () => {
     const registry = registryWithPassage();
-    const payload = buildAgentCompletedPayload(registry, [candidate], 1, 1);
+    const payload = buildAgentCompletedPayload(registry, [candidate], 1, 1, zeroTimings);
 
     expect(payload).toEqual({
       documentsAvailable: 5,
@@ -455,12 +463,13 @@ describe("buildAgentCompletedPayload", () => {
       passagesUsedAsEvidence: 1,
       deterministicRelationshipsChecked: 1,
       nextInvestigationCount: 1,
+      ...zeroTimings,
     });
   });
 
   it("reports zero counts truthfully when nothing was searched (no documents available case)", () => {
     const registry = createEmptyRegistry(0);
-    const payload = buildAgentCompletedPayload(registry, [], 0, 0);
+    const payload = buildAgentCompletedPayload(registry, [], 0, 0, zeroTimings);
 
     expect(payload).toEqual({
       documentsAvailable: 0,
@@ -469,6 +478,20 @@ describe("buildAgentCompletedPayload", () => {
       passagesUsedAsEvidence: 0,
       deterministicRelationshipsChecked: 0,
       nextInvestigationCount: 0,
+      ...zeroTimings,
     });
+  });
+
+  it("passes real timing instrumentation through untouched (PERF-01)", () => {
+    const registry = createEmptyRegistry(0);
+    const timings = {
+      stepCount: 3,
+      totalDurationMs: 4200,
+      modelDurationMs: 4100,
+      toolDurationMs: 100,
+      retrievalDurationMs: 60,
+    };
+    const payload = buildAgentCompletedPayload(registry, [], 0, 0, timings);
+    expect(payload).toMatchObject(timings);
   });
 });

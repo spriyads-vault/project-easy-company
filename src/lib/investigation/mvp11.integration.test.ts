@@ -106,6 +106,15 @@ function minimalToolsContext(
     },
     productFacts: [{ id: seed.factId, category: "clock", label: "system clock", summary: "40 MHz system clock" }],
     correlationCandidates: [],
+    // PERF-01: this file's tests call the tools directly (never through the
+    // agent's own tool-selection logic), so these counts don't affect which
+    // tools are offered here — kept non-zero only so the value is
+    // unambiguously a test fixture, not a real "no history" case.
+    priorContext: {
+      previousRevisionCount: 0,
+      previousInvestigationCount: 1,
+      previousCompletedRunCount: 1,
+    },
   };
 }
 

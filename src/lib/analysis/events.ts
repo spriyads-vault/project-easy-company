@@ -79,6 +79,14 @@ const agentToolCompletedPayloadSchema = z.object({
 // Truthful, actually-computed UX metrics for MVP-10C — every number here is
 // counted from real execution of this run, never a placeholder. See
 // src/lib/agents/validate-agent-output.ts.
+//
+// PERF-01: the five timing/step fields below are optional, not because
+// they're ever conditionally computed by new code (runInvestigationAgent
+// always fills them in) but so a pre-PERF-01 agent.completed row already
+// persisted in analysis_events still parses on refresh — see
+// getInvestigationWorkspaceData's "skip, don't trust" convention for old
+// rows lacking a field a schema later added. Never expose model reasoning
+// tokens or prompts here, only wall-clock counters.
 const agentCompletedPayloadSchema = z.object({
   documentsAvailable: z.number().int().nonnegative(),
   documentSearches: z.number().int().nonnegative(),
@@ -86,6 +94,11 @@ const agentCompletedPayloadSchema = z.object({
   passagesUsedAsEvidence: z.number().int().nonnegative(),
   deterministicRelationshipsChecked: z.number().int().nonnegative(),
   nextInvestigationCount: z.number().int().nonnegative(),
+  stepCount: z.number().int().nonnegative().optional(),
+  totalDurationMs: z.number().int().nonnegative().optional(),
+  modelDurationMs: z.number().int().nonnegative().optional(),
+  toolDurationMs: z.number().int().nonnegative().optional(),
+  retrievalDurationMs: z.number().int().nonnegative().optional(),
 });
 
 const runCompletedPayloadSchema = z.object({

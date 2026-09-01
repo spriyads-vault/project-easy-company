@@ -287,6 +287,28 @@
       ]
     },
     {
+      "id": "PERF-01",
+      "priority": 16.5,
+      "title": "Investigation Agent latency/waste optimization",
+      "depends_on": [
+        "MVP-10B",
+        "MVP-11"
+      ],
+      "passes": true,
+      "acceptance": [
+        "before/after benchmark recorded against a live Gateway X case (duration, model steps, tool calls, document searches, hypotheses)",
+        "getPreviousRevisions/getPreviousInvestigations/getPreviousHypotheses/searchEngineeringDocuments are structurally omitted from the agent's tool list (not just prompted against) when their backing count is zero",
+        "searchEngineeringDocuments returns a stop-nudge after 2 consecutive zero-result searches",
+        "independent grounding tools can be issued in one batched model turn",
+        "case metadata (product/revision/measurement/prior-history counts) is given to the agent in its task prompt instead of being discovered via tool calls",
+        "no LLM call is used for the deterministic harmonic correlation utility",
+        "step/model/tool/retrieval duration and step count are captured per run and shown in the UI, with no chain-of-thought or prompt exposure",
+        "citations, OBSERVED/KNOWN/INFERRED/MISSING labeling, previous-hypothesis comparison, certainty guards, and workspace isolation are all unchanged",
+        "reproducible idempotent Gateway X seed script exists (pnpm seed:gateway-x)",
+        "measured result: fewer tool calls, materially lower latency, same-or-better hypothesis quality, no provenance regression"
+      ]
+    },
+    {
       "id": "MVP-16",
       "priority": 16,
       "title": "Production deployment",

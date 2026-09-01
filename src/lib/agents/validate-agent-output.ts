@@ -271,11 +271,25 @@ export function validateAgentOutput(
   };
 }
 
+/** PERF-01 wall-clock instrumentation — computed by investigation-agent.ts
+ * from its own onToolExecutionEnd activity and a Date.now() wrapper around
+ * the whole agent.generate() call, never from token usage/provider timing
+ * (comparable across providers, no dependency on usage data this codebase
+ * doesn't otherwise track). */
+export interface AgentTimings {
+  stepCount: number;
+  totalDurationMs: number;
+  modelDurationMs: number;
+  toolDurationMs: number;
+  retrievalDurationMs: number;
+}
+
 export function buildAgentCompletedPayload(
   registry: RetrievedRegistry,
   correlationCandidates: readonly HarmonicCorrelationCandidate[],
   passagesUsedAsEvidence: number,
   nextInvestigationCount: number,
+  timings: AgentTimings,
 ): AgentCompletedPayload {
   return {
     documentsAvailable: registry.documentsAvailable,
@@ -284,5 +298,6 @@ export function buildAgentCompletedPayload(
     passagesUsedAsEvidence,
     deterministicRelationshipsChecked: correlationCandidates.length,
     nextInvestigationCount,
+    ...timings,
   };
 }
