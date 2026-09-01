@@ -1,0 +1,306 @@
+"use client";
+
+// RIGHT CONTEXT RAIL (UX-03): a contextual panel, not a permanently-full
+// sidebar — "it should NOT always show everything." Nothing selected: a
+// compact case-state summary built only from data this workspace already
+// has (never a fabricated document/measurement count — see
+// sources-panel.tsx's identical restraint). A hypothesis/measurement/
+// source selected: a condensed detail view for exactly that thing.
+// Selection is lifted into InvestigationWorkspace (investigation-workspace.tsx
+// owns `selection` state) — clicking an artifact on the canvas sets it,
+// this just renders whatever it's given. Collapsible per the ticket
+// ("allow it to collapse").
+import { useState } from "react";
+import type { AgentCompletedPayload, HypothesisCreatedPayload } from "@/lib/analysis/events";
+import type { MeasurementRow } from "@/lib/cases/queries";
+import type { ProductFactRecord } from "@/lib/correlation/harmonic-correlation";
+import type { EvidenceCategory } from "@/lib/domain/schema";
+import type { EvidenceCitation } from "@/lib/hypotheses/schema";
+import { describeDocumentType } from "@/lib/documents/describe-document-type";
+import { HYPOTHESIS_UPDATE_LABEL, HYPOTHESIS_UPDATE_STYLE } from "./describe-hypothesis-update";
+import { evidence, focusRing, surface, text } from "./theme";
+
+export type RailSelection =
+  | { kind: "measurement" }
+  | { kind: "hypothesis"; hypothesis: HypothesisCreatedPayload; index: number }
+  | {
+      kind: "source";
+      citation: EvidenceCitation;
+      category: EvidenceCategory;
+      hypothesisIndex: number;
+      hypothesisTitle: string;
+    }
+  | null;
+
+interface ContextRailProps {
+  selection: RailSelection;
+  onClear: () => void;
+  onOpenFullSource: (
+    citation: EvidenceCitation,
+    category: EvidenceCategory,
+    hypothesisIndex: number,
+    hypothesisTitle: string,
+  ) => void;
+  productName: string;
+  revisionLabel: string;
+  productFacts: ProductFactRecord[];
+  measurement: MeasurementRow | null;
+  agentMetrics: AgentCompletedPayload | null;
+}
+
+const CONFIDENCE_LABEL: Record<HypothesisCreatedPayload["confidenceBand"], string> = {
+  low: "Low confidence",
+  medium: "Medium confidence",
+  high: "High confidence",
+};
+
+function RailField({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className={`${text.kicker} text-[10px]`}>{label}</span>
+      <div className="text-sm">{value}</div>
+    </div>
+  );
+}
+
+function DefaultSummary({
+  productName,
+  revisionLabel,
+  productFacts,
+  agentMetrics,
+}: Pick<ContextRailProps, "productName" | "revisionLabel" | "productFacts" | "agentMetrics">) {
+  return (
+    <div className="flex flex-col gap-4">
+      <p className={`text-xs ${text.muted}`}>Nothing selected — click an artifact on the canvas for detail.</p>
+      <RailField label="Product" value={productName || "—"} />
+      <RailField label="Revision" value={revisionLabel || "—"} />
+      <RailField label="Product facts" value={<span className={text.mono}>{productFacts.length}</span>} />
+      {/* Never fabricated — omitted entirely until an agent run has actually
+          reported a real document count (same restraint as sources-panel.tsx). */}
+      {agentMetrics ? (
+        <RailField label="Sources available" value={<span className={text.mono}>{agentMetrics.documentsAvailable}</span>} />
+      ) : null}
+    </div>
+  );
+}
+
+function MeasurementDetail({ measurement }: { measurement: MeasurementRow | null }) {
+  const peak = measurement?.peaks[0] ?? null;
+  if (!measurement || !peak) {
+    return <p className={`text-sm ${text.muted}`}>No measurement recorded for this case yet.</p>;
+  }
+  return (
+    <div className="flex flex-col gap-4">
+      <RailField label="Revision" value={measurement.revisionLabel} />
+      <RailField
+        label="Frequency"
+        value={<span className={text.mono}>{peak.frequencyMhz} MHz</span>}
+      />
+      <RailField
+        label="Margin"
+        value={
+          <span className={`${text.mono} ${peak.marginDb > 0 ? "text-[#a15a17]" : "text-[#177a3f]"}`}>
+            {peak.marginDb > 0 ? "+" : ""}
+            {peak.marginDb} dB
+          </span>
+        }
+      />
+      {measurement.operatingMode ? <RailField label="Operating mode" value={measurement.operatingMode} /> : null}
+      {peak.detector ? <RailField label="Detector" value={<span className={text.mono}>{peak.detector}</span>} /> : null}
+      {peak.limitLine ? <RailField label="Limit line" value={<span className={text.mono}>{peak.limitLine}</span>} /> : null}
+    </div>
+  );
+}
+
+function HypothesisDetail({
+  hypothesis,
+  index,
+  onOpenFullSource,
+}: {
+  hypothesis: HypothesisCreatedPayload;
+  index: number;
+  onOpenFullSource: ContextRailProps["onOpenFullSource"];
+}) {
+  const missing = hypothesis.evidence.filter((item) => item.category === "missing");
+  const sourced = hypothesis.evidence.filter((item) => item.citation);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <span className={`${text.kicker} text-[10px]`}>Hypothesis {String(index + 1).padStart(2, "0")}</span>
+        <p className="text-sm font-medium leading-snug">{hypothesis.title}</p>
+        <div className="flex flex-wrap gap-1.5 pt-1">
+          <span className="rounded-full border border-[#ddd7c8] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#6b6354]">
+            {CONFIDENCE_LABEL[hypothesis.confidenceBand]}
+          </span>
+          {hypothesis.update ? (
+            <span
+              className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${HYPOTHESIS_UPDATE_STYLE[hypothesis.update.status]}`}
+            >
+              {HYPOTHESIS_UPDATE_LABEL[hypothesis.update.status]}
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      {sourced.length > 0 ? (
+        <div className="flex flex-col gap-1.5">
+          <span className={`${text.kicker} text-[10px]`}>Sources ({sourced.length})</span>
+          <ul className="flex flex-col gap-1">
+            {sourced.map((item, itemIndex) => (
+              <li key={itemIndex}>
+                <button
+                  type="button"
+                  onClick={() => onOpenFullSource(item.citation!, item.category, index, hypothesis.title)}
+                  className={`inline-flex items-center gap-1 rounded-[7px] border border-[#1f9d52]/40 bg-[#1f9d52]/5 px-1.5 py-0.5 text-[11px] text-[#177a3f] transition-colors hover:border-[#1f9d52]/70 hover:bg-[#1f9d52]/15 ${focusRing}`}
+                >
+                  <span aria-hidden="true">⌗</span>
+                  {item.citation!.filename}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {missing.length > 0 ? (
+        <div className="flex flex-col gap-1.5">
+          <span className={`${text.kicker} text-[10px] ${evidence.missing.glyphColor}`}>
+            {evidence.missing.glyph} Missing information
+          </span>
+          <ul className="flex flex-col gap-1">
+            {missing.map((item, itemIndex) => (
+              <li key={itemIndex} className={`text-sm ${text.muted}`}>
+                {item.description}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      <RailField label="Next test" value={hypothesis.recommendedNextStep} />
+    </div>
+  );
+}
+
+function SourceDetail({
+  citation,
+  category,
+  onOpenFullSource,
+  hypothesisIndex,
+  hypothesisTitle,
+}: {
+  citation: EvidenceCitation;
+  category: EvidenceCategory;
+  hypothesisIndex: number;
+  hypothesisTitle: string;
+  onOpenFullSource: ContextRailProps["onOpenFullSource"];
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <RailField label={describeDocumentType(citation.documentType)} value={citation.filename} />
+      <RailField label="Used as" value={category} />
+      <RailField label="Used in" value={`Hypothesis ${String(hypothesisIndex + 1).padStart(2, "0")} — ${hypothesisTitle}`} />
+      <p className={`text-sm leading-relaxed ${text.muted}`}>&ldquo;{citation.passage}&rdquo;</p>
+      <button
+        type="button"
+        onClick={() => onOpenFullSource(citation, category, hypothesisIndex, hypothesisTitle)}
+        className={`self-start rounded-[7px] border border-[#ddd7c8] px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-[#6b6354] transition-colors hover:border-[#1f9d52]/50 hover:text-[#177a3f] ${focusRing}`}
+      >
+        View full passage
+      </button>
+    </div>
+  );
+}
+
+export function ContextRail({
+  selection,
+  onClear,
+  onOpenFullSource,
+  productName,
+  revisionLabel,
+  productFacts,
+  measurement,
+  agentMetrics,
+}: ContextRailProps) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={() => setCollapsed(false)}
+        title="Show case panel"
+        aria-label="Show case panel"
+        className={`hidden h-fit shrink-0 self-start rounded-[10px] border border-[#e7e2d6] bg-white px-2 py-3 text-xs text-[#6b6354] hover:text-[#1c1a15] lg:block ${focusRing}`}
+      >
+        ◂
+      </button>
+    );
+  }
+
+  const heading =
+    selection?.kind === "measurement"
+      ? "Measurement"
+      : selection?.kind === "hypothesis"
+        ? "Hypothesis details"
+        : selection?.kind === "source"
+          ? "Source"
+          : "Case";
+
+  return (
+    <aside
+      aria-label="Case context"
+      className={`hidden w-[300px] shrink-0 flex-col gap-4 self-start p-4 lg:flex xl:w-[340px] ${surface.card}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className={text.kicker}>{heading}</span>
+        <div className="flex items-center gap-2">
+          {selection ? (
+            <button
+              type="button"
+              onClick={onClear}
+              className={`text-xs ${text.muted} hover:text-[#1c1a15] ${focusRing}`}
+            >
+              Clear
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setCollapsed(true)}
+            title="Collapse panel"
+            aria-label="Collapse panel"
+            className={`text-xs ${text.muted} hover:text-[#1c1a15] ${focusRing}`}
+          >
+            ▸
+          </button>
+        </div>
+      </div>
+
+      {!selection ? (
+        <DefaultSummary
+          productName={productName}
+          revisionLabel={revisionLabel}
+          productFacts={productFacts}
+          agentMetrics={agentMetrics}
+        />
+      ) : selection.kind === "measurement" ? (
+        <MeasurementDetail measurement={measurement} />
+      ) : selection.kind === "hypothesis" ? (
+        <HypothesisDetail
+          hypothesis={selection.hypothesis}
+          index={selection.index}
+          onOpenFullSource={onOpenFullSource}
+        />
+      ) : (
+        <SourceDetail
+          citation={selection.citation}
+          category={selection.category}
+          hypothesisIndex={selection.hypothesisIndex}
+          hypothesisTitle={selection.hypothesisTitle}
+          onOpenFullSource={onOpenFullSource}
+        />
+      )}
+    </aside>
+  );
+}

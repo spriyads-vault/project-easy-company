@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getFailureCase } from "@/lib/cases/queries";
 import { getLatestRevisionInLineage } from "@/lib/products/revision-lineage";
 import { AddMeasurementForm } from "./add-measurement-form";
+import { TopBar } from "./investigation/top-bar";
 import { surface, text } from "./investigation/theme";
 
 interface CasePageProps {
@@ -28,86 +29,86 @@ export default async function CasePage({ params }: CasePageProps) {
     };
 
   return (
-    <div className={`flex flex-1 flex-col gap-8 px-6 py-8 sm:px-10 sm:py-10 ${surface.page}`}>
-      <div className="flex flex-col gap-2">
-        <Link
-          href={`/products/${failureCase.productId}/revisions/${failureCase.productRevisionId}`}
-          className={`text-xs ${text.muted} hover:text-[#1c1a15] hover:underline`}
-        >
-          ← {failureCase.productName} · {failureCase.revisionLabel}
-        </Link>
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">{failureCase.title}</h1>
-          <span className="border border-[#ddd7c8] px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#6b6354]">
-            Radiated emissions
-          </span>
+    <div className={`flex min-h-0 flex-1 flex-col ${surface.page}`}>
+      <TopBar
+        caseId={caseId}
+        backHref={`/products/${failureCase.productId}/revisions/${failureCase.productRevisionId}`}
+        backLabel={`${failureCase.productName} · ${failureCase.revisionLabel}`}
+        productName={failureCase.productName}
+        revisionLabel={failureCase.revisionLabel}
+        caseTitle="Radiated emissions"
+      />
+
+      <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mx-auto flex w-full max-w-[900px] flex-col gap-2">
+          <h1 className="text-xl font-semibold tracking-tight">{failureCase.title}</h1>
+          <p className={`text-sm ${text.muted}`}>
+            {failureCase.productName} · {failureCase.revisionLabel} · {failureCase.status}
+          </p>
+          <Link
+            href={`/cases/${failureCase.id}/investigation`}
+            className="mt-2 self-start rounded-[10px] border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#177a3f] transition-colors hover:bg-[#1f9d52]/20"
+          >
+            Open investigation workspace
+          </Link>
         </div>
-        <p className={`text-sm ${text.muted}`}>
-          {failureCase.productName} · {failureCase.revisionLabel} · {failureCase.status}
-        </p>
-        <Link
-          href={`/cases/${failureCase.id}/investigation`}
-          className="mt-2 self-start border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#177a3f] transition-colors hover:bg-[#1f9d52]/20"
-        >
-          Open investigation workspace
-        </Link>
-      </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <section className={`flex flex-col gap-3 p-5 ${surface.panel}`}>
-          <h2 className={text.kicker}>Measurements</h2>
-          {failureCase.measurements.length === 0 ? (
-            <p className={`text-sm ${text.muted}`}>No measurements recorded yet.</p>
-          ) : (
-            <ul className="flex flex-col gap-3">
-              {failureCase.measurements.map((measurement) => (
-                <li key={measurement.id} className="border border-[#e7e2d6] px-3 py-2 text-sm">
-                  <div className="font-medium">
-                    <span className={`mr-2 font-normal ${text.muted}`}>
-                      {measurement.revisionLabel}
-                    </span>
-                    {measurement.label ?? "Measurement"}
-                    {measurement.operatingMode ? (
-                      <span className={`ml-2 font-normal ${text.muted}`}>
-                        {measurement.operatingMode}
+        <div className="mx-auto grid w-full max-w-[900px] gap-6 md:grid-cols-2">
+          <section className={`flex flex-col gap-3 p-5 ${surface.card}`}>
+            <h2 className={text.kicker}>Measurements</h2>
+            {failureCase.measurements.length === 0 ? (
+              <p className={`text-sm ${text.muted}`}>No measurements recorded yet.</p>
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {failureCase.measurements.map((measurement) => (
+                  <li key={measurement.id} className="rounded-lg border border-[#efe9db] px-3 py-2 text-sm">
+                    <div className="font-medium">
+                      <span className={`mr-2 font-normal ${text.muted}`}>
+                        {measurement.revisionLabel}
                       </span>
-                    ) : null}
-                  </div>
-                  <ul className="mt-1 flex flex-col gap-1">
-                    {measurement.peaks.map((peak) => (
-                      <li key={peak.id} className="text-[#6b6354]">
-                        <span className={text.mono}>{peak.frequencyMhz} MHz</span> at{" "}
-                        <span
-                          className={`font-medium ${text.mono} ${
-                            peak.marginDb > 0 ? "text-[#a15a17]" : "text-[#177a3f]"
-                          }`}
-                        >
-                          {peak.marginDb > 0 ? "+" : ""}
-                          {peak.marginDb} dB
+                      {measurement.label ?? "Measurement"}
+                      {measurement.operatingMode ? (
+                        <span className={`ml-2 font-normal ${text.muted}`}>
+                          {measurement.operatingMode}
                         </span>
-                        {peak.detector ? ` · ${peak.detector}` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+                      ) : null}
+                    </div>
+                    <ul className="mt-1 flex flex-col gap-1">
+                      {measurement.peaks.map((peak) => (
+                        <li key={peak.id} className="text-[#6b6354]">
+                          <span className={text.mono}>{peak.frequencyMhz} MHz</span> at{" "}
+                          <span
+                            className={`font-medium ${text.mono} ${
+                              peak.marginDb > 0 ? "text-[#a15a17]" : "text-[#177a3f]"
+                            }`}
+                          >
+                            {peak.marginDb > 0 ? "+" : ""}
+                            {peak.marginDb} dB
+                          </span>
+                          {peak.detector ? ` · ${peak.detector}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
-        <section className={`flex flex-col gap-3 p-5 ${surface.panel}`}>
-          <h2 className={text.kicker}>Add a measurement</h2>
-          {currentRevision.id !== failureCase.productRevisionId ? (
-            <p className={`text-xs ${text.muted}`}>
-              This will be recorded against {currentRevision.label}, the
-              current revision following an engineering change.
-            </p>
-          ) : null}
-          <AddMeasurementForm
-            caseId={failureCase.id}
-            productRevisionId={currentRevision.id}
-          />
-        </section>
+          <section className={`flex flex-col gap-3 p-5 ${surface.card}`}>
+            <h2 className={text.kicker}>Add a measurement</h2>
+            {currentRevision.id !== failureCase.productRevisionId ? (
+              <p className={`text-xs ${text.muted}`}>
+                This will be recorded against {currentRevision.label}, the
+                current revision following an engineering change.
+              </p>
+            ) : null}
+            <AddMeasurementForm
+              caseId={failureCase.id}
+              productRevisionId={currentRevision.id}
+            />
+          </section>
+        </div>
       </div>
     </div>
   );

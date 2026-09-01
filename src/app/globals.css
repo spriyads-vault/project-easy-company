@@ -32,13 +32,21 @@ body {
    in their final resting state (no opacity/transform is ever set outside
    this block). No animation library; two small keyframes cover every use
    named in the ticket (correlation/hypothesis/timeline entry reveal,
-   source drawer slide-in, before/after appearance). */
+   source drawer slide-in, before/after appearance).
+
+   UX-03 adds one more: .crado-connector-draw, the investigation canvas's
+   connector line "drawing itself" between two artifact nodes as they
+   enter — same gating, same restraint (a 300ms scale, not a moving
+   dash/spark). */
 @media (prefers-reduced-motion: no-preference) {
   .crado-rise {
     animation: crado-rise 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   .crado-slide-in {
     animation: crado-slide-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .crado-connector-draw {
+    animation: crado-connector-draw 300ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 }
 
@@ -61,5 +69,14 @@ body {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+@keyframes crado-connector-draw {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
   }
 }

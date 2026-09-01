@@ -22,7 +22,7 @@ export function SourcesPanel({ hypotheses, metrics }: SourcesPanelProps) {
   return (
     <section
       aria-labelledby="sources-panel-heading"
-      className={`flex flex-col gap-3 p-5 ${surface.panel}`}
+      className={`flex flex-col gap-3 p-5 ${surface.card}`}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-2">
@@ -53,11 +53,11 @@ export function SourcesPanel({ hypotheses, metrics }: SourcesPanelProps) {
             : "No document passages were used as evidence in this investigation."}
         </p>
       ) : (
-        <ul className="flex flex-col">
+        <ul className="flex flex-col divide-y divide-[#efe9db]">
           {sources.map((source) => (
             <li
               key={source.documentId}
-              className="flex items-center justify-between gap-3 border-b border-[#e7e2d6] py-2 last:border-b-0"
+              className="flex items-center justify-between gap-3 py-2.5"
             >
               <div className="flex min-w-0 flex-col">
                 <span className="truncate text-sm">{source.filename}</span>

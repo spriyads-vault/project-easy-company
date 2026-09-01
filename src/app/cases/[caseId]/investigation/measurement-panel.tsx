@@ -1,16 +1,22 @@
-// MEASUREMENT region: the actual stored evidence for the measurement under
-// investigation — one peak, its margin relative to the selected limit, and
-// the operating mode it was captured under. Nothing here is derived from
-// the analysis run; it's exactly what's in Postgres, visible before any
-// investigation is started.
+// MEASUREMENT artifact (UX-03): the opening node of the investigation
+// canvas — an "instrument-style object", not a bordered dashboard panel.
+// The actual stored evidence for the measurement under investigation: one
+// peak, its margin relative to the selected limit, and the operating mode
+// it was captured under. Nothing here is derived from the analysis run;
+// it's exactly what's in Postgres, visible before any investigation is
+// started.
 import Link from "next/link";
 import type { MeasurementRow } from "@/lib/cases/queries";
 import { SpectrumChart } from "./spectrum-chart";
-import { accent, surface, text } from "./theme";
+import { accent, artifact, focusRing, surface, text } from "./theme";
 
 interface MeasurementPanelProps {
   caseId: string;
   measurement: MeasurementRow | null;
+  /** UX-03: selects this artifact in the right context rail. Optional so
+   * every pre-UX-03 test call site (rendering the panel standalone) keeps
+   * working unmodified. */
+  onSelect?: () => void;
 }
 
 /** Splits a free-text operating mode ("WiFi TX + display active") into
@@ -26,26 +32,41 @@ function operatingConditions(operatingMode: string | null): string[] {
   return parts.length > 0 ? parts : [operatingMode];
 }
 
-export function MeasurementPanel({ caseId, measurement }: MeasurementPanelProps) {
+export function MeasurementPanel({ caseId, measurement, onSelect }: MeasurementPanelProps) {
   const peak = measurement?.peaks[0] ?? null;
+  const style = artifact.measurement;
 
   return (
-    <section aria-labelledby="measurement-panel-heading" className={`flex flex-col gap-4 p-5 ${surface.panel}`}>
+    <section
+      aria-labelledby="measurement-panel-heading"
+      className={`flex flex-col gap-4 border-l-2 p-5 ${style.accent} ${surface.card}`}
+    >
       <div className="flex items-baseline justify-between gap-2">
         <div className="flex items-baseline gap-2">
           <h2 id="measurement-panel-heading" className={text.kicker}>
-            Measurement
+            {style.label}
           </h2>
           {measurement ? (
             <span className={`${text.mono} text-xs ${text.muted}`}>{measurement.revisionLabel}</span>
           ) : null}
         </div>
-        <Link
-          href={`/cases/${caseId}`}
-          className={`text-xs ${text.muted} hover:text-[#1c1a15] hover:underline`}
-        >
-          Add measurement
-        </Link>
+        <div className="flex items-center gap-3">
+          {onSelect && measurement ? (
+            <button
+              type="button"
+              onClick={onSelect}
+              className={`text-xs ${text.muted} hover:text-[#1c1a15] ${focusRing}`}
+            >
+              Details
+            </button>
+          ) : null}
+          <Link
+            href={`/cases/${caseId}`}
+            className={`text-xs ${text.muted} hover:text-[#1c1a15] hover:underline`}
+          >
+            Add measurement
+          </Link>
+        </div>
       </div>
 
       {!measurement || !peak ? (
@@ -77,7 +98,7 @@ export function MeasurementPanel({ caseId, measurement }: MeasurementPanelProps)
               {operatingConditions(measurement.operatingMode).map((condition) => (
                 <li
                   key={condition}
-                  className="border border-[#e7e2d6] px-2 py-1 text-xs uppercase tracking-wide text-[#6b6354]"
+                  className="rounded-full border border-[#e7e2d6] px-2 py-1 text-xs uppercase tracking-wide text-[#6b6354]"
                 >
                   {condition}
                 </li>

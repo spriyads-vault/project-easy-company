@@ -65,7 +65,7 @@ export function InvestigationTimeline({ entries }: InvestigationTimelineProps) {
   return (
     <section
       aria-labelledby="investigation-timeline-heading"
-      className={`flex flex-col gap-3 p-5 ${surface.panel}`}
+      className={`flex flex-col gap-3 p-5 ${surface.card}`}
     >
       <h2 id="investigation-timeline-heading" className={text.kicker}>
         Investigation timeline

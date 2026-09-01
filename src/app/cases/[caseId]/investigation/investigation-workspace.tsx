@@ -1,22 +1,24 @@
 "use client";
 
-// UX-02: client orchestrator for the agentic-engineering-workspace layout —
-// one active task (this investigation) dominates the screen as a single
-// scrolling canvas with quiet tabs (Investigation/Evidence/Timeline/
-// Sources) instead of UX-01's three-column panel grid, plus a persistent
-// bottom composer. Still owns the one piece of client state (WorkspaceState)
-// and the SSE consumption; every child below is presentational. Not a chat
-// UI — there is no message list, no typing indicator, no chat bubble;
-// POST /api/analysis-runs returns a typed event stream and this folds each
-// event into the same state a page refresh would reconstruct from Postgres
-// (see src/lib/investigation/reconstruct.ts). Tab switching is local state
-// only — never a navigation/fetch — so the live run stays connected
-// regardless of which tab is showing.
+// UX-03: client orchestrator for the investigation-canvas layout — a
+// connected artifact canvas (not a stacked-panel dashboard) framed by a
+// quiet top bar (breadcrumb, agent-status pill, view switcher) and a
+// contextual right rail, with a floating composer over the canvas. Still
+// owns the one piece of client state (WorkspaceState) and the SSE
+// consumption; every child below is presentational. Not a chat UI — there
+// is no message list, no typing indicator, no chat bubble; POST
+// /api/analysis-runs returns a typed event stream and this folds each
+// event into the same state a page refresh would reconstruct from
+// Postgres (see src/lib/investigation/reconstruct.ts). Tab switching and
+// artifact selection are both local state only — never a
+// navigation/fetch — so the live run stays connected regardless of which
+// view is showing or what's selected in the rail.
 import { useRef, useState } from "react";
 import type { MeasurementRow } from "@/lib/cases/queries";
 import type { ProductFactRecord } from "@/lib/correlation/harmonic-correlation";
 import type { EvidenceCategory } from "@/lib/domain/schema";
 import type { EvidenceCitation } from "@/lib/hypotheses/schema";
+import type { HypothesisCreatedPayload } from "@/lib/analysis/events";
 import type { TimelineEntry } from "@/lib/investigation/timeline";
 import {
   applyAnalysisEvent,
@@ -24,21 +26,23 @@ import {
   type WorkspaceState,
 } from "@/lib/investigation/reconstruct";
 import { SseEventParser } from "@/lib/investigation/parse-sse-events";
-import { ProductPanel } from "./product-panel";
 import { MeasurementPanel } from "./measurement-panel";
 import { InvestigationPanel } from "./investigation-panel";
-import { InvestigationHero } from "./investigation-hero";
 import { InvestigationTimeline } from "./investigation-timeline";
 import { RevisionComparisonCard } from "./revision-comparison-card";
 import { AgentActivityPanel } from "./agent-activity-panel";
 import { AgentMetricsPanel } from "./agent-metrics-panel";
 import { SourcesPanel } from "./sources-panel";
 import { SourceDrawer } from "./source-drawer";
-import { CaseNav, type InvestigationTab } from "./case-nav";
+import { TopBar } from "./top-bar";
+import { AgentStatusPill } from "./agent-status-pill";
+import { ViewSwitcher, type InvestigationTab } from "./view-switcher";
+import { ContextRail, type RailSelection } from "./context-rail";
 import { EvidenceView } from "./evidence-view";
 import { CaseComposer } from "./case-composer";
+import { Connector } from "./connector";
 import { deriveSourcesUsed } from "./derive-sources-used";
-import { surface } from "./theme";
+import { canvasBackground, surface, text } from "./theme";
 
 interface OpenCitationState {
   citation: EvidenceCitation;
@@ -54,9 +58,9 @@ interface InvestigationWorkspaceProps {
   /** Optional — defaults to the empty-state label so every pre-MVP-11 test
    * call site keeps working unmodified. */
   currentRevisionLabel?: string;
-  /** UX-01: shown in the agent-presence header. Optional/defaults to "" so
-   * every pre-UX-01 test call site keeps working unmodified — the real
-   * page.tsx always has this from getFailureCase. */
+  /** UX-01: shown in the top bar. Optional/defaults to "" so every
+   * pre-UX-01 test call site keeps working unmodified — the real page.tsx
+   * always has this from getFailureCase. */
   productName?: string;
   hasMultipleRevisions?: boolean;
   productFacts: ProductFactRecord[];
@@ -82,6 +86,7 @@ export function InvestigationWorkspace({
   const [state, setState] = useState<WorkspaceState>(initialState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openCitation, setOpenCitation] = useState<OpenCitationState | null>(null);
+  const [selection, setSelection] = useState<RailSelection>(null);
   const [activeTab, setActiveTab] = useState<InvestigationTab>("investigation");
   // MVP-11 timeline live-update fix: local state seeded from the
   // server-fetched timeline, appended to directly inside the SSE loop below
@@ -105,6 +110,18 @@ export function InvestigationWorkspace({
     hypothesisTitle: string,
   ) {
     setOpenCitation({ citation, category, hypothesisIndex, hypothesisTitle });
+    // UX-03: clicking a source updates the context rail too, not just the
+    // full-passage drawer — so once the drawer closes, the rail keeps
+    // showing that source's provenance at a glance.
+    setSelection({ kind: "source", citation, category, hypothesisIndex, hypothesisTitle });
+  }
+
+  function handleSelectHypothesis(hypothesis: HypothesisCreatedPayload, index: number) {
+    setSelection({ kind: "hypothesis", hypothesis, index });
+  }
+
+  function handleSelectMeasurement() {
+    setSelection({ kind: "measurement" });
   }
 
   const hasPeak = (measurement?.peaks.length ?? 0) > 0;
@@ -202,33 +219,34 @@ export function InvestigationWorkspace({
 
   return (
     <>
-      <div className={`flex flex-1 flex-col ${surface.page}`}>
-        <div className="px-4 pt-4 sm:px-6">
-          <InvestigationHero
-            productName={productName}
-            revisionLabel={currentRevisionLabel}
-            measurement={measurement}
-            status={state.status}
-            busy={isSubmitting}
-          />
-        </div>
-
-        <CaseNav
+      <div className={`flex min-h-0 flex-1 flex-col ${surface.page}`}>
+        <TopBar
           caseId={caseId}
+          backHref={`/cases/${caseId}`}
+          backLabel={`Radiated emissions — ${productName} ${currentRevisionLabel}`.trim()}
           productName={productName}
           revisionLabel={currentRevisionLabel}
-          activeTab={activeTab}
-          onSelectTab={setActiveTab}
+          caseTitle="Radiated emissions"
+          statusPill={<AgentStatusPill status={state.status} busy={isSubmitting} hasMeasurement={measurement !== null} />}
+          rightSlot={<ViewSwitcher activeTab={activeTab} onSelectTab={setActiveTab} />}
         />
 
-        {/* One canvas, four views — switching tabs never unmounts the SSE
-            connection above; only what's rendered here changes. Bottom
-            padding clears the fixed composer bar. */}
-        <div className="flex flex-1 flex-col gap-4 px-4 pb-28 pt-4 sm:px-6">
-          {activeTab === "investigation" ? (
-            <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(240px,300px)] lg:items-start lg:gap-6">
-              <div className="flex flex-col gap-4">
-                <MeasurementPanel caseId={caseId} measurement={measurement} />
+        <div className="flex min-h-0 flex-1">
+          {/* One canvas, four views — switching tabs never unmounts the SSE
+              connection above; only what's rendered here changes. The dot
+              grid is the canvas's one deliberate texture (Investigation
+              view only — the other three are dense information views, not
+              a graph surface). Bottom padding clears the floating
+              composer. */}
+          <div
+            className={`flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-32 pt-5 sm:px-6 ${
+              activeTab === "investigation" ? canvasBackground : ""
+            }`}
+          >
+            {activeTab === "investigation" ? (
+              <div className="mx-auto flex w-full max-w-[760px] flex-col gap-3">
+                <MeasurementPanel caseId={caseId} measurement={measurement} onSelect={handleSelectMeasurement} />
+                <Connector />
                 <AgentActivityPanel
                   activity={state.agentActivity}
                   active={state.agentActive}
@@ -247,39 +265,65 @@ export function InvestigationWorkspace({
                   disabledReason={disabledReason}
                   onRunInvestigation={handleRunInvestigation}
                   onOpenCitation={handleOpenCitation}
+                  onSelectHypothesis={handleSelectHypothesis}
                 />
                 {comparisonEntry?.type === "result" ? (
-                  <RevisionComparisonCard comparison={comparisonEntry.comparison} />
+                  <>
+                    <Connector />
+                    <RevisionComparisonCard comparison={comparisonEntry.comparison} />
+                  </>
                 ) : null}
                 {state.agentMetrics ? (
-                  <AgentMetricsPanel
-                    metrics={state.agentMetrics}
-                    toolCallCount={state.agentActivity.length}
-                    sourcesUsedCount={sourcesUsedCount}
-                  />
+                  <div className="mt-2">
+                    <AgentMetricsPanel
+                      metrics={state.agentMetrics}
+                      toolCallCount={state.agentActivity.length}
+                      sourcesUsedCount={sourcesUsedCount}
+                    />
+                  </div>
                 ) : null}
               </div>
-              <div className="flex flex-col gap-4">
-                <ProductPanel productId={productId} revisionId={revisionId} facts={productFacts} />
+            ) : null}
+
+            {activeTab === "evidence" ? (
+              <div className="mx-auto w-full max-w-[760px]">
+                <EvidenceView hypotheses={state.hypotheses} onOpenCitation={handleOpenCitation} />
               </div>
-            </div>
-          ) : null}
+            ) : null}
 
-          {activeTab === "evidence" ? (
-            <EvidenceView hypotheses={state.hypotheses} onOpenCitation={handleOpenCitation} />
-          ) : null}
+            {activeTab === "timeline" ? (
+              <div className="mx-auto w-full max-w-[760px]">
+                <InvestigationTimeline entries={timeline} />
+              </div>
+            ) : null}
 
-          {activeTab === "timeline" ? <InvestigationTimeline entries={timeline} /> : null}
+            {activeTab === "sources" ? (
+              <div className="mx-auto w-full max-w-[760px]">
+                <SourcesPanel hypotheses={state.hypotheses} metrics={state.agentMetrics} />
+              </div>
+            ) : null}
+          </div>
 
-          {activeTab === "sources" ? (
-            <SourcesPanel hypotheses={state.hypotheses} metrics={state.agentMetrics} />
-          ) : null}
+          <div className="hidden shrink-0 py-5 pr-4 lg:block xl:pr-6">
+            <ContextRail
+              selection={selection}
+              onClear={() => setSelection(null)}
+              onOpenFullSource={handleOpenCitation}
+              productName={productName}
+              revisionLabel={currentRevisionLabel}
+              productFacts={productFacts}
+              measurement={measurement}
+              agentMetrics={state.agentMetrics}
+            />
+          </div>
         </div>
 
-        <div className="sticky bottom-0 border-t border-[#e7e2d6] bg-[#faf8f3]/95 px-4 py-3 backdrop-blur-sm sm:px-6">
-          <CaseComposer caseId={caseId} />
+        <div className="pointer-events-none sticky bottom-0 flex flex-col items-center gap-1.5 px-4 pb-4 pt-2 sm:px-6">
+          <div className="pointer-events-auto w-full">
+            <CaseComposer caseId={caseId} />
+          </div>
           {busy ? (
-            <p className="mt-2 text-xs text-[#847c6a]" role="status" aria-live="polite">
+            <p className={`text-xs ${text.muted}`} role="status" aria-live="polite">
               Crado is investigating — you can still add an observation while it works.
             </p>
           ) : null}

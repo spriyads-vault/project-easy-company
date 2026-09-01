@@ -2225,3 +2225,133 @@ was explicitly **not** started per this session's own instruction.)
 - Next recommended ticket: MVP-12, Regulatory State evidence linkage —
   not started this session (not requested).
 - Commit: (see git log)
+
+### 2026-09-02 — UX-03
+- Completed: Frontier Agentic Investigation Workspace — a further
+  visual/interaction redesign of `src/app/cases/[caseId]/**`, on top of
+  UX-02's palette, replacing UX-02's "stacked bordered rectangles"
+  grammar with a connected investigation canvas. No architecture change:
+  Investigation Agent, deterministic engine, evidence model, database
+  model, benchmark architecture, Regulatory State, and model provider are
+  all untouched; every existing server action, SSE event contract, and
+  data query is reused verbatim.
+  - Application shell: new `app-shell.tsx` (a compact ~60px left rail —
+    Workspace/Sources/Benchmarks + sign out, real routes only, no
+    fabricated "Cases" vs "Products" split the app doesn't have) wired in
+    via a new `src/app/cases/[caseId]/layout.tsx` so both the case page
+    and the investigation page share it through Next.js's normal
+    shared-layout mechanism. New `top-bar.tsx` (breadcrumb + case ref +
+    slots for an agent-status pill and the view switcher) replaces the
+    old plain-text header on both pages.
+  - View switcher: `case-nav.tsx` renamed to `view-switcher.tsx` (same
+    `InvestigationTab` type, same four exact button names
+    Investigation/Evidence/Timeline/Sources tests depend on), restyled
+    from underlined tabs into a compact segmented control living in the
+    top bar.
+  - Investigation canvas: `investigation-hero.tsx` deleted — its status
+    pill moved into the top bar (`agent-status-pill.tsx`, new) and its
+    one-line failure sentence is now Measurement's own context; new
+    `connector.tsx` (`Connector`, `ArtifactRow`) draws the thin vertical
+    lines (and a shared horizontal trunk for >1 sibling) between
+    Measurement → Deterministic Relationship → Hypothesis on a very
+    subtle dot-grid background (`canvasBackground` in theme.ts).
+    `measurement-panel.tsx`, `correlation-card.tsx`, `hypothesis-card.tsx`
+    restyled from hard-bordered boxes to soft-shadow/rounded "artifact"
+    cards (`surface.card`/`radius` tokens), each with a left-accent bar
+    and kicker label from the new `artifact` token map in theme.ts.
+    Consolidation, disclosed rather than hidden: the ticket's MISSING
+    EVIDENCE and NEXT TEST steps are rendered as differentiated zones
+    *inside* the Hypothesis artifact (a dashed Missing section, a
+    highlighted green Next-test block) rather than as two more separate
+    connected cards — same information, one fewer redundant node per
+    hypothesis, since both are properties of that specific hypothesis.
+  - Agent activity: `agent-activity-panel.tsx` rewritten to drop its
+    bordered-panel wrapper — an active run renders unboxed inline
+    ("Crado is investigating" + live checklist), a finished run
+    compresses to a small chip ("N actions completed · Xs
+    [View activity]"), preserving every exact string its existing test
+    suite already pinned (no test file needed rewriting for this piece).
+  - Contextual right rail: new `context-rail.tsx` (~300–340px, hidden
+    below `lg`, collapsible) — default state shows a compact case
+    summary built only from data already on hand (Product/Revision/
+    Product facts count/Sources-available count, the last one omitted
+    entirely rather than shown as a fabricated 0 when no agent run has
+    reported it yet); clicking a measurement, a hypothesis's new
+    "Details" button, or any evidence citation updates it in place with
+    that artifact's detail. Citations still also open the existing
+    `source-drawer.tsx` overlay unchanged — the rail is additive, not a
+    replacement for the full-passage view.
+  - Composer: `case-composer.tsx` rewritten into a floating, centered
+    (max-width 900px), rounded surface instead of a full-width bar, with
+    a real "+ Attach" menu (Observation focuses the input; Measurement
+    links to the case page's real add-measurement form — no fabricated
+    file-upload control). The parse-confirm flow is visually restyled
+    into the ticket's exact "OBSERVATION DETECTED / OBSERVATION /
+    MEASUREMENT CHANGE / [Add to investigation] [Cancel]" shape;
+    `parse-engineer-input.ts`'s deterministic, non-paraphrasing behavior
+    (from UX-02) is unchanged.
+  - Timeline/Sources: light restyle only (`investigation-timeline.tsx`,
+    `sources-panel.tsx`) — softer surfaces, same connected-chain/list
+    structure, same exact strings.
+  - Evidence: `evidence-view.tsx` rewritten from four bordered category
+    cards into compact inline-marker rows grouped by category, using the
+    ticket's exact glyph set (●◆△○ — `known`'s glyph changed from ▪ to ◆
+    and `inferred`'s from ◆ to △ in theme.ts's `evidence` token to match).
+  - A real layout bug found and fixed during QA: the root layout only
+    sets `min-h-full` on `<body>`, so tall canvas content made the whole
+    *page* scroll instead of the canvas's own `overflow-y-auto` region —
+    the floating composer's `sticky bottom-0` then pinned itself over
+    content that hadn't scrolled into view yet. Fixed by giving
+    `app-shell.tsx`'s root `h-dvh` so exactly one region (the canvas)
+    scrolls, scoped to this route family only (root layout untouched).
+  - Case page (`/cases/[caseId]/page.tsx`) restyled to match (TopBar,
+    `surface.card`) for visual consistency across the two pages the new
+    shell wraps — no logic change.
+- Tests: `pnpm typecheck`, `pnpm lint`, `pnpm test` (268 passing —
+  2 pre-existing `hypothesis-card.test.tsx` assertions fixed after the
+  restyle introduced sibling text nodes: isolated "Hypothesis 03" in its
+  own span, and kept the "Next investigation" heading text literal
+  instead of pulling it from the new `artifact.nextTest.label` token so
+  the existing test kept passing without a rewrite), `pnpm
+  test:integration` (58 passing, untouched), `pnpm build` — all pass; no
+  test file needed structural rewriting beyond those two assertions.
+- Decisions (reversible, made per CLAUDE.md autonomy rules):
+  - No canvas/graph library (react-flow, d3, etc.) was added. The
+    "connected investigation, not stacked rectangles" requirement is met
+    with a hand-built vertical connected-flow (`connector.tsx`, pure
+    CSS/SVG-free) rather than a real pan/zoom node graph — a full graph
+    engine is out of MVP scope per CLAUDE.md ("no speculative
+    infrastructure") and would need to collapse to this same vertical
+    shape on mobile anyway.
+  - The app shell's left rail links only to routes that actually exist
+    (`/workspace`, `/documents`, `/benchmarks`) — there's no standalone
+    `/cases` or `/products` index in this app, so the rail doesn't
+    fabricate a "Cases" vs "Products" split the ticket's mock implied but
+    the real IA doesn't have.
+  - Live QA in this environment's chrome-devtools MCP could not resize
+    below 500px width (`resize_page` floors at 500 regardless of the
+    width requested — confirmed by requesting 390 and 320 and reading
+    back `window.innerWidth`); 500px was used as the smallest achievable
+    "mobile" check instead of the ticket's literal 390, and is disclosed
+    here rather than silently claimed as 390. No overflow at 500px; the
+    left rail hides below Tailwind's `sm` (640px) breakpoint so mobile
+    width goes entirely to the investigation content, per the ticket's
+    mobile priority list (which doesn't include app navigation).
+  - The right context rail's default summary shows Product/Revision/
+    Product-facts-count/Sources-available — not the ticket mock's literal
+    "MEASUREMENTS 3" line, since `InvestigationWorkspace` is only ever
+    given the case's *current* measurement, not a full count across
+    revisions; showing a fabricated or misleading count would violate
+    "never fabricate document counts." The measurement count line was
+    dropped rather than guessed.
+- Remaining: Sources view still doesn't show per-document "revision" or
+  "indexed status" columns the ticket sketched — `SourceUsage` (see
+  `derive-sources-used.ts`) doesn't carry that data today, and adding it
+  would mean touching the retrieval/citation pipeline, out of this
+  visual-only ticket's scope. `AgentMetricsPanel`'s "What Crado Handled"
+  stat grid is restyled (quieter surface) but still a metrics grid, not a
+  fully reimagined artifact — it's already deprioritized (UX-01) and
+  wasn't a focus of this pass.
+- Next recommended ticket: MVP-12, Regulatory State evidence linkage —
+  not started this session (not requested).
+- Commit: (see git log)

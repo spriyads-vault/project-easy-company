@@ -1,4 +1,4 @@
-// LIVE AGENT WORK (UX-02): a plain rendering of the persisted
+// LIVE AGENT WORK (UX-03): a plain rendering of the persisted
 // agent.tool.completed events (src/lib/analysis/events.ts) — observable
 // work only, never chain-of-thought (there is none to show: the underlying
 // event payload has no field for it, see
@@ -6,15 +6,17 @@
 // and a refreshed/reconstructed one — reconstructFromPersistedEvents
 // produces the identical agentActivity/agentActive shape either way.
 //
-// UX-02: while the agent is working this renders as a progressive
-// checklist in the primary canvas (not hidden in a collapsed technical
-// panel) so there's something to actually watch during the 15-40s model
-// run. Once the run completes, it compresses to "N actions completed ·
-// Xs · [View activity]" — the full checklist stays one click away, never
-// deleted.
+// UX-03: "do not use a permanent Agent Activity dashboard card." While the
+// agent is working this renders unboxed, directly in the canvas flow — a
+// "Crado is investigating" headline over the progressive checklist, so
+// there's something to actually watch during the 15-40s model run without
+// it looking like its own dashboard panel. Once the run completes, it
+// compresses to a small chip ("N actions completed · Xs") sized to its
+// content, not a full-width card — the full checklist stays one click away
+// behind [View activity], never deleted.
 import { useState } from "react";
 import type { AgentToolCompletedPayload } from "@/lib/analysis/events";
-import { focusRing, surface, text } from "./theme";
+import { focusRing, text } from "./theme";
 
 interface AgentActivityPanelProps {
   activity: AgentToolCompletedPayload[];
@@ -79,15 +81,50 @@ export function AgentActivityPanel({
   // this ticket asks for.
   const showCompressedSummary = collapsed && !active && activity.length > 0;
 
+  if (showCompressedSummary) {
+    return (
+      <div className="flex items-center gap-3">
+        <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1f9d52]/40 bg-[#1f9d52]/10 text-[10px] font-semibold text-[#177a3f]">
+          C
+        </span>
+        <p className="text-sm">
+          <span className="sr-only">Agent activity</span>
+          <span className="font-medium">
+            {activity.length} {activity.length === 1 ? "action" : "actions"} completed
+          </span>
+          {durationMs != null ? <span className={text.muted}> · {formatDuration(durationMs)}</span> : null}
+        </p>
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          aria-expanded={false}
+          className={`rounded-[7px] border border-[#e7e2d6] px-2 py-0.5 text-xs ${text.muted} hover:text-[#1c1a15] ${focusRing}`}
+        >
+          View activity
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <section
-      aria-labelledby="agent-activity-heading"
-      className={`flex flex-col gap-3 p-5 ${surface.panel}`}
-    >
+    <section aria-label={active ? "Crado is investigating" : "Agent activity"} className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 id="agent-activity-heading" className={text.kicker}>
-          Agent activity
-        </h2>
+        <div className="flex items-center gap-2.5">
+          <span
+            aria-hidden="true"
+            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold ${
+              active
+                ? "border-[#1f9d52]/50 bg-[#1f9d52]/15 text-[#177a3f]"
+                : "border-[#1f9d52]/40 bg-[#1f9d52]/10 text-[#177a3f]"
+            }`}
+          >
+            C
+          </span>
+          <span className="text-sm font-medium">
+            {active ? "Crado is investigating" : "Agent activity"}
+          </span>
+          {active ? <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#1f9d52]" /> : null}
+        </div>
         {!active ? (
           <button
             type="button"
@@ -100,52 +137,35 @@ export function AgentActivityPanel({
         ) : null}
       </div>
 
-      {showCompressedSummary ? (
-        <p className="text-sm">
-          <span className="font-medium">
-            {activity.length} {activity.length === 1 ? "action" : "actions"} completed
-          </span>
-          {durationMs != null ? (
-            <span className={text.muted}> · {formatDuration(durationMs)}</span>
-          ) : null}
-        </p>
-      ) : (
-        // CSS-hidden, not unmounted, when collapsed — the detail stays
-        // reachable (e.g. to a page-find or a test's getByText) and the
-        // toggle is instant, no re-fetch or re-render of list content.
-        <ul className="flex flex-col gap-2.5">
-          {activity.map((item, index) => {
-            const { primary, detail } = splitLabel(item.label);
-            return (
-              <li key={index} className="flex items-start gap-2.5">
-                <span aria-hidden="true" className="mt-0.5 shrink-0 text-sm text-[#177a3f]">
-                  ✓
-                </span>
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm">
-                    {primary}
-                    {detail ? <span className={text.muted}> — {detail}</span> : null}
-                  </span>
-                  {item.query ? (
-                    <span className={`text-xs ${text.muted}`}>Query: &ldquo;{item.query}&rdquo;</span>
-                  ) : null}
-                </div>
-              </li>
-            );
-          })}
-          {active ? (
-            <li className="flex items-start gap-2.5" role="status" aria-live="polite">
-              <span
-                aria-hidden="true"
-                className="mt-0.5 shrink-0 animate-pulse text-sm text-[#847c6a]"
-              >
-                ◌
+      <ul className="flex flex-col gap-2.5 pl-8">
+        {activity.map((item, index) => {
+          const { primary, detail } = splitLabel(item.label);
+          return (
+            <li key={index} className="flex items-start gap-2.5">
+              <span aria-hidden="true" className="mt-0.5 shrink-0 text-sm text-[#177a3f]">
+                ✓
               </span>
-              <span className={`text-sm ${text.muted}`}>Working…</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm">
+                  {primary}
+                  {detail ? <span className={text.muted}> — {detail}</span> : null}
+                </span>
+                {item.query ? (
+                  <span className={`text-xs ${text.muted}`}>Query: &ldquo;{item.query}&rdquo;</span>
+                ) : null}
+              </div>
             </li>
-          ) : null}
-        </ul>
-      )}
+          );
+        })}
+        {active ? (
+          <li className="flex items-start gap-2.5" role="status" aria-live="polite">
+            <span aria-hidden="true" className="mt-0.5 shrink-0 animate-pulse text-sm text-[#847c6a]">
+              ◌
+            </span>
+            <span className={`text-sm ${text.muted}`}>Working…</span>
+          </li>
+        ) : null}
+      </ul>
     </section>
   );
 }

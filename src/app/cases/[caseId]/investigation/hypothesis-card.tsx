@@ -1,15 +1,18 @@
-// The signature Crado component: a ranked investigation hypothesis with
-// its evidence strictly separated into OBSERVED / KNOWN / INFERRED /
-// MISSING. This is a direct rendering of FinalHypothesis (MVP-07) — the
-// evidence array's categories are the trust boundary, not a styling
-// choice; the model can never populate observed/known (see
+// INVESTIGATION HYPOTHESIS artifact (UX-03): the signature Crado
+// component. Agent-generated — clearly labeled INFERRED, never made to
+// look equivalent to the deterministic relationship artifact above it (a
+// muted amber accent vs. the deterministic card's neutral one, and the
+// evidence grid's own △ INFERRED marker). Evidence is strictly separated
+// into OBSERVED / KNOWN / INFERRED / MISSING — a direct rendering of
+// FinalHypothesis (MVP-07); the categories are the trust boundary, not a
+// styling choice. The model can never populate observed/known (see
 // src/lib/hypotheses/schema.ts), so INFERRED is the only place model
 // reasoning appears, and it's always labeled as such, never as fact.
 import type { HypothesisCreatedPayload } from "@/lib/analysis/events";
 import type { EvidenceCategory } from "@/lib/domain/schema";
 import type { EvidenceCitation } from "@/lib/hypotheses/schema";
 import { HYPOTHESIS_UPDATE_LABEL, HYPOTHESIS_UPDATE_STYLE } from "./describe-hypothesis-update";
-import { evidence, motion, surface, text } from "./theme";
+import { artifact, evidence, focusRing, motion, surface, text } from "./theme";
 
 interface HypothesisCardProps {
   hypothesis: HypothesisCreatedPayload;
@@ -22,6 +25,9 @@ interface HypothesisCardProps {
     hypothesisIndex: number,
     hypothesisTitle: string,
   ) => void;
+  /** UX-03: selects this artifact in the right context rail. Optional so
+   * every pre-UX-03 test call site keeps working unmodified. */
+  onSelect?: () => void;
 }
 
 const CONFIDENCE_LABEL: Record<HypothesisCreatedPayload["confidenceBand"], string> = {
@@ -41,25 +47,40 @@ const EVIDENCE_SECTIONS: {
   { category: "missing", heading: "Missing", hint: "Needed to support or rule this out." },
 ];
 
-export function HypothesisCard({ hypothesis, index, onOpenCitation }: HypothesisCardProps) {
+export function HypothesisCard({ hypothesis, index, onOpenCitation, onSelect }: HypothesisCardProps) {
   const whyThisTest = hypothesis.evidence.find((item) => item.category === "inferred")?.description ?? null;
+  const style = artifact.hypothesis;
 
   return (
-    <article className={`flex flex-col gap-4 p-4 ${motion.rise} ${surface.panelElevated}`}>
+    <article className={`flex flex-col gap-4 border-l-2 p-4 ${style.accent} ${motion.rise} ${surface.card}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex flex-col gap-0.5">
-          <span className={`${text.kicker} text-[10px] text-[#847c6a]`}>
-            Hypothesis {String(index + 1).padStart(2, "0")}
+          <span className={`${text.kicker} text-[10px] ${evidence.inferred.glyphColor}`}>
+            <span aria-hidden="true">{evidence.inferred.glyph}</span>{" "}
+            <span>Hypothesis {String(index + 1).padStart(2, "0")}</span>
+            {" · "}
+            {style.label}
           </span>
           <h3 className="text-base font-medium leading-snug">{hypothesis.title}</h3>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <span className="border border-[#ddd7c8] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#6b6354]">
-            {CONFIDENCE_LABEL[hypothesis.confidenceBand]}
-          </span>
+          <div className="flex items-center gap-2">
+            {onSelect ? (
+              <button
+                type="button"
+                onClick={onSelect}
+                className={`text-xs ${text.muted} hover:text-[#1c1a15] ${focusRing}`}
+              >
+                Details
+              </button>
+            ) : null}
+            <span className="rounded-full border border-[#ddd7c8] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#6b6354]">
+              {CONFIDENCE_LABEL[hypothesis.confidenceBand]}
+            </span>
+          </div>
           {hypothesis.update ? (
             <span
-              className={`border px-2 py-0.5 text-[10px] uppercase tracking-wide ${HYPOTHESIS_UPDATE_STYLE[hypothesis.update.status]}`}
+              className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${HYPOTHESIS_UPDATE_STYLE[hypothesis.update.status]}`}
               title={`Continues: ${hypothesis.update.previousHypothesisTitle}`}
             >
               {HYPOTHESIS_UPDATE_LABEL[hypothesis.update.status]}
@@ -74,15 +95,15 @@ export function HypothesisCard({ hypothesis, index, onOpenCitation }: Hypothesis
             (item) => item.category === section.category,
           );
           if (items.length === 0) return null;
-          const style = evidence[section.category];
+          const sectionStyle = evidence[section.category];
           return (
             <div
               key={section.category}
-              className={`flex flex-col gap-1.5 border-l-2 pl-2.5 ${style.borderColor}`}
+              className={`flex flex-col gap-1.5 border-l-2 pl-2.5 ${sectionStyle.borderColor} ${sectionStyle.dashed ? "border-dashed" : ""}`}
             >
               <span className={text.kicker}>
-                <span aria-hidden="true" className={`mr-1.5 ${style.glyphColor}`}>
-                  {style.glyph}
+                <span aria-hidden="true" className={`mr-1.5 ${sectionStyle.glyphColor}`}>
+                  {sectionStyle.glyph}
                 </span>
                 {section.heading}
               </span>
@@ -107,7 +128,7 @@ export function HypothesisCard({ hypothesis, index, onOpenCitation }: Hypothesis
                           onClick={() =>
                             onOpenCitation(item.citation!, item.category, index, hypothesis.title)
                           }
-                          className="inline-flex items-center gap-1 border border-[#1f9d52]/40 bg-[#1f9d52]/5 px-1.5 py-0.5 align-middle text-[11px] text-[#177a3f] transition-colors hover:border-[#1f9d52]/70 hover:bg-[#1f9d52]/15 hover:text-[#15703a]"
+                          className="inline-flex items-center gap-1 rounded-[7px] border border-[#1f9d52]/40 bg-[#1f9d52]/5 px-1.5 py-0.5 align-middle text-[11px] text-[#177a3f] transition-colors hover:border-[#1f9d52]/70 hover:bg-[#1f9d52]/15 hover:text-[#15703a]"
                         >
                           <span aria-hidden="true">⌗</span>
                           {item.citation.filename}
@@ -123,8 +144,8 @@ export function HypothesisCard({ hypothesis, index, onOpenCitation }: Hypothesis
         })}
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-[#e7e2d6] pt-3">
-        <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-3 border-t border-[#efe9db] pt-3">
+        <div className={`flex flex-col gap-1 rounded-lg border-l-2 ${artifact.nextTest.accent} bg-[#1f9d52]/[0.03] py-1.5 pl-2.5`}>
           <span className={text.kicker}>Next investigation</span>
           <p className="text-sm">{hypothesis.recommendedNextStep}</p>
         </div>

@@ -12,8 +12,7 @@
 // section, present for anyone who wants it but never competing with the
 // investigation hypothesis for attention.
 import type { AgentCompletedPayload } from "@/lib/analysis/events";
-import { text } from "./theme";
-import { surface } from "./theme";
+import { surface, text } from "./theme";
 
 interface AgentMetricsPanelProps {
   metrics: AgentCompletedPayload;
@@ -73,15 +72,15 @@ export function AgentMetricsPanel({ metrics, toolCallCount, sourcesUsedCount }: 
   return (
     <section
       aria-labelledby="agent-metrics-heading"
-      className={`flex flex-col gap-3 p-5 ${surface.panel}`}
+      className={`flex flex-col gap-3 p-4 ${surface.cardQuiet}`}
     >
       <h2 id="agent-metrics-heading" className={text.kicker}>
         What Crado handled
       </h2>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
         {shownPrimary.map(({ key, label }) => (
           <div key={key} className="flex flex-col gap-0.5">
-            <dd className={`text-2xl font-semibold ${text.mono}`}>{primaryValues[key]}</dd>
+            <dd className={`text-xl font-semibold ${text.mono}`}>{primaryValues[key]}</dd>
             <dt className={`${text.kicker} text-[10px]`}>{label}</dt>
           </div>
         ))}
@@ -95,7 +94,7 @@ export function AgentMetricsPanel({ metrics, toolCallCount, sourcesUsedCount }: 
             <span className="group-open:hidden">Show technical detail</span>
             <span className="hidden group-open:inline">Hide technical detail</span>
           </summary>
-          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[#e7e2d6] pt-3 sm:grid-cols-3 lg:grid-cols-4">
+          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[#efe9db] pt-3 sm:grid-cols-3 lg:grid-cols-4">
             {shownDetail.map(({ key, label, format }) => {
               const value = metrics[key] as number;
               return (

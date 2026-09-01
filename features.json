@@ -381,6 +381,29 @@
       ]
     },
     {
+      "id": "UX-03",
+      "priority": 16.9,
+      "title": "Frontier Agentic Investigation Workspace",
+      "depends_on": [
+        "UX-02"
+      ],
+      "passes": true,
+      "acceptance": [
+        "application shell: compact ~60px left rail (Workspace/Sources/Benchmarks + sign out, real destinations only) and a quiet top bar (breadcrumb + agent-status pill + Investigation/Evidence/Timeline/Sources segmented view switcher) replace the old boxed agent-presence header and underlined tab row",
+        "investigation canvas: Measurement, Deterministic Relationship, and Hypothesis artifacts render as shadow/radius cards on a subtle dot-grid canvas connected by drawn connector lines (a shared vertical trunk + drop for >1 hypothesis) instead of stacked bordered rectangles",
+        "each artifact kind has a distinct visual identity per the ticket's Artifact Design spec: instrument-style Measurement, monospace-equation Deterministic card, INFERRED-labeled Hypothesis with a dashed Missing-evidence zone and a highlighted Next-test zone",
+        "OBSERVED/KNOWN/INFERRED/MISSING uses the ticket's exact glyph set (●◆△○) as compact inline markers, not four bordered category cards",
+        "collapsible right context rail (~300-340px, hidden below lg): default case-state summary (Product/Revision/Product facts/Sources available — never a fabricated count); clicking a measurement, hypothesis, or source citation updates it in place with that artifact's detail",
+        "agent activity renders unboxed inline during a run ('Crado is investigating' + live checklist, no dashboard card), compresses to a small 'N actions completed · Xs [View activity]' chip on completion — never chain-of-thought",
+        "floating centered composer (not a full-width bolted bar) with a real +Attach menu (Observation/Measurement, both wired to working actions) and a floating 'OBSERVATION DETECTED' confirmation artifact before any natural-language input is persisted — parser stays the deterministic, non-paraphrasing one from UX-02",
+        "Timeline redesigned as a connected top-to-bottom chain with a highlighted before/after result step; Sources as a compact document list; both update the context rail on selection",
+        "restrained motion: connector lines draw in (scaleY, prefers-reduced-motion-safe), reusing UX-01/02's existing rise/slide-in vocabulary — no glow, no particles, no generic fade-up",
+        "1440/1280/1024/768/500 (the environment's minimum resize width — see PROGRESS.md) verified live with no horizontal overflow; left rail hides below the `sm` breakpoint per the ticket's mobile priority list",
+        "no Investigation Agent, deterministic engine, evidence model, database schema, benchmark architecture, Regulatory State, or model-provider change",
+        "full Gateway X flow verified live: real ~28s RE-EVALUATE INVESTIGATION run watched end to end, context-rail selection on a hypothesis, composer confirm-and-persist flow, all four views, case page restyled to match"
+      ]
+    },
+    {
       "id": "MVP-16",
       "priority": 16,
       "title": "Production deployment",
