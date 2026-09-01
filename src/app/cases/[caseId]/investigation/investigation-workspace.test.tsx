@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { JsonToSseTransformStream } from "ai";
 import type { AnalysisEvent } from "@/lib/analysis/events";
@@ -103,6 +103,63 @@ const runCompleted = (overrides: Partial<{ correlationsFound: number; hypotheses
   });
 const runFailed = () =>
   event({ type: "run.failed", sequence: 1, payload: { message: "Analysis failed unexpectedly. Please try again or contact support." } });
+
+const agentStarted = () =>
+  event({ type: "agent.started", sequence: 3, payload: { correlationCount: 1 } });
+const agentToolCompleted = (overrides: Partial<{ toolName: string; label: string; query: string | null }> = {}) =>
+  event({
+    type: "agent.tool.completed",
+    sequence: 4,
+    payload: {
+      toolName: overrides.toolName ?? "searchEngineeringDocuments",
+      label: overrides.label ?? "Searched engineering documents / 3 passages retrieved",
+      resultCount: 3,
+      durationMs: 12,
+      query: overrides.query === undefined ? "40 MHz display cable" : overrides.query,
+    },
+  });
+const agentCompleted = (overrides: Partial<{ documentsAvailable: number; passagesUsedAsEvidence: number }> = {}) =>
+  event({
+    type: "agent.completed",
+    sequence: 5,
+    payload: {
+      documentsAvailable: overrides.documentsAvailable ?? 4,
+      documentSearches: 1,
+      passagesRetrieved: 3,
+      passagesUsedAsEvidence: overrides.passagesUsedAsEvidence ?? 1,
+      deterministicRelationshipsChecked: 1,
+      nextInvestigationCount: 1,
+    },
+  });
+const hypothesisCreatedWithCitation = () =>
+  event({
+    type: "hypothesis.created",
+    sequence: 6,
+    payload: {
+      productFactId: "fact-clock-40mhz",
+      title: "5th harmonic of 40 MHz system clock",
+      confidenceBand: "medium",
+      recommendedNextStep: "Disconnect the display path and re-measure.",
+      evidence: [
+        { category: "observed", description: "200 MHz peak, 7.4 dB above the selected limit." },
+        {
+          category: "known",
+          description: 'EMC-Test-04.md (Suspected Source): "The 40 MHz clock is a candidate."',
+          citation: {
+            documentId: "doc-1",
+            chunkId: "chunk-1",
+            filename: "EMC-Test-04.md",
+            documentType: "test_report",
+            pageNumber: null,
+            section: "Suspected Source",
+            passage: "The 40 MHz clock is a candidate.",
+          },
+        },
+        { category: "inferred", description: "The fifth harmonic relationship may be relevant." },
+        { category: "missing", description: "Measurement with display disconnected." },
+      ],
+    },
+  });
 
 /** Builds a mock SSE Response using the exact framing the real route
  * produces (ai's JsonToSseTransformStream), so the client's parser is
@@ -326,5 +383,118 @@ describe("InvestigationWorkspace — controls and accessibility", () => {
     await waitFor(() => {
       expect(screen.getByRole("alert")).toBeInTheDocument();
     });
+  });
+});
+
+describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
+  it("shows agent activity progressively as it streams in, then the truthful metrics once agent.completed arrives", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        buildSseResponse(
+          [
+            runStarted(),
+            measurementLoaded(),
+            correlationFound(),
+            agentStarted(),
+            agentToolCompleted(),
+            agentCompleted(),
+            hypothesisCreatedWithCitation(),
+            runCompleted(),
+          ],
+          5,
+        ),
+      ),
+    );
+    render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
+    fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Agent activity")).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(screen.getByText("What Crado handled")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Searched engineering documents")).toBeInTheDocument();
+    expect(screen.getByText("Sources used")).toBeInTheDocument();
+  });
+
+  it("replays a completed run's agent activity, metrics, and sources from persisted state without calling fetch", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const persistedState = reconstructFromPersistedEvents([
+      runStarted(),
+      measurementLoaded(),
+      correlationFound(),
+      agentStarted(),
+      agentToolCompleted(),
+      agentCompleted(),
+      hypothesisCreatedWithCitation(),
+      runCompleted(),
+    ]);
+
+    render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+
+    expect(screen.getByText("Agent activity")).toBeInTheDocument();
+    expect(screen.getByText("What Crado handled")).toBeInTheDocument();
+    expect(screen.getByText("EMC-Test-04.md")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("opens the source drawer with the exact stored passage when a citation is clicked, and closes it on Escape", async () => {
+    const persistedState = reconstructFromPersistedEvents([
+      runStarted(),
+      measurementLoaded(),
+      correlationFound(),
+      agentStarted(),
+      agentToolCompleted(),
+      agentCompleted(),
+      hypothesisCreatedWithCitation(),
+      runCompleted(),
+    ]);
+    render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /EMC-Test-04\.md/ }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText("The 40 MHz clock is a candidate.")).toBeInTheDocument();
+    expect(within(dialog).getByText(/Hypothesis 01/)).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows the honest 'no passages used as evidence' state when the agent searched but found nothing usable", () => {
+    const persistedState = reconstructFromPersistedEvents([
+      runStarted(),
+      measurementLoaded(),
+      correlationFound(),
+      agentStarted(),
+      agentCompleted({ passagesUsedAsEvidence: 0 }),
+      runCompleted({ hypothesesCreated: 0 }),
+    ]);
+    render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+
+    expect(
+      screen.getByText("No document passages were used as evidence in this investigation."),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the metrics/sources rows entirely for a run that never reached the agent phase (no correlations)", () => {
+    const persistedState = reconstructFromPersistedEvents([
+      runStarted(),
+      measurementLoaded(),
+      runCompleted({ correlationsFound: 0, hypothesesCreated: 0 }),
+    ]);
+    render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+
+    expect(screen.queryByText("Agent activity")).not.toBeInTheDocument();
+    expect(screen.queryByText("What Crado handled")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sources used")).not.toBeInTheDocument();
   });
 });

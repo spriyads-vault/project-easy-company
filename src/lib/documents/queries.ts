@@ -26,6 +26,11 @@ export interface DocumentListItem {
   failureReason: string | null;
   productId: string | null;
   productRevisionId: string | null;
+  /** Denormalized for display only — never joined for access control, RLS
+   * already scopes the row itself. Null for workspace-level documents not
+   * tied to a product. */
+  productName: string | null;
+  revisionLabel: string | null;
   isCurrent: boolean;
 }
 
@@ -36,6 +41,9 @@ export interface ListDocumentsInput {
   pageSize?: number;
   productId?: string;
   productRevisionId?: string;
+  /** Restrict to one or more DocumentType values (a Sources-page filter
+   * tab groups several, e.g. "Product" -> schematic/pcb/mechanical). */
+  documentTypes?: string[];
 }
 
 export interface ListDocumentsResult {
@@ -49,7 +57,7 @@ const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
 
 const DOCUMENT_LIST_COLUMNS =
-  "id, filename, document_type, status, page_count, uploaded_at, indexed_at, failure_reason, product_id, product_revision_id, is_current";
+  "id, filename, document_type, status, page_count, uploaded_at, indexed_at, failure_reason, product_id, product_revision_id, is_current, products(name), product_revisions(label)";
 
 export async function listEngineeringDocuments(
   supabase: SupabaseClient<Database>,
@@ -68,6 +76,9 @@ export async function listEngineeringDocuments(
   if (input.productId) rangedQuery = rangedQuery.eq("product_id", input.productId);
   if (input.productRevisionId) {
     rangedQuery = rangedQuery.eq("product_revision_id", input.productRevisionId);
+  }
+  if (input.documentTypes && input.documentTypes.length > 0) {
+    rangedQuery = rangedQuery.in("document_type", input.documentTypes);
   }
 
   const { data, count, error } = await rangedQuery;
@@ -95,6 +106,9 @@ export async function listEngineeringDocuments(
   if (input.productRevisionId) {
     countQuery = countQuery.eq("product_revision_id", input.productRevisionId);
   }
+  if (input.documentTypes && input.documentTypes.length > 0) {
+    countQuery = countQuery.in("document_type", input.documentTypes);
+  }
   const { count: totalCount } = await countQuery;
 
   return { documents: [], totalCount: totalCount ?? 0, page, pageSize };
@@ -112,6 +126,8 @@ function mapDocumentRow(row: {
   product_id: string | null;
   product_revision_id: string | null;
   is_current: boolean;
+  products: { name: string } | null;
+  product_revisions: { label: string } | null;
 }): DocumentListItem {
   return {
     id: row.id,
@@ -124,6 +140,8 @@ function mapDocumentRow(row: {
     failureReason: row.failure_reason,
     productId: row.product_id,
     productRevisionId: row.product_revision_id,
+    productName: row.products?.name ?? null,
+    revisionLabel: row.product_revisions?.label ?? null,
     isCurrent: row.is_current,
   };
 }

@@ -56,6 +56,7 @@ function registryWithPassage(): RetrievedRegistry {
     chunkId: "chunk-1",
     documentId: "doc-1",
     filename: "EMC-Test-04.md",
+    documentType: "test_report",
     pageNumber: null,
     section: "Suspected Source",
     passage: "The 40 MHz system clock is a strong candidate.",
@@ -142,6 +143,15 @@ describe("validateAgentOutput", () => {
     );
     expect(documentEvidence).toBeDefined();
     expect(documentEvidence?.description).toContain("The 40 MHz system clock is a strong candidate.");
+    expect(documentEvidence?.citation).toEqual({
+      documentId: "doc-1",
+      chunkId: "chunk-1",
+      filename: "EMC-Test-04.md",
+      documentType: "test_report",
+      pageNumber: null,
+      section: "Suspected Source",
+      passage: "The 40 MHz system clock is a strong candidate.",
+    });
     expect(documentEvidence?.category).toBe("known");
     expect(result.passagesUsedAsEvidence).toBe(1);
   });

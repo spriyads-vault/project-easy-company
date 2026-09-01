@@ -10,6 +10,8 @@
 import { useRef, useState } from "react";
 import type { MeasurementRow } from "@/lib/cases/queries";
 import type { ProductFactRecord } from "@/lib/correlation/harmonic-correlation";
+import type { EvidenceCategory } from "@/lib/domain/schema";
+import type { EvidenceCitation } from "@/lib/hypotheses/schema";
 import {
   applyAnalysisEvent,
   isRunActive,
@@ -19,7 +21,18 @@ import { SseEventParser } from "@/lib/investigation/parse-sse-events";
 import { ProductPanel } from "./product-panel";
 import { MeasurementPanel } from "./measurement-panel";
 import { InvestigationPanel } from "./investigation-panel";
+import { AgentActivityPanel } from "./agent-activity-panel";
+import { AgentMetricsPanel } from "./agent-metrics-panel";
+import { SourcesPanel } from "./sources-panel";
+import { SourceDrawer } from "./source-drawer";
 import { surface } from "./theme";
+
+interface OpenCitationState {
+  citation: EvidenceCitation;
+  category: EvidenceCategory;
+  hypothesisIndex: number;
+  hypothesisTitle: string;
+}
 
 interface InvestigationWorkspaceProps {
   caseId: string;
@@ -40,10 +53,20 @@ export function InvestigationWorkspace({
 }: InvestigationWorkspaceProps) {
   const [state, setState] = useState<WorkspaceState>(initialState);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [openCitation, setOpenCitation] = useState<OpenCitationState | null>(null);
   // Belt-and-suspenders duplicate-run guard: `disabled` on the button lags
   // one render behind a click, so a fast double-click could otherwise fire
   // two POSTs before React re-renders. This ref is checked synchronously.
   const runInFlightRef = useRef(false);
+
+  function handleOpenCitation(
+    citation: EvidenceCitation,
+    category: EvidenceCategory,
+    hypothesisIndex: number,
+    hypothesisTitle: string,
+  ) {
+    setOpenCitation({ citation, category, hypothesisIndex, hypothesisTitle });
+  }
 
   const hasPeak = (measurement?.peaks.length ?? 0) > 0;
   const canRunAnalysis = measurement !== null && hasPeak && !isRunActive(state.status);
@@ -120,24 +143,50 @@ export function InvestigationWorkspace({
   }
 
   return (
-    <div
-      className={`grid flex-1 grid-cols-1 gap-4 p-4 md:grid-cols-2 lg:grid-cols-[minmax(260px,320px)_minmax(320px,1fr)_minmax(380px,1.2fr)] ${surface.page}`}
-    >
-      <div className="lg:order-1">
-        <ProductPanel productId={productId} revisionId={revisionId} facts={productFacts} />
+    <>
+      <div
+        className={`grid flex-1 grid-cols-1 content-start gap-4 p-4 md:grid-cols-2 lg:grid-cols-[minmax(260px,320px)_minmax(320px,1fr)_minmax(380px,1.2fr)] ${surface.page}`}
+      >
+        {/* Mobile order: Measurement, Investigation, Agent activity, What
+            Crado handled, Sources, Product — desktop reflows into the
+            three-column PRODUCT|MEASUREMENT|INVESTIGATION row plus
+            full-width rows below it. */}
+        <div className="order-6 md:order-1 lg:order-1">
+          <ProductPanel productId={productId} revisionId={revisionId} facts={productFacts} />
+        </div>
+        <div className="order-1 md:order-2 lg:order-2">
+          <MeasurementPanel caseId={caseId} measurement={measurement} />
+        </div>
+        <div className="order-2 md:col-span-2 md:order-3 lg:col-span-1 lg:order-3">
+          <InvestigationPanel
+            state={state}
+            canRunAnalysis={canRunAnalysis}
+            isSubmitting={isSubmitting}
+            disabledReason={disabledReason}
+            onRunInvestigation={handleRunInvestigation}
+            onOpenCitation={handleOpenCitation}
+          />
+        </div>
+        <div className="order-3 md:order-4 md:col-span-2 lg:col-span-3 lg:order-4">
+          <AgentActivityPanel activity={state.agentActivity} active={state.agentActive} />
+        </div>
+        {state.agentMetrics ? (
+          <div className="order-4 md:order-5 md:col-span-2 lg:col-span-3 lg:order-5">
+            <AgentMetricsPanel metrics={state.agentMetrics} />
+          </div>
+        ) : null}
+        <div className="order-5 md:order-6 md:col-span-2 lg:col-span-3 lg:order-6">
+          <SourcesPanel hypotheses={state.hypotheses} metrics={state.agentMetrics} />
+        </div>
       </div>
-      <div className="lg:order-2">
-        <MeasurementPanel caseId={caseId} measurement={measurement} />
-      </div>
-      <div className="md:col-span-2 lg:order-3 lg:col-span-1">
-        <InvestigationPanel
-          state={state}
-          canRunAnalysis={canRunAnalysis}
-          isSubmitting={isSubmitting}
-          disabledReason={disabledReason}
-          onRunInvestigation={handleRunInvestigation}
-        />
-      </div>
-    </div>
+
+      <SourceDrawer
+        citation={openCitation?.citation ?? null}
+        hypothesisTitle={openCitation?.hypothesisTitle ?? null}
+        hypothesisIndex={openCitation?.hypothesisIndex ?? null}
+        evidenceCategory={openCitation?.category ?? null}
+        onClose={() => setOpenCitation(null)}
+      />
+    </>
   );
 }

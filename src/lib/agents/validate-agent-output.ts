@@ -29,6 +29,7 @@ export interface RetrievedDocumentPassage {
   chunkId: string;
   documentId: string;
   filename: string;
+  documentType: string;
   pageNumber: number | null;
   section: string | null;
   passage: string;
@@ -104,6 +105,17 @@ function buildDocumentPassageEvidence(
   return {
     category: "known",
     description: `${passage.filename}${location ? ` (${location})` : ""}: "${passage.passage}"`,
+    // Structured provenance for MVP-10C's clickable citation badge/drawer —
+    // every field sourced from the stored chunk row, never the model.
+    citation: {
+      documentId: passage.documentId,
+      chunkId: passage.chunkId,
+      filename: passage.filename,
+      documentType: passage.documentType,
+      pageNumber: passage.pageNumber,
+      section: passage.section,
+      passage: passage.passage,
+    },
   };
 }
 

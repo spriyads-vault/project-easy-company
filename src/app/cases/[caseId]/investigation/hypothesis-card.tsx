@@ -7,10 +7,20 @@
 // reasoning appears, and it's always labeled as such, never as fact.
 import type { HypothesisCreatedPayload } from "@/lib/analysis/events";
 import type { EvidenceCategory } from "@/lib/domain/schema";
+import type { EvidenceCitation } from "@/lib/hypotheses/schema";
 import { surface, text } from "./theme";
 
 interface HypothesisCardProps {
   hypothesis: HypothesisCreatedPayload;
+  /** Zero-based position among this run's hypotheses — used only for the
+   * "HYPOTHESIS 01" label and the source drawer's "Used in" line. */
+  index: number;
+  onOpenCitation: (
+    citation: EvidenceCitation,
+    category: EvidenceCategory,
+    hypothesisIndex: number,
+    hypothesisTitle: string,
+  ) => void;
 }
 
 const CONFIDENCE_LABEL: Record<HypothesisCreatedPayload["confidenceBand"], string> = {
@@ -30,11 +40,18 @@ const EVIDENCE_SECTIONS: {
   { category: "missing", heading: "Missing", hint: "Needed to support or rule this out." },
 ];
 
-export function HypothesisCard({ hypothesis }: HypothesisCardProps) {
+export function HypothesisCard({ hypothesis, index, onOpenCitation }: HypothesisCardProps) {
+  const whyThisTest = hypothesis.evidence.find((item) => item.category === "inferred")?.description ?? null;
+
   return (
     <article className={`flex flex-col gap-4 p-4 ${surface.panelElevated}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <h3 className="text-base font-medium leading-snug">{hypothesis.title}</h3>
+        <div className="flex flex-col gap-0.5">
+          <span className={`${text.kicker} text-[10px] text-[#6f6d65]`}>
+            Hypothesis {String(index + 1).padStart(2, "0")}
+          </span>
+          <h3 className="text-base font-medium leading-snug">{hypothesis.title}</h3>
+        </div>
         <span className="shrink-0 border border-[#3a3d34] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#c8c6bb]">
           {CONFIDENCE_LABEL[hypothesis.confidenceBand]}
         </span>
@@ -50,9 +67,9 @@ export function HypothesisCard({ hypothesis }: HypothesisCardProps) {
             <div key={section.category} className="flex flex-col gap-1.5">
               <span className={text.kicker}>{section.heading}</span>
               <ul className="flex flex-col gap-1">
-                {items.map((item, index) => (
+                {items.map((item, itemIndex) => (
                   <li
-                    key={index}
+                    key={itemIndex}
                     className={
                       section.category === "inferred"
                         ? "text-sm italic text-[#d8d6cb]"
@@ -62,6 +79,21 @@ export function HypothesisCard({ hypothesis }: HypothesisCardProps) {
                     }
                   >
                     {item.description}
+                    {item.citation ? (
+                      <>
+                        {" "}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onOpenCitation(item.citation!, item.category, index, hypothesis.title)
+                          }
+                          className="text-xs text-[#5fdb87] underline decoration-dotted underline-offset-2 hover:text-[#7fe6a0]"
+                        >
+                          [{item.citation.filename}
+                          {item.citation.section ? ` · ${item.citation.section}` : item.citation.pageNumber ? ` · p.${item.citation.pageNumber}` : ""}]
+                        </button>
+                      </>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -70,9 +102,17 @@ export function HypothesisCard({ hypothesis }: HypothesisCardProps) {
         })}
       </div>
 
-      <div className="flex flex-col gap-1 border-t border-[#2c2f27] pt-3">
-        <span className={text.kicker}>Next investigation</span>
-        <p className="text-sm">{hypothesis.recommendedNextStep}</p>
+      <div className="flex flex-col gap-3 border-t border-[#2c2f27] pt-3">
+        <div className="flex flex-col gap-1">
+          <span className={text.kicker}>Next investigation</span>
+          <p className="text-sm">{hypothesis.recommendedNextStep}</p>
+        </div>
+        {whyThisTest ? (
+          <div className="flex flex-col gap-1">
+            <span className={`${text.kicker} text-[10px] text-[#6f6d65]`}>Why this test</span>
+            <p className={`text-xs italic ${text.muted}`}>{whyThisTest}</p>
+          </div>
+        ) : null}
       </div>
     </article>
   );

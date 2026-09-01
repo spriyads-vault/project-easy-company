@@ -159,6 +159,7 @@ function absorbToolResult(
             chunkId: string;
             documentId: string;
             filename: string;
+            documentType: string;
             pageNumber: number | null;
             section: string | null;
             passage: string;

@@ -107,9 +107,30 @@ export type HypothesisGenerationOutput = z.infer<
 
 // ---- The assembled result the rest of the app consumes ----
 
+// A KNOWN evidence item sourced from a retrieved document passage carries
+// its exact provenance so the UI (MVP-10C) can render a clickable citation
+// and a source drawer — every field here comes from the stored chunk/
+// document row, assembled deterministically in
+// src/lib/agents/validate-agent-output.ts, never from the model's own
+// restatement of where something came from.
+export const evidenceCitationSchema = z.object({
+  documentId: z.string(),
+  chunkId: z.string(),
+  filename: z.string(),
+  documentType: z.string(),
+  pageNumber: z.number().nullable(),
+  section: z.string().nullable(),
+  /** The exact stored passage text, for the source drawer — independent of
+   * `description` above, which may be trimmed/formatted for the evidence
+   * list. */
+  passage: z.string(),
+});
+export type EvidenceCitation = z.infer<typeof evidenceCitationSchema>;
+
 export const finalEvidenceItemSchema = z.object({
   category: z.enum(["observed", "known", "inferred", "missing"]),
   description: z.string(),
+  citation: evidenceCitationSchema.optional(),
 });
 export type FinalEvidenceItem = z.infer<typeof finalEvidenceItemSchema>;
 

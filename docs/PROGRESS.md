@@ -1,20 +1,20 @@
 # Claude Progress
 
 ## Current state
-MVP-01 through MVP-09, MVP-10A, and MVP-10B done. Auth, workspace isolation,
-the full core domain schema, product/revision/fact entry, failure-case +
-measurement entry, the deterministic harmonic correlation engine, the AI
-structured hypothesis service, a real streaming `POST /api/analysis-runs`
-endpoint, the real investigation workspace UI, the Engineering Knowledge Base
-(private document storage, ingestion, hybrid retrieval, a Documents/Sources
-UI at `/documents`), and now the Investigation Agent (an AI SDK `ToolLoopAgent`
-that decides what product context/documents/history to gather before
-proposing evidence-labeled, source-cited hypotheses) all work, tested, against
-a local Supabase instance (`supabase start`) and live-verified against a real
-Anthropic call. MVP-10C (the polished agent-activity UI: source drawer, live
-tool-call panel) and MVP-10 (composer + observation updating a hypothesis)
-are both open next tickets — either is eligible depending on which the user
-wants.
+MVP-01 through MVP-09, MVP-10A, MVP-10B, and MVP-10C done. Auth, workspace
+isolation, the full core domain schema, product/revision/fact entry,
+failure-case + measurement entry, the deterministic harmonic correlation
+engine, the AI structured hypothesis service, a real streaming
+`POST /api/analysis-runs` endpoint, the Engineering Knowledge Base (private
+document storage, ingestion, hybrid retrieval), the Investigation Agent (an
+AI SDK `ToolLoopAgent` that decides what product context/documents/history to
+gather before proposing evidence-labeled, source-cited hypotheses), and now
+the polished investigation workspace UI — a single connected workspace
+(Product/Measurement/Investigation/Agent Activity/Sources, with a clickable
+source-provenance drawer) rather than four separate dashboard cards — all
+work, tested, against a local Supabase instance (`supabase start`) and
+live-verified against a real Anthropic call. MVP-10 (composer + observation
+updating a hypothesis) is the next open ticket.
 
 ## Session handoff format
 Append one entry per completed/paused ticket:
@@ -1010,4 +1010,184 @@ architecture change.
 - Next recommended ticket: MVP-10C (polished agent-activity UI: observable
   tool-call log, source/citation drawer) or MVP-10 (composer + observation
   updating a hypothesis) — both are open, neither blocks the other.
+- Commit: (see git log)
+
+### 2026-09-01 — MVP-10C: Investigation workspace UX
+- Completed: upgraded `/cases/[caseId]/investigation` from three independent
+  panels into one connected investigation workspace, per explicit instruction
+  not to touch the Investigation Agent's architecture except where the UI
+  exposed a genuine defect.
+  - **Layout**: a single responsive CSS grid (six children: Product,
+    Measurement, Investigation, Agent Activity, What Crado Handled, Sources)
+    using per-breakpoint Tailwind `order-*` classes rather than duplicated
+    markup — desktop is header row + PRODUCT | MEASUREMENT | INVESTIGATION +
+    full-width AGENT ACTIVITY row; mobile order is Measurement, Investigation
+    (Next Investigation is inline per-hypothesis, not separate), Agent
+    Activity, What Crado Handled, Sources, Product, exactly as specified.
+    Verified live at desktop (1440px), tablet (834px — collapses to a
+    sensible two-column PRODUCT/MEASUREMENT row), and mobile (390px).
+  - **Agent Activity** (`agent-activity-panel.tsx`): renders only persisted
+    `agent.started`/`agent.tool.completed`/`agent.completed` events as plain
+    observable work — "Loaded product context / 3 structured facts",
+    "Searched engineering documents / 3 passages retrieved / Query: ...",
+    etc. No "thinking"/"reasoning"/chain-of-thought language anywhere. A
+    live run shows tool events appearing one at a time under a pulsing
+    "◌ Working…" `role="status"` line — no fake typing animation.
+  - **What Crado Handled** (`agent-metrics-panel.tsx`): a `<dl>` grid over
+    the six real `agent.completed` fields (documentsAvailable/
+    documentSearches/passagesRetrieved/passagesUsedAsEvidence/
+    deterministicRelationshipsChecked/nextInvestigationCount) — no
+    hardcoded numbers; a 1-document workspace correctly shows "1", not a
+    placeholder like 600/612.
+  - **Structured citations — the one architecture change made, and why it's
+    in-scope**: added an optional `citation` object (documentId, chunkId,
+    filename, documentType, pageNumber, section, passage) to
+    `finalEvidenceItemSchema` (`src/lib/hypotheses/schema.ts`) and had
+    `buildDocumentPassageEvidence` (`validate-agent-output.ts`) return it
+    alongside the existing text description — built only from the stored
+    retrieval registry, never model-generated text. This is additive/
+    optional (old persisted rows without it still validate) and was the one
+    genuine gap the ticket's own citation/provenance requirements exposed:
+    citations existed only as unstructured prose before, with no reliable
+    way for the UI to link a claim back to its exact source.
+  - **Source drawer** (`source-drawer.tsx`, new, from scratch, no external
+    dialog library): opens on citation click, shows filename/type/revision,
+    page or section, the exact stored passage, "Used in" (hypothesis title)
+    and "Evidence type". Real accessible dialog: `role="dialog"
+    aria-modal="true"`, focus captured on open and restored to the exact
+    triggering button on close, manual Tab focus-trap, Escape-to-close,
+    backdrop-click-to-close, full-screen sheet on mobile. Verified in a real
+    Chrome instance (chrome-devtools MCP), not just jsdom: Escape closed the
+    drawer and returned focus to the precise citation button that opened it.
+  - **Sources panel** (`sources-panel.tsx`): documents actually used
+    (deduped by citation, `derive-sources-used.ts`) with per-document
+    passage-used counts, real "N documents available · N searches performed
+    · N passages retrieved" header, a link to `/documents`, and two distinct
+    honest empty states ("no relevant passages retrieved" vs. "passages
+    retrieved but none used as evidence") — both independently confirmed as
+    real, reachable states (see live run below, not just fixtures).
+  - **Hypothesis card polish**: "HYPOTHESIS 0N" numbering, citation badges
+    beside KNOWN evidence that carries one, a "Why this test" line beside
+    Next Investigation reusing the hypothesis's own INFERRED synthesis (no
+    new model call). Deterministic-relationship arithmetic stays visually
+    separate from AI inference (unchanged from MVP-09, confirmed still
+    correct here).
+  - **`/documents` polish**: "SOURCES" heading with a real always-unfiltered
+    total count (a filter never makes the library look smaller), six filter
+    tabs (All/Product/Testing/Regulatory/Datasheets/Notes,
+    `describe-document-type.ts`'s new `DOCUMENT_TYPE_GROUPS`,
+    server-rendered `<Link>`s so filtering needs no client JS), rows now
+    show product/revision and a real indexed date
+    (`src/lib/documents/queries.ts` joins `products`/`product_revisions`).
+    Verified live: filtering to a type with zero matches shows "0 matching /
+    No documents match this filter." while the header total stays honest.
+- **Genuine defect found and fixed during live QA, not guessed at**:
+  `sources-panel.tsx` rendered "1 documents available" — a real
+  singular/plural bug invisible to every jsdom test (fixed test data never
+  hit the n=1 case). Found only by looking at the actual rendered page with
+  the real 1-document seed case; fixed with singular/plural ternaries for
+  both "document(s) available" and "passage(s) retrieved", confirmed fixed
+  live via Next.js Fast Refresh.
+- Tests: 214 unit tests (60 new: `agent-activity-panel`,
+  `agent-metrics-panel`, `sources-panel`, `source-drawer`,
+  `type-filter-tabs` test files new; `hypothesis-card`,
+  `investigation-workspace`, `document-list`, `validate-agent-output` tests
+  extended), `pnpm typecheck`, `pnpm lint`, `pnpm build` all pass.
+  `investigation-workspace.test.tsx` gained a dedicated "Investigation Agent
+  (MVP-10C)" block: progressive live streaming of agent-activity events,
+  full replay of a completed run, citation click → drawer → Escape closes
+  and restores focus, the honest empty-passages state, and agent metrics/
+  sources correctly absent when the agent phase never ran (plain MVP-07/08/09
+  path, unaffected by any of this).
+- Live browser walkthrough (chrome-devtools MCP): seeded a fully realistic
+  completed Gateway X run directly into Postgres (same real data captured
+  from MVP-10B's live Anthropic test) to inspect the replay/completed UI
+  without a second paid model call, then separately triggered one real,
+  live (non-replayed) Anthropic run via "RUN AGAIN" on that same case to
+  confirm the progressive streaming UX and get real timing numbers:
+  - Desktop (1440px): full three-column layout, agent activity panel,
+    metrics grid, sources list, and source drawer all confirmed against the
+    real a11y tree and screenshots.
+  - Tablet (834px): Product/Measurement collapse to two columns,
+    Investigation/Agent Activity/Sources stay full-width below — a
+    reasonable intermediate layout, not a forced 3-column squeeze.
+  - Mobile (390px): confirmed exact required order (Measurement,
+    Investigation with hypotheses, Agent Activity, What Crado Handled,
+    Sources, Product).
+  - Keyboard pass: Tab order is top-to-bottom/left-to-right (back link →
+    Edit facts → Add measurement → Run Again → citation buttons →
+    View all sources), every stop has a visible focus outline; drawer
+    focus-trap/Escape/focus-restore confirmed live (not just in jsdom).
+  - `/documents`: real "SOURCES" / total count, filter tabs wired to real
+    `?type=` URLs, "Testing" filter correctly includes the one seeded
+    test-report document, "Product" filter correctly shows the honest
+    zero-match empty state without shrinking the header total.
+  - **Live (non-replayed) run**: clicked "Run again" on the real case;
+    button changed to disabled "ANALYZING…", the deterministic correlation
+    appeared immediately, then agent-activity events appeared one at a time
+    under a pulsing "Working…" status over the course of the run, then
+    "Investigation complete" with 3 hypotheses. Total wall-clock time from
+    click to completion: **~47 seconds**. This run's 5 document searches
+    all legitimately returned 0 passages (real semantic/keyword search
+    against the one seeded document's actual phrasing didn't match this
+    run's query terms) — confirming "No relevant passages were retrieved
+    for this investigation." is real, reachable behavior, not only a test
+    fixture; hypotheses correctly fell back to product-context-only KNOWN
+    evidence with no citation badges. Refresh after completion reconstructed
+    the identical state from `analysis_events` with no re-run.
+  - Observed but explicitly out of this ticket's scope (no architecture
+    change made): the live model occasionally emits a duplicate KNOWN
+    evidence line within one hypothesis (e.g. "Product context: system
+    clock — 40 MHz" listed twice). This is a model-output quality issue in
+    MVP-10B's prompt/output, not a UI rendering defect — the workspace
+    faithfully renders whatever the persisted event contains. Worth a
+    future prompt-tightening pass, not a reason to touch the agent now.
+  - Whether the ~47s / up-to-9-model-steps latency is visibly justified:
+    yes, materially — the Agent Activity panel showed 7 distinct, concretely
+    quantified actions (measurement/product-context load, 2 history checks,
+    5 document searches with their exact query strings and result counts)
+    that a user can read end-to-end and see real work happened, not a
+    generic spinner. The one soft edge: 5 consecutive document searches
+    that all returned 0 results back-to-back can read as "flailing" rather
+    than "efficient" to an engineer watching live — a genuine UX
+    observation for a future tuning pass (e.g. capping/deduping near-
+    identical failed queries), not something addressed here since it's
+    MVP-10B agent behavior, not a UI defect.
+  - Cleanup: the throwaway seed script
+    (`src/lib/agents/__seed-walkthrough.integration.test.ts`) and all QA
+    screenshots (`.qa-screenshots/`) were deleted before commit, matching
+    the MVP-10B precedent — neither is part of the committed suite.
+- Files/areas added: `src/app/cases/[caseId]/investigation/{agent-activity-
+  panel,agent-metrics-panel,derive-sources-used,sources-panel,source-drawer}.tsx`
+  + matching `*.test.tsx`, `src/lib/documents/describe-document-type.ts`,
+  `src/app/documents/type-filter-tabs.tsx` + `.test.tsx`. Files/areas
+  changed: `src/lib/hypotheses/schema.ts` (citation field),
+  `src/lib/agents/{validate-agent-output,investigation-agent}.ts` +
+  `validate-agent-output.test.ts`, `src/app/cases/[caseId]/investigation/
+  {hypothesis-card,investigation-panel,investigation-workspace}.tsx` +
+  `*.test.tsx`, `src/app/documents/{document-list,page}.tsx` +
+  `document-list.test.tsx`, `src/lib/documents/queries.ts` (product/revision
+  join, type filtering).
+- Decisions (reversible, made per CLAUDE.md autonomy rules):
+  - Citation is optional/additive on the existing evidence schema rather
+    than a new table or a required field — old persisted hypotheses (no
+    citation) still render correctly with plain KNOWN text and no badge,
+    matching "a hypothesis with no document citations should just show
+    deterministic/product evidence only."
+  - Built the source drawer as a hand-written accessible dialog rather than
+    pulling in a UI library — one focused, fully-owned component with no new
+    dependency, consistent with CLAUDE.md's "no package unless it saves
+    meaningful implementation time" and the existing near-monochrome custom
+    design language.
+  - Reused a real completed run's exact data (captured from MVP-10B's live
+    test) to seed a throwaway visual-QA case rather than paying for a
+    second live Anthropic call for every layout/breakpoint check — the one
+    live call actually spent was reserved for the thing only a live call
+    can prove: progressive streaming UX and real timing.
+- Remaining: none for MVP-10C. The duplicate-KNOWN-evidence-line and
+  multiple-empty-searches observations above are notes for a future MVP-10B
+  prompt-tuning pass, not blockers.
+- Next recommended ticket: MVP-10 (composer + observation updating a
+  hypothesis) — the next open, unblocked ticket. Do not start it without
+  further instruction (explicitly deferred by the user this session).
 - Commit: (see git log)

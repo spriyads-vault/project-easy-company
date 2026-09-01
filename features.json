@@ -174,6 +174,29 @@
       "notes": "The polished agent-activity UI (source drawer, live tool-call panel) is MVP-10C, not built here — this ticket is the orchestration layer and its backend event/reducer foundation only. The live test uncovered and fixed two real defects: reasoning/nextInvestigation needed wider Zod bounds (600/300 -> 1200/500 chars) for the agent's evidence-integrated answers, and the tool-activity label pluralizer was naively appending 's' to two-word nouns ('passage retrieveds') — fixed to pluralize the noun only ('passages retrieved'), covered by a regression test."
     },
     {
+      "id": "MVP-10C",
+      "priority": 9.85,
+      "title": "Investigation workspace UX: agent activity, citations, source drawer",
+      "depends_on": [
+        "MVP-10B"
+      ],
+      "passes": true,
+      "acceptance": [
+        "investigation page reads as one workspace: header (product/rev/case + live status), PRODUCT | MEASUREMENT | INVESTIGATION three-column row, full-width AGENT ACTIVITY row, clicking a citation opens a right-side source drawer",
+        "Agent Activity renders only persisted agent.started/agent.tool.completed/agent.completed events as observable work (e.g. 'Loaded product context / 3 structured facts'); no chain-of-thought/reasoning language anywhere",
+        "live run shows tool events appearing progressively with a pulsing 'Working…' status, no fake typing animation; verified against a real live (non-replayed) Anthropic run in-browser",
+        "'What Crado handled' grid shows real execution metrics (documentsAvailable/documentSearches/passagesRetrieved/passagesUsedAsEvidence/deterministicRelationshipsChecked/nextInvestigationCount) from agent.completed, never hardcoded",
+        "every document-backed KNOWN evidence item carries a structured citation (documentId/chunkId/filename/documentType/pageNumber/section/passage) built only from the stored retrieval registry, never model-generated text; citation is a clickable badge",
+        "source drawer shows filename/type/revision, page or section, the exact stored passage, 'Used in' (hypothesis) and 'Evidence type'; accessible dialog with focus capture/restore, Tab trap, Escape-to-close, backdrop click — verified in a real browser, not just jsdom",
+        "Sources panel lists documents actually used with per-document passage-used counts and a link to /documents; honest empty states for 'no passages retrieved' vs 'passages retrieved but none used as evidence', verified live (a real run legitimately hit 0-passages-retrieved)",
+        "hypothesis cards show 'HYPOTHESIS 0N' numbering, four visually separated evidence classes, a deterministic-relationship block visually distinct from AI inference, and a 'Why this test' line beside Next Investigation",
+        "/documents polished into a 'SOURCES' repository: real unfiltered total count, All/Product/Testing/Regulatory/Datasheets/Notes filter tabs (filtering never shrinks the header count), filename/type/product+revision/status/indexed-date rows",
+        "mobile order is Product, Measurement, Investigation (hypotheses incl. Next Investigation), Agent Activity, What Crado Handled, Sources — achieved via a single responsive grid with per-breakpoint order classes, no duplicated markup; source drawer becomes a full-screen sheet",
+        "refresh reconstructs all agent activity/metrics/hypotheses/sources from persisted analysis_events, never reruns the agent"
+      ],
+      "notes": "Investigation Agent architecture (MVP-10B) untouched except one additive, backward-compatible change: an optional structured `citation` field on evidenceItem (schema.ts) plus buildDocumentPassageEvidence returning it alongside the existing text description — justified as the one genuine UI-exposed gap (citations existed only as unstructured text). Visual QA done live via chrome-devtools MCP: desktop, tablet (834px, collapses to a sensible 2-column), and mobile screenshots; keyboard tab-order and drawer focus-trap/Escape confirmed in a real browser; one real live Anthropic run observed end-to-end (button click -> 'Investigation complete' in ~47s, 3 hypotheses, 5 document searches that legitimately returned 0 passages this run, confirming the 'no relevant passages retrieved' empty state is real behavior, not just a fixture). Observed but out of scope to fix here: the live model occasionally duplicates a KNOWN evidence line (e.g. 'Product context: system clock — 40 MHz' twice in one hypothesis) — a model-output quality issue, not a UI defect, worth a future prompt tightening pass."
+    },
+    {
       "id": "MVP-10",
       "priority": 10,
       "title": "Observation updates hypothesis",

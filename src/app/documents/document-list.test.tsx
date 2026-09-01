@@ -15,6 +15,8 @@ function doc(overrides: Partial<DocumentListItem> = {}): DocumentListItem {
     failureReason: null,
     productId: null,
     productRevisionId: null,
+    productName: null,
+    revisionLabel: null,
     isCurrent: true,
     ...overrides,
   };
@@ -62,6 +64,33 @@ describe("DocumentList", () => {
     );
     expect(screen.getByText(/schematic · 5 pages/i)).toBeInTheDocument();
     expect(screen.queryByText(/no-pages.*pages/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the product/revision it's scoped to, and omits that segment for a workspace-level document", () => {
+    render(
+      <DocumentList
+        documents={[
+          doc({ id: "1", filename: "scoped.pdf", productName: "Gateway X", revisionLabel: "Rev17" }),
+          doc({ id: "2", filename: "workspace-level.pdf", productName: null, revisionLabel: null }),
+        ]}
+        page={1}
+        pageSize={25}
+        totalCount={2}
+      />,
+    );
+    expect(screen.getByText(/Gateway X Rev17/)).toBeInTheDocument();
+  });
+
+  it("shows the real indexed date for an indexed document", () => {
+    render(
+      <DocumentList
+        documents={[doc({ status: "indexed", indexedAt: "2026-08-31T00:01:00.000Z" })]}
+        page={1}
+        pageSize={25}
+        totalCount={1}
+      />,
+    );
+    expect(screen.getByText(/^Indexed /)).toBeInTheDocument();
   });
 
   it("shows pagination controls only when there is more than one page, with real page numbers", () => {

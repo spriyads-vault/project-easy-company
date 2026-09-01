@@ -5,6 +5,8 @@
 // itself, which is what makes it easy to test with a plain WorkspaceState
 // prop and no network.
 import type { RunStatus, WorkspaceState } from "@/lib/investigation/reconstruct";
+import type { EvidenceCategory } from "@/lib/domain/schema";
+import type { EvidenceCitation } from "@/lib/hypotheses/schema";
 import { CorrelationCard } from "./correlation-card";
 import { HypothesisCard } from "./hypothesis-card";
 import { accent, surface, text } from "./theme";
@@ -18,6 +20,12 @@ interface InvestigationPanelProps {
   isSubmitting: boolean;
   disabledReason: string | null;
   onRunInvestigation: () => void;
+  onOpenCitation: (
+    citation: EvidenceCitation,
+    category: EvidenceCategory,
+    hypothesisIndex: number,
+    hypothesisTitle: string,
+  ) => void;
 }
 
 const STATUS_LABEL: Record<RunStatus, string> = {
@@ -48,6 +56,7 @@ export function InvestigationPanel({
   isSubmitting,
   disabledReason,
   onRunInvestigation,
+  onOpenCitation,
 }: InvestigationPanelProps) {
   const busy = isSubmitting || state.status === "running";
   const hasRunAtLeastOnce = state.status !== "idle";
@@ -117,7 +126,12 @@ export function InvestigationPanel({
       {state.hypotheses.length > 0 ? (
         <div className="flex flex-col gap-3">
           {state.hypotheses.map((hypothesis, index) => (
-            <HypothesisCard key={`${hypothesis.productFactId}-${index}`} hypothesis={hypothesis} />
+            <HypothesisCard
+              key={`${hypothesis.productFactId}-${index}`}
+              hypothesis={hypothesis}
+              index={index}
+              onOpenCitation={onOpenCitation}
+            />
           ))}
         </div>
       ) : null}
