@@ -285,4 +285,50 @@ describe("createAnalysisRunForFailureCase", () => {
       message: "This measurement has no recorded peak to analyze.",
     });
   });
+
+  it("MVP-11: analyzes a measurement using its own revision's product facts, not the failure case's original revision (RE-EVALUATE after an engineering change)", async () => {
+    const seed = await seedGatewayXCase(userA.client);
+
+    // REV17 -> REV18, same shape createEngineeringChange produces, but with
+    // *no* facts carried onto REV18 (deliberately not copied here — unlike
+    // createEngineeringChange's own real copy-forward — so the presence or
+    // absence of a correlation unambiguously proves which revision's facts
+    // were actually loaded). REV17 keeps its 40 MHz clock fact, which is
+    // exactly what the 200 MHz/5th-harmonic correlation depends on. If this
+    // measurement were still analyzed against REV17's facts, the
+    // correlation would incorrectly fire even though REV18 has none.
+    const { data: revision18 } = await userA.client
+      .from("product_revisions")
+      .insert({ product_id: seed.productId, label: "Rev18", supersedes_revision_id: seed.revisionId })
+      .select("id")
+      .single();
+    const { data: measurement18 } = await userA.client
+      .from("measurements")
+      .insert({
+        failure_case_id: seed.failureCaseId,
+        product_revision_id: revision18!.id,
+        operating_mode: "WiFi TX only",
+      })
+      .select("id")
+      .single();
+    await userA.client.from("measurement_peaks").insert({
+      measurement_id: measurement18!.id,
+      frequency_mhz: 200,
+      margin_db: -3.6,
+    });
+
+    const result = await createAnalysisRunForFailureCase(
+      { failureCaseId: seed.failureCaseId, measurementId: measurement18!.id },
+      fakeAdapter({ hypotheses: [], clarificationQuestion: null }),
+      userA.client,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const events = await collect(result.events);
+
+    // The 40 MHz fact (REV17-only) would produce a 5th-harmonic
+    // correlation.found at 200 MHz — its absence proves REV18's own facts
+    // were used, not REV17's.
+    expect(events.some((e) => e.type === "correlation.found")).toBe(false);
+  });
 });

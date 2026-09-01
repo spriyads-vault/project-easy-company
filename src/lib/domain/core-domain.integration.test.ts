@@ -183,6 +183,7 @@ describe("core domain schema", () => {
       failure_case_id: failureCase!.id,
       from_product_revision_id: revision!.id,
       to_product_revision_id: revision18!.id,
+      title: "Display termination changed",
       description: "Display termination Rev17 -> Rev18",
     });
     expect(changeError).toBeNull();

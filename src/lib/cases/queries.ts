@@ -23,6 +23,12 @@ export interface MeasurementRow {
   notes: string | null;
   createdAt: string;
   peaks: MeasurementPeakRow[];
+  /** MVP-11: a measurement can belong to a *newer* revision than the case
+   * itself was opened against (a second measurement recorded for Rev18 on
+   * a case still scoped to Rev17) — this is what makes the before/after
+   * comparison and revision-scoped evidence ownership possible. */
+  productRevisionId: string;
+  revisionLabel: string;
 }
 
 export interface FailureCaseDetail extends FailureCaseSummary {
@@ -74,7 +80,7 @@ export async function getFailureCase(
   const { data: measurements } = await supabase
     .from("measurements")
     .select(
-      "id, label, operating_mode, notes, created_at, measurement_peaks(id, frequency_mhz, margin_db, detector, limit_line)",
+      "id, label, operating_mode, notes, created_at, product_revision_id, product_revisions(label), measurement_peaks(id, frequency_mhz, margin_db, detector, limit_line)",
     )
     .eq("failure_case_id", caseId)
     .order("created_at", { ascending: true });
@@ -94,6 +100,8 @@ export async function getFailureCase(
       operatingMode: row.operating_mode,
       notes: row.notes,
       createdAt: row.created_at,
+      productRevisionId: row.product_revision_id,
+      revisionLabel: row.product_revisions?.label ?? revision.label,
       peaks: (row.measurement_peaks ?? []).map((peak) => ({
         id: peak.id,
         frequencyMhz: Number(peak.frequency_mhz),

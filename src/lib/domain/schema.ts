@@ -118,6 +118,34 @@ export type InvestigationObservationInput = z.infer<
   typeof investigationObservationInputSchema
 >;
 
+// The "RECORD ENGINEERING CHANGE" form (MVP-11, "Engineering change and
+// second measurement"): structured input, never a chatbot textarea.
+// Recording a change is what creates the new revision (see
+// src/lib/engineering-changes/create-engineering-change.ts) — `newRevisionLabel`
+// is the one field that isn't part of the change record itself but is
+// required to do that. Only `title`/`description`/`newRevisionLabel` are
+// required; the rest describe the change without inventing a value the
+// engineer didn't actually supply.
+export const engineeringChangeInputSchema = z.object({
+  title: z.string().trim().min(1, "Give this change a title.").max(200),
+  description: z
+    .string()
+    .trim()
+    .min(1, "Describe the change.")
+    .max(2000),
+  affectedSubsystem: z.string().trim().min(1).max(200).optional(),
+  previousValue: z.string().trim().min(1).max(300).optional(),
+  newValue: z.string().trim().min(1).max(300).optional(),
+  reason: z.string().trim().min(1).max(1000).optional(),
+  notes: z.string().trim().min(1).max(1000).optional(),
+  newRevisionLabel: z
+    .string()
+    .trim()
+    .min(1, "Give the new revision a label.")
+    .max(100),
+});
+export type EngineeringChangeInput = z.infer<typeof engineeringChangeInputSchema>;
+
 // Per-category fact shapes. `fact` is stored as jsonb (see
 // supabase/migrations/20260831035611_core_domain.sql) so new categories or
 // fields don't need a migration, but every category the app actually

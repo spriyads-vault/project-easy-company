@@ -32,9 +32,14 @@ export function MeasurementPanel({ caseId, measurement }: MeasurementPanelProps)
   return (
     <section aria-labelledby="measurement-panel-heading" className={`flex flex-col gap-4 p-5 ${surface.panel}`}>
       <div className="flex items-baseline justify-between gap-2">
-        <h2 id="measurement-panel-heading" className={text.kicker}>
-          Measurement
-        </h2>
+        <div className="flex items-baseline gap-2">
+          <h2 id="measurement-panel-heading" className={text.kicker}>
+            Measurement
+          </h2>
+          {measurement ? (
+            <span className={`${text.mono} text-xs ${text.muted}`}>{measurement.revisionLabel}</span>
+          ) : null}
+        </div>
         <Link
           href={`/cases/${caseId}`}
           className={`text-xs ${text.muted} hover:text-[#f3f1e8] hover:underline`}

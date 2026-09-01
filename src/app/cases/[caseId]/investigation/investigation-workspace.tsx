@@ -23,6 +23,7 @@ import { ProductPanel } from "./product-panel";
 import { MeasurementPanel } from "./measurement-panel";
 import { InvestigationPanel } from "./investigation-panel";
 import { InvestigationTimeline } from "./investigation-timeline";
+import { RevisionComparisonCard } from "./revision-comparison-card";
 import { AgentActivityPanel } from "./agent-activity-panel";
 import { AgentMetricsPanel } from "./agent-metrics-panel";
 import { SourcesPanel } from "./sources-panel";
@@ -40,6 +41,10 @@ interface InvestigationWorkspaceProps {
   caseId: string;
   productId: string;
   revisionId: string;
+  /** Optional — defaults to the empty-state label so every pre-MVP-11 test
+   * call site keeps working unmodified. */
+  currentRevisionLabel?: string;
+  hasMultipleRevisions?: boolean;
   productFacts: ProductFactRecord[];
   measurement: MeasurementRow | null;
   initialState: WorkspaceState;
@@ -52,6 +57,8 @@ export function InvestigationWorkspace({
   caseId,
   productId,
   revisionId,
+  currentRevisionLabel = "",
+  hasMultipleRevisions = false,
   productFacts,
   measurement,
   initialState,
@@ -60,10 +67,20 @@ export function InvestigationWorkspace({
   const [state, setState] = useState<WorkspaceState>(initialState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openCitation, setOpenCitation] = useState<OpenCitationState | null>(null);
+  // MVP-11 timeline live-update fix: local state seeded from the
+  // server-fetched timeline, appended to directly inside the SSE loop below
+  // as hypothesis.created events arrive — never via a useEffect watching
+  // `state` (that pattern already tripped the set-state-in-effect lint rule
+  // once in this file's history). A full page refresh still discards this
+  // and reconstructs the real, persisted timeline from Postgres
+  // (getInvestigationTimeline in page.tsx) — this is purely a same-session
+  // "don't wait for a refresh to see what just streamed in" fix.
+  const [timeline, setTimeline] = useState<TimelineEntry[]>(timelineEntries);
   // Belt-and-suspenders duplicate-run guard: `disabled` on the button lags
   // one render behind a click, so a fast double-click could otherwise fire
   // two POSTs before React re-renders. This ref is checked synchronously.
   const runInFlightRef = useRef(false);
+  const comparisonEntry = timeline.find((entry) => entry.type === "result");
 
   function handleOpenCitation(
     citation: EvidenceCitation,
@@ -119,6 +136,21 @@ export function InvestigationWorkspace({
         const events = parser.push(decoder.decode(value, { stream: true }));
         for (const event of events) {
           setState((prev) => applyAnalysisEvent(prev, event));
+          if (event.type === "hypothesis.created") {
+            setTimeline((prev) => [
+              ...prev,
+              {
+                type: "hypothesis",
+                id: `${event.runId}:${event.sequence}`,
+                createdAt: event.createdAt,
+                title: event.payload.title,
+                confidenceBand: event.payload.confidenceBand,
+                recommendedNextStep: event.payload.recommendedNextStep,
+                update: event.payload.update ?? null,
+                revisionLabel: measurement?.revisionLabel ?? null,
+              },
+            ]);
+          }
         }
       }
 
@@ -157,7 +189,7 @@ export function InvestigationWorkspace({
             activity, What Crado handled, Sources, Product — desktop
             reflows into the three-column PRODUCT|MEASUREMENT|INVESTIGATION
             row plus full-width rows below it. */}
-        <div className="order-7 md:order-1 lg:order-1">
+        <div className="order-9 md:order-1 lg:order-1">
           <ProductPanel productId={productId} revisionId={revisionId} facts={productFacts} />
         </div>
         <div className="order-1 md:order-2 lg:order-2">
@@ -166,6 +198,10 @@ export function InvestigationWorkspace({
         <div className="order-2 md:col-span-2 md:order-3 lg:col-span-1 lg:order-3">
           <InvestigationPanel
             caseId={caseId}
+            productId={productId}
+            revisionId={revisionId}
+            currentRevisionLabel={currentRevisionLabel}
+            hasMultipleRevisions={hasMultipleRevisions}
             state={state}
             canRunAnalysis={canRunAnalysis}
             isSubmitting={isSubmitting}
@@ -174,18 +210,23 @@ export function InvestigationWorkspace({
             onOpenCitation={handleOpenCitation}
           />
         </div>
-        <div className="order-3 md:order-4 md:col-span-2 lg:col-span-3 lg:order-4">
-          <InvestigationTimeline entries={timelineEntries} />
+        {comparisonEntry?.type === "result" ? (
+          <div className="order-3 md:order-4 md:col-span-2 lg:col-span-3 lg:order-4">
+            <RevisionComparisonCard comparison={comparisonEntry.comparison} />
+          </div>
+        ) : null}
+        <div className="order-5 md:order-5 md:col-span-2 lg:col-span-3 lg:order-5">
+          <InvestigationTimeline entries={timeline} />
         </div>
-        <div className="order-4 md:order-5 md:col-span-2 lg:col-span-3 lg:order-5">
+        <div className="order-6 md:order-6 md:col-span-2 lg:col-span-3 lg:order-6">
           <AgentActivityPanel activity={state.agentActivity} active={state.agentActive} />
         </div>
         {state.agentMetrics ? (
-          <div className="order-5 md:order-6 md:col-span-2 lg:col-span-3 lg:order-6">
+          <div className="order-7 md:order-7 md:col-span-2 lg:col-span-3 lg:order-7">
             <AgentMetricsPanel metrics={state.agentMetrics} />
           </div>
         ) : null}
-        <div className="order-6 md:order-7 md:col-span-2 lg:col-span-3 lg:order-7">
+        <div className="order-8 md:order-8 md:col-span-2 lg:col-span-3 lg:order-8">
           <SourcesPanel hypotheses={state.hypotheses} metrics={state.agentMetrics} />
         </div>
       </div>

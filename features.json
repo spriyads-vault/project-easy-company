@@ -222,7 +222,7 @@
       "depends_on": [
         "MVP-10"
       ],
-      "passes": false,
+      "passes": true,
       "acceptance": [
         "change tied to revision",
         "new measurement stored",

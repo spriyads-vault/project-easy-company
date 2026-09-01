@@ -10,10 +10,19 @@ import type { EvidenceCitation } from "@/lib/hypotheses/schema";
 import { CorrelationCard } from "./correlation-card";
 import { HypothesisCard } from "./hypothesis-card";
 import { RecordObservationForm } from "./record-observation-form";
+import { RecordEngineeringChangeForm } from "./record-engineering-change-form";
 import { accent, surface, text } from "./theme";
 
 interface InvestigationPanelProps {
   caseId: string;
+  productId: string;
+  revisionId: string;
+  currentRevisionLabel: string;
+  /** MVP-11: once the case's evidence spans more than one revision, RUN
+   * AGAIN is relabeled RE-EVALUATE INVESTIGATION — same run mechanism, no
+   * new agent behavior, just a label that reflects what's actually being
+   * asked: "look at the case as it stands now, after the change." */
+  hasMultipleRevisions: boolean;
   state: WorkspaceState;
   canRunAnalysis: boolean;
   /** True the instant the button is clicked, before the first run.started
@@ -46,14 +55,18 @@ const STATUS_DOT_COLOR: Record<RunStatus, string> = {
   interrupted: "bg-[#e0916a]",
 };
 
-function buttonLabel(status: RunStatus, busy: boolean): string {
+function buttonLabel(status: RunStatus, busy: boolean, hasMultipleRevisions: boolean): string {
   if (busy) return "ANALYZING…";
   if (status === "idle") return "RUN INVESTIGATION";
-  return "RUN AGAIN";
+  return hasMultipleRevisions ? "RE-EVALUATE INVESTIGATION" : "RUN AGAIN";
 }
 
 export function InvestigationPanel({
   caseId,
+  productId,
+  revisionId,
+  currentRevisionLabel,
+  hasMultipleRevisions,
   state,
   canRunAnalysis,
   isSubmitting,
@@ -82,7 +95,7 @@ export function InvestigationPanel({
           title={disabledReason ?? undefined}
           className="border border-[#3ecf6e]/50 bg-[#3ecf6e]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#5fdb87] transition-colors hover:bg-[#3ecf6e]/20 disabled:cursor-not-allowed disabled:border-[#3a3d34] disabled:bg-transparent disabled:text-[#6f6d65]"
         >
-          {buttonLabel(state.status, busy)}
+          {buttonLabel(state.status, busy, hasMultipleRevisions)}
         </button>
       </div>
 
@@ -143,7 +156,15 @@ export function InvestigationPanel({
           only makes sense once there's at least one hypothesis to follow
           up on. See src/app/cases/[caseId]/investigation/actions.ts. */}
       {state.status !== "running" && state.hypotheses.length > 0 ? (
-        <RecordObservationForm caseId={caseId} />
+        <div className="flex flex-wrap gap-3">
+          <RecordObservationForm caseId={caseId} />
+          <RecordEngineeringChangeForm
+            caseId={caseId}
+            productId={productId}
+            fromRevisionId={revisionId}
+            currentRevisionLabel={currentRevisionLabel}
+          />
+        </div>
       ) : null}
 
       {state.status === "completed" &&

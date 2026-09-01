@@ -220,29 +220,38 @@ export type Database = {
       }
       engineering_changes: {
         Row: {
+          affected_subsystem: string | null
           created_at: string
           description: string
           failure_case_id: string
           from_product_revision_id: string | null
           id: string
+          payload: Json
+          title: string
           to_product_revision_id: string
           workspace_id: string
         }
         Insert: {
+          affected_subsystem?: string | null
           created_at?: string
           description: string
           failure_case_id: string
           from_product_revision_id?: string | null
           id?: string
+          payload?: Json
+          title: string
           to_product_revision_id: string
           workspace_id?: string
         }
         Update: {
+          affected_subsystem?: string | null
           created_at?: string
           description?: string
           failure_case_id?: string
           from_product_revision_id?: string | null
           id?: string
+          payload?: Json
+          title?: string
           to_product_revision_id?: string
           workspace_id?: string
         }
@@ -613,6 +622,7 @@ export type Database = {
           label: string
           notes: string | null
           product_id: string
+          supersedes_revision_id: string | null
           workspace_id: string
         }
         Insert: {
@@ -621,6 +631,7 @@ export type Database = {
           label: string
           notes?: string | null
           product_id: string
+          supersedes_revision_id?: string | null
           workspace_id?: string
         }
         Update: {
@@ -629,6 +640,7 @@ export type Database = {
           label?: string
           notes?: string | null
           product_id?: string
+          supersedes_revision_id?: string | null
           workspace_id?: string
         }
         Relationships: [
@@ -637,6 +649,13 @@ export type Database = {
             columns: ["product_id", "workspace_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id", "workspace_id"]
+          },
+          {
+            foreignKeyName: "product_revisions_supersedes_revision_id_fkey"
+            columns: ["supersedes_revision_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "product_revisions"
             referencedColumns: ["id", "workspace_id"]
           },
         ]

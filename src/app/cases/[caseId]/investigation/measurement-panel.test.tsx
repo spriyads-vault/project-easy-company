@@ -9,6 +9,8 @@ const gatewayXMeasurement: MeasurementRow = {
   operatingMode: "WiFi TX + display active",
   notes: null,
   createdAt: "2026-08-31T00:00:00.000Z",
+  productRevisionId: "revision-1",
+  revisionLabel: "Rev17",
   peaks: [
     {
       id: "peak-1",

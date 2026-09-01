@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 import { getFailureCase } from "@/lib/cases/queries";
+import { getLatestRevisionInLineage } from "@/lib/products/revision-lineage";
 import { AddMeasurementForm } from "./add-measurement-form";
 
 interface CasePageProps {
@@ -13,6 +15,16 @@ export default async function CasePage({ params }: CasePageProps) {
   if (!failureCase) {
     notFound();
   }
+
+  // MVP-11: a follow-up measurement (after an engineering change) belongs to
+  // the newest revision in the case's lineage, not the case's original one
+  // — REV17 stays exactly as it was, the new measurement attaches to REV18.
+  const supabase = await createClient();
+  const currentRevision =
+    (await getLatestRevisionInLineage(supabase, failureCase.productRevisionId)) ?? {
+      id: failureCase.productRevisionId,
+      label: failureCase.revisionLabel,
+    };
 
   return (
     <div className="flex flex-1 flex-col gap-6 px-8 py-10 text-foreground">
@@ -55,6 +67,9 @@ export default async function CasePage({ params }: CasePageProps) {
                   className="rounded-md border border-foreground/10 px-3 py-2 text-sm"
                 >
                   <div className="font-medium">
+                    <span className="mr-2 font-normal text-foreground/50">
+                      {measurement.revisionLabel}
+                    </span>
                     {measurement.label ?? "Measurement"}
                     {measurement.operatingMode ? (
                       <span className="ml-2 font-normal text-foreground/60">
@@ -90,9 +105,15 @@ export default async function CasePage({ params }: CasePageProps) {
           <h2 className="text-sm font-medium uppercase tracking-wide text-foreground/50">
             Add a measurement
           </h2>
+          {currentRevision.id !== failureCase.productRevisionId ? (
+            <p className="text-xs text-foreground/50">
+              This will be recorded against {currentRevision.label}, the
+              current revision following an engineering change.
+            </p>
+          ) : null}
           <AddMeasurementForm
             caseId={failureCase.id}
-            productRevisionId={failureCase.productRevisionId}
+            productRevisionId={currentRevision.id}
           />
         </section>
       </div>

@@ -23,6 +23,9 @@ function marginLabel(marginDb: number): string {
 function entryKicker(entry: TimelineEntry): string {
   if (entry.type === "measurement") return "Measurement";
   if (entry.type === "observation") return "Observation";
+  if (entry.type === "engineering_change") return "Engineering change";
+  if (entry.type === "new_revision") return "New revision";
+  if (entry.type === "result") return "Result";
   return entry.update ? "Updated investigation" : "Hypothesis";
 }
 
@@ -54,6 +57,7 @@ export function InvestigationTimeline({ entries }: InvestigationTimelineProps) {
 
             {entry.type === "measurement" ? (
               <p className="text-sm">
+                <span className={`text-xs ${text.muted}`}>{entry.revisionLabel} — </span>
                 {entry.label ? `${entry.label} — ` : ""}
                 <span className={text.mono}>{entry.frequencyMhz} MHz</span>
                 {" · "}
@@ -63,6 +67,9 @@ export function InvestigationTimeline({ entries }: InvestigationTimelineProps) {
 
             {entry.type === "hypothesis" ? (
               <div className="flex flex-col gap-1">
+                {entry.revisionLabel ? (
+                  <span className={`text-xs ${text.muted}`}>{entry.revisionLabel}</span>
+                ) : null}
                 <p className="text-sm">{entry.title}</p>
                 {entry.update ? (
                   <span
@@ -79,6 +86,43 @@ export function InvestigationTimeline({ entries }: InvestigationTimelineProps) {
               <p className="text-sm">
                 {entry.observation}
                 {entry.measurementChange ? ` ${entry.measurementChange}` : ""}
+              </p>
+            ) : null}
+
+            {entry.type === "engineering_change" ? (
+              <div className="flex flex-col gap-1">
+                <p className="text-sm">
+                  {entry.title}
+                  {entry.affectedSubsystem ? (
+                    <span className={`ml-2 text-xs ${text.muted}`}>{entry.affectedSubsystem}</span>
+                  ) : null}
+                </p>
+                <p className={`text-xs ${text.muted}`}>
+                  {entry.fromRevisionLabel ?? "Unknown revision"} → {entry.toRevisionLabel}
+                </p>
+              </div>
+            ) : null}
+
+            {entry.type === "new_revision" ? (
+              <p className="text-sm">
+                <span className={text.mono}>{entry.label}</span>
+                {entry.supersedesLabel ? (
+                  <span className={`text-xs ${text.muted}`}> supersedes {entry.supersedesLabel}</span>
+                ) : null}
+              </p>
+            ) : null}
+
+            {entry.type === "result" ? (
+              <p className="text-sm">
+                <span className={text.mono}>{entry.comparison.before.revisionLabel}</span>
+                {" → "}
+                <span className={text.mono}>{entry.comparison.after.revisionLabel}</span>
+                {": "}
+                <span className={entry.comparison.improved ? "text-[#5fdb87]" : "text-[#e0916a]"}>
+                  {entry.comparison.deltaDb === 0
+                    ? "no change"
+                    : `${entry.comparison.improved ? "improved" : "worsened"} by ${Math.abs(entry.comparison.deltaDb).toFixed(1)} dB`}
+                </span>
               </p>
             ) : null}
           </li>

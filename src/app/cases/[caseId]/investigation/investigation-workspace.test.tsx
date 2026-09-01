@@ -25,6 +25,8 @@ const measurement: MeasurementRow = {
   operatingMode: "WiFi TX + display active",
   notes: null,
   createdAt: "2026-08-31T00:00:00.000Z",
+  productRevisionId: "revision-1",
+  revisionLabel: "Rev17",
   peaks: [{ id: "peak-1", frequencyMhz: 200, marginDb: 7.4, detector: null, limitLine: null }],
 };
 
@@ -230,7 +232,37 @@ describe("InvestigationWorkspace — streaming", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Candidate relationship")).toBeInTheDocument();
-      expect(screen.getByText("5th harmonic of 40 MHz system clock")).toBeInTheDocument();
+      // Appears twice by design once the MVP-11 timeline live-update fix
+      // lands: the hypothesis card's own title, and the timeline entry
+      // appended live from the same SSE event — see
+      // investigation-workspace.tsx's hypothesis.created handling.
+      expect(screen.getAllByText("5th harmonic of 40 MHz system clock").length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("updates the investigation timeline immediately when a hypothesis streams in, with no refresh (MVP-11 timeline live-update fix)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        buildSseResponse([runStarted(), measurementLoaded(), correlationFound(), hypothesisCreated(), runCompleted()], 0),
+      ),
+    );
+    // Starts with an empty server-fetched timeline — as if this were the
+    // very first run for a fresh page load — so any timeline entry that
+    // appears must have come from the live SSE event, not the initial prop.
+    render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} timelineEntries={[]} />);
+
+    expect(screen.queryByText("Investigation timeline")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Investigation timeline")).toBeInTheDocument();
+      const timelineSection = screen.getByText("Investigation timeline").closest("section")!;
+      expect(within(timelineSection).getByText("Hypothesis")).toBeInTheDocument();
+      expect(
+        within(timelineSection).getByText("5th harmonic of 40 MHz system clock"),
+      ).toBeInTheDocument();
     });
   });
 

@@ -8,6 +8,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getFailureCase, type FailureCaseDetail } from "@/lib/cases/queries";
 import { loadProductFactRecords } from "@/lib/products/load-fact-records";
+import { getLatestRevisionInLineage } from "@/lib/products/revision-lineage";
 import type { ProductFactRecord } from "@/lib/correlation/harmonic-correlation";
 import { analysisEventSchema, type AnalysisEvent } from "@/lib/analysis/events";
 import {
@@ -17,14 +18,25 @@ import {
 
 export interface InvestigationWorkspaceData {
   failureCase: FailureCaseDetail;
+  /** Product facts for the *current* revision under investigation (MVP-11:
+   * the newest revision in the case's lineage, not necessarily the case's
+   * original one) — this is what "an engineering change updates what the
+   * agent reasons over" requires; loading the original revision's facts
+   * forever would silently ignore a Rev18 fact edit. */
   productFacts: ProductFactRecord[];
   /** The measurement the workspace investigates — the most recently
-   * recorded one for this case. MVP-11 (second measurement, before/after)
-   * is the ticket that has to decide how multiple measurements are
-   * presented together; for MVP-09 there's exactly one under
-   * investigation at a time. */
+   * recorded one for this case, which after MVP-11's second measurement is
+   * the newer revision's measurement. */
   measurement: FailureCaseDetail["measurements"][number] | null;
   workspaceState: WorkspaceState;
+  /** The newest revision in the case's lineage — the revision an
+   * engineering change should chain its new revision from, and the one the
+   * RE-EVALUATE INVESTIGATION run should reason over. */
+  currentRevisionId: string;
+  currentRevisionLabel: string;
+  /** True once the case has evidence spanning more than one revision — the
+   * signal used to relabel RUN AGAIN as RE-EVALUATE INVESTIGATION. */
+  hasMultipleRevisions: boolean;
 }
 
 export async function getInvestigationWorkspaceData(
@@ -34,13 +46,18 @@ export async function getInvestigationWorkspaceData(
   if (!failureCase) return null;
 
   const supabase = await createClient();
-  const productFacts = await loadProductFactRecords(
-    supabase,
-    failureCase.productRevisionId,
-  );
+  const currentRevision =
+    (await getLatestRevisionInLineage(supabase, failureCase.productRevisionId)) ?? {
+      id: failureCase.productRevisionId,
+      label: failureCase.revisionLabel,
+    };
+  const productFacts = await loadProductFactRecords(supabase, currentRevision.id);
 
   const measurement =
     failureCase.measurements[failureCase.measurements.length - 1] ?? null;
+  const hasMultipleRevisions = failureCase.measurements.some(
+    (row) => row.productRevisionId !== failureCase.productRevisionId,
+  );
 
   const { data: latestRun } = await supabase
     .from("analysis_runs")
@@ -78,5 +95,8 @@ export async function getInvestigationWorkspaceData(
     productFacts,
     measurement,
     workspaceState: reconstructFromPersistedEvents(events),
+    currentRevisionId: currentRevision.id,
+    currentRevisionLabel: currentRevision.label,
+    hasMultipleRevisions,
   };
 }

@@ -21,10 +21,28 @@ more evidence — never a probability claim) on the next run, and a
 chronological investigation timeline proving old hypotheses are never
 rewritten — all work, tested, against a local Supabase instance
 (`supabase start`) and live-verified against two real Anthropic calls (a
-first investigation and a follow-up after recording an observation). The
-next open ticket is engineering change + second measurement / before-after
-comparison (the pre-existing MVP-11 entry in features.json — explicitly not
-started).
+first investigation and a follow-up after recording an observation).
+
+The pre-existing MVP-11 entry (engineering change + second measurement /
+before-after comparison) is now also done: a structured "Record engineering
+change" action creates a new product revision (REV17 -> REV18, via a
+`supersedes_revision_id` lineage pointer) without ever touching the original
+revision, a second measurement can be recorded against the new revision
+from the same case, a deterministic `compareMeasurements()` utility (zero
+model involvement) computes the before/after delta, and a "Before / after
+comparison" card renders it using only "N dB above/below selected limit"
+phrasing — never PASS/FAIL/CERTIFIED. The investigation timeline now also
+shows ENGINEERING CHANGE / NEW REVISION / RESULT entries alongside
+MEASUREMENT/HYPOTHESIS/OBSERVATION, each measurement and hypothesis entry
+now carries its own revision label, and the previous session's known
+timeline-lag UX issue is fixed (the timeline updates live from the same SSE
+events driving the Investigation panel, no refresh needed — verified live).
+RUN AGAIN relabels itself RE-EVALUATE INVESTIGATION once a case spans more
+than one revision; it's the same run mechanism, not a new agent. All
+work, tested (unit + integration) against a local Supabase instance, and
+live-verified end to end including one real Anthropic RE-EVALUATE call. The
+next open ticket is MVP-12, Regulatory State evidence linkage — explicitly
+not started, per direct instruction to stop after MVP-11.
 
 ## Session handoff format
 Append one entry per completed/paused ticket:
@@ -1393,4 +1411,192 @@ was explicitly **not** started per this session's own instruction.)
 - Next recommended ticket: engineering change + second measurement /
   before-after comparison (features.json's pre-existing MVP-11) — explicitly
   **not** started this session per direct instruction. STOPPING here.
+- Commit: (see git log)
+
+### 2026-09-01 — MVP-11 (engineering change + second measurement + revision comparison)
+- Completed: the full Gateway X loop the ticket describes — MEASUREMENT
+  (REV17, +7.4 dB) -> HYPOTHESIS -> OBSERVATION -> ENGINEERING CHANGE ->
+  NEW REVISION (REV18) -> MEASUREMENT (REV18, -3.6 dB) -> RESULT (11 dB
+  improvement) — end to end, live-verified in a real browser, not just
+  tests.
+  - **1. Engineering change model**: `engineeringChangeInputSchema`
+    (title/description/affectedSubsystem/previousValue/newValue/reason/
+    notes/newRevisionLabel — required-but-structured, never a chatbot
+    textarea) backs a new `record-engineering-change-form.tsx`, matching
+    `RecordObservationForm`'s collapsed-by-default/duplicate-submission-
+    protected pattern exactly. `engineering_changes` gained real
+    `title`/`affected_subsystem` columns plus a `payload` jsonb for the
+    rest (additive migration
+    `20260901020000_engineering_change_revision_lineage.sql`).
+  - **2. Revision creation and lineage**: `product_revisions` gained a
+    self-referencing `supersedes_revision_id` (composite FK on
+    `(id, workspace_id)`, mirroring `engineering_documents.
+    supersedes_document_id`'s existing pattern). Recording a change is
+    what creates the new revision — `createEngineeringChange()`
+    (`src/lib/engineering-changes/create-engineering-change.ts`) inserts
+    the new revision with `supersedes_revision_id` set, copies REV17's
+    `product_facts` forward verbatim (never inventing a changed fact — an
+    explicit fact edit goes through the pre-existing MVP-04 add/edit-fact
+    UI on the new revision), then inserts the `engineering_changes` row;
+    any failure partway compensates by deleting the just-created revision
+    (same compensating-action pattern as MVP-05's measurement/peak insert,
+    justified by CLAUDE.md's "simplest reversible implementation"
+    tie-breaker — no DB transaction available). `getLatestRevisionInLineage()`
+    (`src/lib/products/revision-lineage.ts`) walks the chain forward,
+    bounded at 25 hops, and is what both the case page (which revision a
+    new measurement binds to) and the investigation workspace (which
+    revision's facts the agent reasons over) resolve to "the current
+    revision" from.
+  - **3. Second-measurement model**: architecturally free — `measurements.
+    product_revision_id` was already independent of `failure_cases.
+    product_revision_id`, so a second measurement for REV18 attaches to
+    the *same* failure case without a new case. `cases/[caseId]/page.tsx`
+    now binds `AddMeasurementForm` to `getLatestRevisionInLineage()`'s
+    result instead of the case's original revision, with a visible note
+    ("This will be recorded against Rev18…") when they differ. The margin
+    is never labeled PASS or CERTIFIED anywhere — the comparison card and
+    timeline both use "N dB above/below selected limit" phrasing only.
+  - **4. Before/after calculation**: `compareMeasurements()`
+    (`src/lib/measurements/compare-measurements.ts`) — pure TypeScript,
+    zero I/O, zero model call. `deltaDb = before.marginDb - after.marginDb`,
+    rounded to one decimal to avoid float noise; `sameFrequency` flags a
+    cross-frequency comparison so the UI never presents that as a single
+    before/after result. `RevisionComparisonCard` renders it and states
+    explicitly "an investigation finding, not a pass or certification
+    result."
+  - **5. Evidence ownership**: also architecturally free once (2) and (3)
+    existed — `analysis_runs.measurement_id -> measurements.
+    product_revision_id` transitively scopes every hypothesis to the
+    revision its underlying measurement belongs to, so REV17's original
+    measurement/hypotheses/observation/analysis runs are never touched by
+    anything REV18-related; `createEngineeringChange` only ever inserts
+    new rows. Fixed one real latent bug this surfaced:
+    `createAnalysisRunForFailureCase` was loading product facts from the
+    *failure case's* original revision rather than the *measurement being
+    analyzed*'s own revision — meaning a RE-EVALUATE run against the REV18
+    measurement would have silently reasoned over stale REV17 facts. Now
+    loads facts (and the revision/product context passed to the
+    Investigation Agent) from `measurement.product_revision_id` — proven
+    with a dedicated integration test (a REV18 with zero facts vs. REV17's
+    real 40 MHz clock fact; the correlation the bug would have wrongly
+    produced is asserted absent) and confirmed live (the RE-EVALUATE run
+    still found the correct 40 MHz x 5 correlation because REV18's copied
+    fact was loaded correctly).
+  - **6. Timeline live-update fix** (the previous session's documented UX
+    gap): `investigation-workspace.tsx`'s `timelineEntries` prop became
+    local state (`useState(timelineEntries)`), appended to directly inside
+    the existing SSE event-loop's `for (const event of events)` — not a
+    `useEffect` (that pattern already tripped the `set-state-in-effect`
+    lint rule once in this file's history) — for every `hypothesis.
+    created` event. No model rerun, no polling; a full page refresh still
+    discards this local state and reconstructs the real timeline from
+    Postgres via `getInvestigationTimeline`, unchanged. Verified live both
+    ways: the timeline updated within the same run (no refresh) for both
+    the first run (1 hypothesis) and the RE-EVALUATE run (3 hypotheses),
+    and a subsequent reload reproduced the identical entries from
+    persisted state.
+  - **7. Gateway X walkthrough** (chrome-devtools MCP, real browser, fresh
+    signup — no persistent seed case existed from a prior session):
+    created Gateway X/Rev17, a 40 MHz clock fact, a failure case, the
+    +7.4 dB/200 MHz measurement; ran a real Anthropic investigation (5th-
+    harmonic hypothesis); recorded the ticket's own observation example;
+    recorded the engineering change ("Display termination changed" /
+    "Display path" / the ticket's own reason text) — REV18 created;
+    recorded the second measurement (-3.6 dB/200 MHz) — correctly bound to
+    REV18 with a visible "Rev18" badge on both the case page and the
+    measurement panel; the BEFORE/AFTER COMPARISON card and the extended
+    timeline (MEASUREMENT -> HYPOTHESIS -> OBSERVATION -> ENGINEERING
+    CHANGE -> NEW REVISION -> MEASUREMENT -> RESULT) rendered correctly;
+    the button relabeled itself RE-EVALUATE INVESTIGATION; clicked it for
+    one more real Anthropic call, which produced a `SUPPORTED BY NEW
+    EVIDENCE` hypothesis reasoning about the display cable/connector as
+    the dominant radiating path, grounded in the real -3.6 dB measurement
+    and the observation — no "root cause confirmed", PASS, or CERTIFIED
+    language anywhere. Reloaded the page afterward: every timeline entry
+    (including both live-run's hypotheses) reconstructed identically from
+    Postgres.
+  - **8. UX issue found and fixed during the walkthrough**: the "Engineering
+    change recorded." success message initially read **"Rev18 → Rev18
+    created"** instead of "Rev17 → Rev18 created" — `revalidatePath` (fired
+    by the successful action) re-renders the form's parent with the
+    *already-updated* `currentRevisionLabel` prop (now "Rev18") before the
+    success state finishes rendering, so reading that live prop for the
+    "from" side of the message showed the wrong revision. Fixed by
+    capturing the from-label once via `useState(currentRevisionLabel)`
+    (a lazy initializer, not resynced on prop changes) instead of reading
+    the live prop; added a regression test that re-renders the component
+    with an updated `currentRevisionLabel` mid-flow to prove the fix holds
+    without relying on real timing. Verified fixed live via a page reload
+    and a second submission.
+- Tests: 253 unit tests (12 new: `compare-measurements.test.ts`,
+  `suggest-next-revision-label.test.ts`, extended
+  `investigation-timeline.test.tsx` for engineering_change/new_revision/
+  result entries, extended `investigation-workspace.test.tsx` for the
+  timeline live-update fix, new `record-engineering-change-form.test.tsx`
+  including the from-label regression test, new
+  `revision-comparison-card.test.tsx` including a no-PASS/CERTIFIED
+  assertion). 49 integration tests (11 new): `create-engineering-change.
+  integration.test.ts` (revision creation/lineage, fact copy-forward,
+  compensating rollback on a genuine partial failure, workspace isolation);
+  a new describe block in `mvp11.integration.test.ts` running the full
+  Gateway X loop against real Postgres (extended timeline entry-type
+  ordering, deterministic 11 dB comparison equality-checked against
+  `compareMeasurements()` directly, evidence-ownership assertions on the
+  raw rows, workspace isolation, a no-PASS/CERTIFIED serialized-timeline
+  assertion, exactly-one-peak-per-submission); a new test in
+  `create-analysis-run.integration.test.ts` proving facts load from the
+  measurement's own revision. `pnpm lint`, `pnpm typecheck`, `pnpm test`,
+  `pnpm test:integration`, `pnpm build` all pass. One real Gateway X
+  walkthrough completed live (see item 7 above), including one real
+  RE-EVALUATE INVESTIGATION Anthropic call. Fake adapters only in
+  automated tests, per the ticket's explicit instruction.
+- Files/areas changed: `supabase/migrations/
+  20260901020000_engineering_change_revision_lineage.sql` (new),
+  `src/lib/supabase/database.types.ts` (regenerated), `src/lib/domain/
+  schema.ts` (`engineeringChangeInputSchema`), `src/lib/measurements/
+  compare-measurements.ts` (new), `src/lib/products/
+  suggest-next-revision-label.ts` (new), `src/lib/products/
+  revision-lineage.ts` (new), `src/lib/engineering-changes/
+  create-engineering-change.ts` (new), `src/lib/cases/queries.ts`
+  (`MeasurementRow` gained `productRevisionId`/`revisionLabel`),
+  `src/lib/investigation/queries.ts` (resolves the case's latest revision
+  in lineage for facts/context; `hasMultipleRevisions`), `src/lib/
+  investigation/timeline.ts` (extended `TimelineEntry` union:
+  `engineering_change`/`new_revision`/`result`, revision labels on
+  `measurement`/`hypothesis`), `src/lib/analysis/create-analysis-run.ts`
+  (fixed: loads facts from the analyzed measurement's own revision, not
+  the case's original one), `src/app/cases/[caseId]/page.tsx` (binds to
+  latest-lineage revision, shows per-measurement revision labels),
+  `src/app/cases/[caseId]/investigation/{actions,page,
+  investigation-workspace,investigation-panel,investigation-timeline,
+  measurement-panel}.tsx` (new action, new props, timeline live-update
+  fix, RE-EVALUATE relabeling, revision badges), new `record-engineering-
+  change-form.tsx` and `revision-comparison-card.tsx` (+ their tests).
+- Decisions (reversible, made per CLAUDE.md autonomy rules):
+  - Built a dedicated `createEngineeringChange()` rather than reusing the
+    pre-existing generic `createRevision` action — the generic action
+    creates a context-free empty revision with no lineage/engineering-
+    change linkage, which doesn't match "recording the change is what
+    creates REV18."
+  - No 5th `hypothesisUpdateStatus` enum value for "measured improvement"
+    — reused the existing 4 qualitative statuses from the previous
+    session's ticket, letting the agent's own grounded reasoning (plus the
+    now-negative marginDb in its evidence) communicate the improvement,
+    per this ticket's explicit "do not redesign the agent."
+  - `RECORD ENGINEERING CHANGE` placed next to `RECORD RESULT`, both
+    gated on "at least one hypothesis exists" — same placement rationale
+    as the previous session's `RecordObservationForm` decision, and it
+    naturally follows an observation in the ticket's own step ordering.
+  - The `result` timeline entry is computed, not persisted — derived in
+    `getInvestigationTimeline` from the earliest and latest measurements
+    across two distinct revisions, via the same `compareMeasurements()`
+    the comparison card uses, so the two surfaces can never show different
+    numbers for the same case.
+- Remaining: none blocking. MVP-19 ("Gateway X demo case", a persistent
+  seed script) doesn't exist yet, so every live walkthrough so far
+  (including this one) has had to build its own case by hand through the
+  UI — worth doing before more live walkthroughs are needed.
+- Next recommended ticket: MVP-12, Regulatory State evidence linkage —
+  explicitly **not** started this session per direct instruction. STOPPING
+  here.
 - Commit: (see git log)

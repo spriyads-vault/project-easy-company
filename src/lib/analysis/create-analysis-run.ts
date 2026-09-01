@@ -76,7 +76,7 @@ export async function createAnalysisRunForFailureCase(
   const { data: measurement } = await supabase
     .from("measurements")
     .select(
-      "id, failure_case_id, operating_mode, label, measurement_peaks(id, frequency_mhz, margin_db, detector, limit_line)",
+      "id, failure_case_id, operating_mode, label, product_revision_id, product_revisions(id, label), measurement_peaks(id, frequency_mhz, margin_db, detector, limit_line)",
     )
     .eq("id", params.measurementId)
     .maybeSingle();
@@ -104,14 +104,21 @@ export async function createAnalysisRunForFailureCase(
     operatingMode: measurement.operating_mode,
   };
 
-  const productFacts = await loadProductFactRecords(
-    supabase,
-    failureCase.product_revision_id,
-  );
+  // MVP-11: a measurement can belong to a *newer* revision than the case
+  // itself was opened against (a second measurement recorded for Rev18 on
+  // a case still scoped to Rev17) — facts must come from the measurement's
+  // own revision, not the case's original one, or a RE-EVALUATE INVESTIGATION
+  // after an engineering change would silently reason over stale Rev17 facts.
+  const analyzedRevisionId = measurement.product_revision_id;
+  const productFacts = await loadProductFactRecords(supabase, analyzedRevisionId);
   const productFactSummaries = toFactSummaries(productFacts);
 
-  const revision = failureCase.product_revisions;
-  const product = revision?.products;
+  const product = failureCase.product_revisions?.products;
+  const revision = measurement.product_revisions
+    ? { id: measurement.product_revisions.id, label: measurement.product_revisions.label }
+    : failureCase.product_revisions
+      ? { id: failureCase.product_revisions.id, label: failureCase.product_revisions.label }
+      : null;
 
   let agentRunner: InvestigationAgentRunner | undefined;
   if (options.agentModel && revision && product) {

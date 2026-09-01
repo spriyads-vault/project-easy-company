@@ -16,8 +16,9 @@
 // which is what makes the DB-touching half directly integration-testable.
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { investigationObservationInputSchema } from "@/lib/domain/schema";
+import { investigationObservationInputSchema, engineeringChangeInputSchema } from "@/lib/domain/schema";
 import { insertInvestigationObservation } from "@/lib/investigation/record-observation";
+import { createEngineeringChange } from "@/lib/engineering-changes/create-engineering-change";
 
 export interface RecordObservationFormState {
   error?: string;
@@ -54,4 +55,61 @@ export async function recordInvestigationObservation(
 
   revalidatePath(`/cases/${caseId}/investigation`);
   return { success: true };
+}
+
+// MVP-11's "RECORD ENGINEERING CHANGE" action — structured, never a chatbot
+// textarea (see record-engineering-change-form.tsx). Recording the change
+// is what creates REV17 -> REV18 (src/lib/engineering-changes/
+// create-engineering-change.ts): REV17 is never overwritten, only ever
+// superseded, so every prior measurement/hypothesis/observation on it stays
+// exactly where it was. Revalidates both the investigation workspace (new
+// timeline entries) and the case page (AddMeasurementForm now binds to the
+// new latest revision via getLatestRevisionInLineage).
+export interface RecordEngineeringChangeFormState {
+  error?: string;
+  success?: boolean;
+  newRevisionLabel?: string;
+}
+
+export async function recordEngineeringChange(
+  caseId: string,
+  productId: string,
+  fromRevisionId: string,
+  _prevState: RecordEngineeringChangeFormState,
+  formData: FormData,
+): Promise<RecordEngineeringChangeFormState> {
+  const parsed = engineeringChangeInputSchema.safeParse({
+    title: formData.get("title"),
+    description: formData.get("description"),
+    affectedSubsystem: formData.get("affectedSubsystem") || undefined,
+    previousValue: formData.get("previousValue") || undefined,
+    newValue: formData.get("newValue") || undefined,
+    reason: formData.get("reason") || undefined,
+    notes: formData.get("notes") || undefined,
+    newRevisionLabel: formData.get("newRevisionLabel"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: "You must be signed in to record an engineering change." };
+  }
+
+  const result = await createEngineeringChange(
+    supabase,
+    { failureCaseId: caseId, productId, fromRevisionId },
+    parsed.data,
+  );
+  if (!result.ok) {
+    return { error: result.message };
+  }
+
+  revalidatePath(`/cases/${caseId}/investigation`);
+  revalidatePath(`/cases/${caseId}`);
+  return { success: true, newRevisionLabel: result.newRevisionLabel };
 }

@@ -18,6 +18,7 @@ describe("InvestigationTimeline", () => {
         label: null,
         frequencyMhz: 200,
         marginDb: 7.4,
+        revisionLabel: "Rev17",
       },
       {
         type: "hypothesis",
@@ -27,6 +28,7 @@ describe("InvestigationTimeline", () => {
         confidenceBand: "medium",
         recommendedNextStep: "Disconnect the display path and re-measure.",
         update: null,
+        revisionLabel: "Rev17",
       },
       {
         type: "observation",
@@ -46,6 +48,7 @@ describe("InvestigationTimeline", () => {
           status: "supported_by_new_evidence",
           previousHypothesisTitle: "5th harmonic of 40 MHz system clock",
         },
+        revisionLabel: "Rev17",
       },
     ];
 
@@ -77,6 +80,7 @@ describe("InvestigationTimeline", () => {
         label: "TEST-04",
         frequencyMhz: 200,
         marginDb: 7.4,
+        revisionLabel: "Rev17",
       },
     ];
     render(<InvestigationTimeline entries={entries} />);
@@ -92,10 +96,72 @@ describe("InvestigationTimeline", () => {
         label: null,
         frequencyMhz: 150,
         marginDb: -3.6,
+        revisionLabel: "Rev17",
       },
     ];
     render(<InvestigationTimeline entries={entries} />);
     expect(screen.getByText(/-3.6 dB/)).toBeInTheDocument();
     expect(screen.queryByText(/\+-3.6/)).not.toBeInTheDocument();
+  });
+
+  it("renders an engineering change, the new revision it created, and the deterministic result (MVP-11 timeline extension)", () => {
+    const entries: TimelineEntry[] = [
+      {
+        type: "engineering_change",
+        id: "change-1",
+        createdAt: "2026-09-01T00:00:00.000Z",
+        title: "Display termination changed",
+        affectedSubsystem: "Display path",
+        fromRevisionLabel: "Rev17",
+        toRevisionLabel: "Rev18",
+      },
+      {
+        type: "new_revision",
+        id: "revision-18",
+        createdAt: "2026-09-01T00:00:01.000Z",
+        label: "Rev18",
+        supersedesLabel: "Rev17",
+      },
+      {
+        type: "measurement",
+        id: "m2",
+        createdAt: "2026-09-01T00:05:00.000Z",
+        label: null,
+        frequencyMhz: 200,
+        marginDb: -3.6,
+        revisionLabel: "Rev18",
+      },
+      {
+        type: "result",
+        id: "result-1",
+        createdAt: "2026-09-01T00:05:01.000Z",
+        comparison: {
+          before: { revisionLabel: "Rev17", frequencyMhz: 200, marginDb: 7.4 },
+          after: { revisionLabel: "Rev18", frequencyMhz: 200, marginDb: -3.6 },
+          deltaDb: 11,
+          improved: true,
+          sameFrequency: true,
+        },
+      },
+    ];
+
+    render(<InvestigationTimeline entries={entries} />);
+
+    const list = screen.getByRole("list");
+    const items = within(list).getAllByRole("listitem");
+    expect(items).toHaveLength(4);
+
+    expect(within(items[0]).getByText("Engineering change")).toBeInTheDocument();
+    expect(within(items[0]).getByText(/Display termination changed/)).toBeInTheDocument();
+    expect(within(items[0]).getByText(/Rev17.*Rev18/)).toBeInTheDocument();
+
+    expect(within(items[1]).getByText("New revision")).toBeInTheDocument();
+    expect(within(items[1]).getByText(/supersedes Rev17/)).toBeInTheDocument();
+
+    expect(within(items[3]).getByText("Result")).toBeInTheDocument();
+    expect(within(items[3]).getByText(/improved by 11.0 dB/)).toBeInTheDocument();
+    // Never a pass/certification claim.
+    expect(screen.queryByText(/PASS/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/CERTIFIED/)).not.toBeInTheDocument();
   });
 });

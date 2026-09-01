@@ -17,7 +17,15 @@ export default async function InvestigationPage({ params }: InvestigationPagePro
     notFound();
   }
 
-  const { failureCase, productFacts, measurement, workspaceState } = data;
+  const {
+    failureCase,
+    productFacts,
+    measurement,
+    workspaceState,
+    currentRevisionId,
+    currentRevisionLabel,
+    hasMultipleRevisions,
+  } = data;
   const supabase = await createClient();
   const timelineEntries = await getInvestigationTimeline(supabase, caseId);
 
@@ -39,7 +47,9 @@ export default async function InvestigationPage({ params }: InvestigationPagePro
       <InvestigationWorkspace
         caseId={caseId}
         productId={failureCase.productId}
-        revisionId={failureCase.productRevisionId}
+        revisionId={currentRevisionId}
+        currentRevisionLabel={currentRevisionLabel}
+        hasMultipleRevisions={hasMultipleRevisions}
         productFacts={productFacts}
         measurement={measurement}
         initialState={workspaceState}
