@@ -153,6 +153,27 @@
       "notes": "The Investigation Agent (MVP-10B) and citation/source drawer (MVP-10C) are separate follow-on tickets that build on this. The 'semantic' half of retrieval is a zero-dependency local hashed lexical embedding (src/lib/documents/embedding.ts), not a neural embedding model — no embeddings API key is configured, and adding a new third-party credential is a one-way-door decision per CLAUDE.md, not made unasked. Swapping in a real embedding provider later is a drop-in change behind the same EmbeddingAdapter-shaped function signature."
     },
     {
+      "id": "MVP-10B",
+      "priority": 9.75,
+      "title": "Investigation Agent (ToolLoopAgent orchestration layer)",
+      "depends_on": [
+        "MVP-10A"
+      ],
+      "passes": true,
+      "acceptance": [
+        "one Investigation Agent (src/lib/agents), built on AI SDK ToolLoopAgent, with exactly six bounded tools: getProductContext, getMeasurementContext, getDeterministicCorrelations, searchEngineeringDocuments, getPreviousRevisions, getPreviousInvestigations",
+        "deterministic correlation (MVP-06) stays guaranteed and unchanged; the agent only runs after real candidates exist, and never recomputes them",
+        "structured output only (Zod, via Output.object) — hypotheses[] with reasoning/evidenceRefs/missingEvidence/nextInvestigation, clarificationQuestion, investigationStatus; no free-form prose contract",
+        "independent post-hoc validation rejects hallucinated productFactId/certainty language (whole hypothesis) and hallucinated or mismatched document/fact/investigation citations (that one citation only), reusing MVP-07's buildObservedEvidence/buildKnownEvidence/containsProhibitedCertaintyLanguage rather than reimplementing them",
+        "bounded tool loop: explicit stopWhen at 9 steps, not the SDK's 20-step default; a model that never produces a final answer fails the run cleanly rather than looping",
+        "observable, safe agent.started/agent.tool.completed/agent.completed events (tool name, safe label, result count, durationMs, query) — never hidden reasoning or a raw prompt; persisted and reconstructed exactly like existing analysis_events",
+        "truthful agent.completed metrics (documentsAvailable/documentSearches/passagesRetrieved/passagesUsedAsEvidence/deterministicRelationshipsChecked/nextInvestigationCount) computed from real tool-call results, never fabricated",
+        "fully backward compatible: createAnalysisRunForFailureCase's agentModel option and runAnalysis's agentRunner are additive/optional — every MVP-08/09 test passes unchanged with neither supplied",
+        "live-verified against a real Gateway X case (40 MHz clock, WiFi radio, unshielded display cable, one seeded test-report document, 200 MHz/+7.4dB measurement): full event sequence including 5 document searches, 2 evidence-labeled hypotheses with real document citations (filename+section+exact quoted passage) and no root-cause/certainty language, persisted rows match the stream exactly"
+      ],
+      "notes": "The polished agent-activity UI (source drawer, live tool-call panel) is MVP-10C, not built here — this ticket is the orchestration layer and its backend event/reducer foundation only. The live test uncovered and fixed two real defects: reasoning/nextInvestigation needed wider Zod bounds (600/300 -> 1200/500 chars) for the agent's evidence-integrated answers, and the tool-activity label pluralizer was naively appending 's' to two-word nouns ('passage retrieveds') — fixed to pluralize the noun only ('passages retrieved'), covered by a regression test."
+    },
+    {
       "id": "MVP-10",
       "priority": 10,
       "title": "Observation updates hypothesis",

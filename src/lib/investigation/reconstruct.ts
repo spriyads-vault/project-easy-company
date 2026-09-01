@@ -9,6 +9,8 @@
 // Same function, same shape either way — the UI can't tell live streaming
 // and refresh-reconstruction apart, which is the point.
 import type {
+  AgentCompletedPayload,
+  AgentToolCompletedPayload,
   AnalysisEvent,
   CorrelationFoundPayload,
   HypothesisCreatedPayload,
@@ -40,6 +42,18 @@ export interface WorkspaceState {
   clarification: string | null;
   errorMessage: string | null;
   summary: RunCompletedPayload | null;
+  /** Observable Investigation Agent activity (MVP-10B) — the tool-call log
+   * MVP-10C's UI will render. Never model reasoning; each entry is one
+   * completed tool call's safe display fields. Empty when a run didn't use
+   * the agent (e.g. no correlation candidates). */
+  agentActivity: AgentToolCompletedPayload[];
+  /** True from `agent.started` until `agent.completed`/a terminal event —
+   * lets the UI distinguish "the agent is working" from "no agent phase for
+   * this run" without inferring it from array length. */
+  agentActive: boolean;
+  /** Truthful, actually-computed metrics from `agent.completed`, or null if
+   * the run never reached that event. */
+  agentMetrics: AgentCompletedPayload | null;
 }
 
 export const initialWorkspaceState: WorkspaceState = {
@@ -52,6 +66,9 @@ export const initialWorkspaceState: WorkspaceState = {
   clarification: null,
   errorMessage: null,
   summary: null,
+  agentActivity: [],
+  agentActive: false,
+  agentMetrics: null,
 };
 
 /** True while a run is in flight — the one condition that must block a new
@@ -105,6 +122,25 @@ export function applyAnalysisEvent(
         ...state,
         clarification: event.payload.question,
         lastEventSummary: "Next evidence required appears",
+      };
+    case "agent.started":
+      return {
+        ...state,
+        agentActive: true,
+        lastEventSummary: "Investigation agent started",
+      };
+    case "agent.tool.completed":
+      return {
+        ...state,
+        agentActivity: [...state.agentActivity, event.payload],
+        lastEventSummary: event.payload.label,
+      };
+    case "agent.completed":
+      return {
+        ...state,
+        agentActive: false,
+        agentMetrics: event.payload,
+        lastEventSummary: "Investigation agent finished",
       };
     case "run.completed":
       return {

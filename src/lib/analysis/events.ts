@@ -51,6 +51,40 @@ const clarificationRequiredPayloadSchema = z.object({
   question: z.string(),
 });
 
+// The Investigation Agent's observable activity (MVP-10B) — never the
+// model's raw reasoning tokens. "agent.started" fires once the deterministic
+// correlations are in hand and the agent begins gathering additional
+// context; correlationCount lets the UI show what it's investigating
+// against without repeating the correlation.found events.
+const agentStartedPayloadSchema = z.object({
+  correlationCount: z.number().int().nonnegative(),
+});
+
+// One per tool call the agent actually made. resultCount/query are omitted
+// (null) where not meaningful for a given tool (e.g. getMeasurementContext
+// has no query and returns a single object, not a list) — never fabricated
+// to fill the field. label is a safe, pre-written display string, never
+// model-generated text.
+const agentToolCompletedPayloadSchema = z.object({
+  toolName: z.string(),
+  label: z.string(),
+  resultCount: z.number().int().nonnegative().nullable(),
+  durationMs: z.number().int().nonnegative(),
+  query: z.string().nullable(),
+});
+
+// Truthful, actually-computed UX metrics for MVP-10C — every number here is
+// counted from real execution of this run, never a placeholder. See
+// src/lib/agents/validate-agent-output.ts.
+const agentCompletedPayloadSchema = z.object({
+  documentsAvailable: z.number().int().nonnegative(),
+  documentSearches: z.number().int().nonnegative(),
+  passagesRetrieved: z.number().int().nonnegative(),
+  passagesUsedAsEvidence: z.number().int().nonnegative(),
+  deterministicRelationshipsChecked: z.number().int().nonnegative(),
+  nextInvestigationCount: z.number().int().nonnegative(),
+});
+
 const runCompletedPayloadSchema = z.object({
   correlationsFound: z.number().int().nonnegative(),
   hypothesesCreated: z.number().int().nonnegative(),
@@ -82,6 +116,9 @@ export const analysisEventSchema = z.discriminatedUnion("type", [
   eventVariant("correlation.found", correlationFoundPayloadSchema),
   eventVariant("hypothesis.created", hypothesisCreatedPayloadSchema),
   eventVariant("clarification.required", clarificationRequiredPayloadSchema),
+  eventVariant("agent.started", agentStartedPayloadSchema),
+  eventVariant("agent.tool.completed", agentToolCompletedPayloadSchema),
+  eventVariant("agent.completed", agentCompletedPayloadSchema),
   eventVariant("run.completed", runCompletedPayloadSchema),
   eventVariant("run.failed", runFailedPayloadSchema),
 ]);
@@ -104,3 +141,8 @@ export type ClarificationRequiredPayload = z.infer<
 >;
 export type RunCompletedPayload = z.infer<typeof runCompletedPayloadSchema>;
 export type RunFailedPayload = z.infer<typeof runFailedPayloadSchema>;
+export type AgentStartedPayload = z.infer<typeof agentStartedPayloadSchema>;
+export type AgentToolCompletedPayload = z.infer<
+  typeof agentToolCompletedPayloadSchema
+>;
+export type AgentCompletedPayload = z.infer<typeof agentCompletedPayloadSchema>;

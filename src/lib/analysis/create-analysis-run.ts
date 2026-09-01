@@ -8,17 +8,35 @@
 // integration-testable against a real local Supabase with a fake adapter,
 // no live model key required.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { LanguageModel } from "ai";
 import type { Database } from "@/lib/supabase/database.types";
 import type { HypothesisModelAdapter } from "@/lib/ai/provider";
 import { loadProductFactRecords } from "@/lib/products/load-fact-records";
 import { describeProductFact } from "@/lib/products/describe-fact";
 import type { ProductFactForHypotheses } from "@/lib/hypotheses/generate-hypotheses";
-import { runAnalysis, type AnalysisMeasurementInput } from "./run-analysis";
+import { runInvestigationAgent } from "@/lib/agents/investigation-agent";
+import {
+  runAnalysis,
+  type AnalysisMeasurementInput,
+  type InvestigationAgentRunner,
+} from "./run-analysis";
 import { analysisEventSchema, type AnalysisEvent } from "./events";
 
 export interface CreateAnalysisRunParams {
   failureCaseId: string;
   measurementId: string;
+}
+
+export interface CreateAnalysisRunOptions {
+  /**
+   * When provided, MVP-10B's Investigation Agent produces the run's
+   * hypotheses (grounded with document citations and case history) instead
+   * of the plain single-shot adapter call — this is the real production
+   * behavior (see src/app/api/analysis-runs/route.ts). Omitted, every
+   * existing test's event sequence is unchanged: no ANTHROPIC_API_KEY or
+   * live model is required to exercise the plain path.
+   */
+  agentModel?: LanguageModel;
 }
 
 export type CreateAnalysisRunResult =
@@ -40,10 +58,13 @@ export async function createAnalysisRunForFailureCase(
   params: CreateAnalysisRunParams,
   adapter: HypothesisModelAdapter,
   supabase: SupabaseClient<Database>,
+  options: CreateAnalysisRunOptions = {},
 ): Promise<CreateAnalysisRunResult> {
   const { data: failureCase } = await supabase
     .from("failure_cases")
-    .select("id, product_revision_id")
+    .select(
+      "id, product_revision_id, title, status, product_revisions(id, label, product_id, products(id, name))",
+    )
     .eq("id", params.failureCaseId)
     .maybeSingle();
   if (!failureCase) {
@@ -55,7 +76,7 @@ export async function createAnalysisRunForFailureCase(
   const { data: measurement } = await supabase
     .from("measurements")
     .select(
-      "id, failure_case_id, operating_mode, measurement_peaks(frequency_mhz, margin_db)",
+      "id, failure_case_id, operating_mode, label, measurement_peaks(id, frequency_mhz, margin_db, detector, limit_line)",
     )
     .eq("id", params.measurementId)
     .maybeSingle();
@@ -89,6 +110,55 @@ export async function createAnalysisRunForFailureCase(
   );
   const productFactSummaries = toFactSummaries(productFacts);
 
+  const revision = failureCase.product_revisions;
+  const product = revision?.products;
+
+  let agentRunner: InvestigationAgentRunner | undefined;
+  if (options.agentModel && revision && product) {
+    const agentModel = options.agentModel;
+    const { count: documentsAvailable } = await supabase
+      .from("engineering_documents")
+      .select("id", { count: "exact", head: true })
+      .eq("product_id", product.id)
+      .eq("status", "indexed");
+
+    agentRunner = {
+      investigate: async (correlationCandidates) =>
+        runInvestigationAgent(
+          {
+            supabase,
+            model: agentModel,
+            caseContext: {
+              supabase,
+              product: { id: product.id, name: product.name },
+              revision: { id: revision.id, label: revision.label },
+              failureCase: {
+                id: failureCase.id,
+                title: failureCase.title,
+                status: failureCase.status,
+              },
+              measurement: {
+                id: measurement.id,
+                label: measurement.label,
+                operatingMode: measurement.operating_mode,
+                peaks: measurement.measurement_peaks.map((row) => ({
+                  id: row.id,
+                  frequencyMhz: Number(row.frequency_mhz),
+                  marginDb: Number(row.margin_db),
+                  detector: row.detector,
+                  limitLine: row.limit_line,
+                })),
+              },
+              productFacts: productFactSummaries,
+              correlationCandidates,
+            },
+          },
+          documentsAvailable ?? 0,
+          measurementInput,
+        ),
+    };
+  }
+
   const { data: run, error: runError } = await supabase
     .from("analysis_runs")
     .insert({
@@ -115,6 +185,7 @@ export async function createAnalysisRunForFailureCase(
         productFactSummaries,
       },
       adapter,
+      agentRunner,
     )) {
       // Re-validate before it's persisted or streamed — the last trust
       // boundary before this leaves the process either direction.

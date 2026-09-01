@@ -3,7 +3,7 @@
 // adapter. Business logic must not depend on one model vendor."). Everything
 // else — src/lib/hypotheses/generate-hypotheses.ts, API routes, tests —
 // depends only on the HypothesisModelAdapter interface below.
-import { generateObject } from "ai";
+import { generateObject, type LanguageModel } from "ai";
 import { anthropic, createAnthropic, type AnthropicProvider } from "@ai-sdk/anthropic";
 import {
   hypothesisGenerationInputSchema,
@@ -54,6 +54,12 @@ Propose up to 5 ranked investigation hypotheses, grounded ONLY in the candidates
 
 const DEFAULT_MODEL_ID = process.env.CRADO_HYPOTHESIS_MODEL ?? "claude-sonnet-5";
 
+// The Investigation Agent (MVP-10B) defaults to the same model as the plain
+// hypothesis service unless a separate override is configured — kept as its
+// own env var so the two can diverge later (e.g. a cheaper/faster model for
+// tool-calling) without touching either call site.
+const DEFAULT_AGENT_MODEL_ID = process.env.CRADO_AGENT_MODEL ?? DEFAULT_MODEL_ID;
+
 /**
  * Some Anthropic API keys are "identity-linked" (created via Console
  * SSO/an individual's identity rather than scoped to one workspace) and
@@ -98,4 +104,22 @@ export function createAnthropicHypothesisAdapter(
       return hypothesisGenerationOutputSchema.parse(object);
     },
   };
+}
+
+/**
+ * Returns a plain AI SDK `LanguageModel` for `ToolLoopAgent`'s `model`
+ * field (src/lib/agents/investigation-agent.ts). This is the one other
+ * place allowed to know the provider is Anthropic — it reuses
+ * resolveAnthropicProvider()/buildAnthropicHeaders() rather than
+ * duplicating the identity-linked-key workspace-header logic, and fails the
+ * same way generateHypotheses does when no key is configured (see
+ * MissingProviderApiKeyError).
+ */
+export function resolveInvestigationAgentModel(
+  modelId: string = DEFAULT_AGENT_MODEL_ID,
+): LanguageModel {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new MissingProviderApiKeyError();
+  }
+  return resolveAnthropicProvider()(modelId);
 }

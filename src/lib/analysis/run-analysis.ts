@@ -8,6 +8,7 @@
 // and no network/DB at all.
 import {
   correlateMeasurementWithProductFacts,
+  type HarmonicCorrelationCandidate,
   type ProductFactRecord,
 } from "@/lib/correlation/harmonic-correlation";
 import {
@@ -15,7 +16,25 @@ import {
   type ProductFactForHypotheses,
 } from "@/lib/hypotheses/generate-hypotheses";
 import type { HypothesisModelAdapter } from "@/lib/ai/provider";
+import type { FinalHypothesis } from "@/lib/hypotheses/schema";
+import type { RunInvestigationAgentResult } from "@/lib/agents/investigation-agent";
 import type { AnalysisEvent, AnalysisEventType } from "./events";
+
+/**
+ * The DB-touching half of MVP-10B's agent integration. run-analysis.ts stays
+ * pure/DB-free by only depending on this narrow interface — the real
+ * implementation (a closure over an authenticated Supabase client, a
+ * resolved model, and the case's context) is built by
+ * create-analysis-run.ts, exactly the same shape as HypothesisModelAdapter
+ * above. When omitted, runAnalysis falls back to the plain adapter path
+ * unchanged — every existing test exercises that path with no agent
+ * involved at all.
+ */
+export interface InvestigationAgentRunner {
+  investigate(
+    correlationCandidates: HarmonicCorrelationCandidate[],
+  ): Promise<RunInvestigationAgentResult>;
+}
 
 export interface AnalysisMeasurementInput {
   id: string;
@@ -63,6 +82,7 @@ function isMissingProviderApiKeyError(error: unknown): error is Error {
 export async function* runAnalysis(
   input: RunAnalysisInput,
   adapter: HypothesisModelAdapter,
+  agentRunner?: InvestigationAgentRunner,
 ): AsyncGenerator<AnalysisEvent, void, void> {
   let sequence = 0;
   function emit<T extends AnalysisEventType>(
@@ -111,18 +131,43 @@ export async function* runAnalysis(
       });
     }
 
-    const hypothesisResult = await generateHypothesesForMeasurement(
-      {
-        measurement: {
-          frequencyMhz: input.measurement.frequencyMhz,
-          marginDb: input.measurement.marginDb,
-          operatingMode: input.measurement.operatingMode,
+    let hypothesisResult: {
+      hypotheses: FinalHypothesis[];
+      clarificationQuestion: string | null;
+      rejectedCount: number;
+    };
+
+    if (correlationCandidates.length > 0 && agentRunner) {
+      // The Investigation Agent phase (MVP-10B) — additional context
+      // gathering the model itself decides it needs, layered on top of the
+      // guaranteed deterministic correlations above. Never a substitute for
+      // them: this branch only ever runs once real candidates already
+      // exist.
+      yield emit("agent.started", { correlationCount: correlationCandidates.length });
+      const agentResult = await agentRunner.investigate(correlationCandidates);
+      for (const activity of agentResult.activity) {
+        yield emit("agent.tool.completed", activity);
+      }
+      yield emit("agent.completed", agentResult.metrics);
+      hypothesisResult = {
+        hypotheses: agentResult.hypotheses,
+        clarificationQuestion: agentResult.clarificationQuestion,
+        rejectedCount: 0, // already logged by runInvestigationAgent
+      };
+    } else {
+      hypothesisResult = await generateHypothesesForMeasurement(
+        {
+          measurement: {
+            frequencyMhz: input.measurement.frequencyMhz,
+            marginDb: input.measurement.marginDb,
+            operatingMode: input.measurement.operatingMode,
+          },
+          correlationCandidates,
+          productFacts: [...input.productFactSummaries],
         },
-        correlationCandidates,
-        productFacts: [...input.productFactSummaries],
-      },
-      adapter,
-    );
+        adapter,
+      );
+    }
 
     if (hypothesisResult.rejectedCount > 0) {
       // Never surfaced to the client — this is purely so an operator can

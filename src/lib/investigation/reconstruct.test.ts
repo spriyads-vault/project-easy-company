@@ -80,6 +80,40 @@ const clarificationRequired = () =>
     payload: { question: "Was the display refresh clock documented?" },
   });
 
+const agentStarted = () =>
+  event({
+    type: "agent.started",
+    sequence: 3,
+    payload: { correlationCount: 1 },
+  });
+
+const agentToolCompleted = (overrides: Partial<{ toolName: string; label: string }> = {}) =>
+  event({
+    type: "agent.tool.completed",
+    sequence: 4,
+    payload: {
+      toolName: overrides.toolName ?? "searchEngineeringDocuments",
+      label: overrides.label ?? "Searched engineering documents / 2 passages retrieved",
+      resultCount: 2,
+      durationMs: 120,
+      query: "40 MHz clock",
+    },
+  });
+
+const agentCompleted = () =>
+  event({
+    type: "agent.completed",
+    sequence: 5,
+    payload: {
+      documentsAvailable: 12,
+      documentSearches: 1,
+      passagesRetrieved: 2,
+      passagesUsedAsEvidence: 1,
+      deterministicRelationshipsChecked: 1,
+      nextInvestigationCount: 1,
+    },
+  });
+
 const runCompleted = () =>
   event({
     type: "run.completed",
@@ -163,6 +197,40 @@ describe("applyAnalysisEvent", () => {
     );
   });
 
+  it("agent.started marks the agent phase active, without disturbing the correlations already shown", () => {
+    const state = [correlationFound(), agentStarted()].reduce(applyAnalysisEvent, initialWorkspaceState);
+    expect(state.agentActive).toBe(true);
+    expect(state.correlations).toHaveLength(1);
+    expect(state.lastEventSummary).toBe("Investigation agent started");
+  });
+
+  it("agent.tool.completed appends observable activity in order, never touching hidden reasoning", () => {
+    const state = [
+      agentStarted(),
+      agentToolCompleted({ toolName: "getMeasurementContext", label: "Loaded measurement context / 1 peak" }),
+      agentToolCompleted({ toolName: "searchEngineeringDocuments", label: "Searched engineering documents / 2 passages retrieved" }),
+    ].reduce(applyAnalysisEvent, initialWorkspaceState);
+
+    expect(state.agentActivity.map((a) => a.toolName)).toEqual([
+      "getMeasurementContext",
+      "searchEngineeringDocuments",
+    ]);
+    expect(state.lastEventSummary).toBe("Searched engineering documents / 2 passages retrieved");
+  });
+
+  it("agent.completed stores the truthful metrics and clears agentActive", () => {
+    const state = [agentStarted(), agentCompleted()].reduce(applyAnalysisEvent, initialWorkspaceState);
+    expect(state.agentActive).toBe(false);
+    expect(state.agentMetrics).toEqual({
+      documentsAvailable: 12,
+      documentSearches: 1,
+      passagesRetrieved: 2,
+      passagesUsedAsEvidence: 1,
+      deterministicRelationshipsChecked: 1,
+      nextInvestigationCount: 1,
+    });
+  });
+
   it("run.completed with zero correlations/hypotheses stays a valid completed state (empty hypotheses case)", () => {
     const state = [
       runStarted(),
@@ -208,6 +276,25 @@ describe("reconstructFromPersistedEvents", () => {
     expect(state.correlations).toHaveLength(1);
     expect(state.hypotheses).toHaveLength(1);
     expect(state.clarification).toBe("Was the display refresh clock documented?");
+  });
+
+  it("reconstructs a completed run that went through the Investigation Agent phase (MVP-10B)", () => {
+    const events = [
+      runStarted(),
+      measurementLoaded(),
+      correlationFound(),
+      agentStarted(),
+      agentToolCompleted(),
+      agentCompleted(),
+      hypothesisCreated(),
+      runCompleted(),
+    ];
+    const state = reconstructFromPersistedEvents(events);
+    expect(state.status).toBe("completed");
+    expect(state.agentActive).toBe(false);
+    expect(state.agentActivity).toHaveLength(1);
+    expect(state.agentMetrics).not.toBeNull();
+    expect(state.hypotheses).toHaveLength(1);
   });
 
   it("reconstructs a failed run", () => {

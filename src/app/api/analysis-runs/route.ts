@@ -10,6 +10,7 @@ import { JsonToSseTransformStream } from "ai";
 import { z } from "zod";
 import {
   createAnthropicHypothesisAdapter,
+  resolveInvestigationAgentModel,
   type HypothesisModelAdapter,
 } from "@/lib/ai/provider";
 import { createClientFromRequest } from "@/lib/supabase/route-client";
@@ -63,10 +64,19 @@ export async function handleCreateAnalysisRun(
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
+  // The Investigation Agent (MVP-10B) needs the same key the plain adapter
+  // does — when it's not configured, omit agentModel entirely rather than
+  // let resolveInvestigationAgentModel() throw here; the plain fallback
+  // path already turns a missing key into a clean run.failed event.
+  const agentModel = process.env.ANTHROPIC_API_KEY
+    ? resolveInvestigationAgentModel()
+    : undefined;
+
   const result = await createAnalysisRunForFailureCase(
     parsed.data,
     adapter,
     supabase,
+    { agentModel },
   );
   if (!result.ok) {
     return NextResponse.json({ error: result.message }, { status: result.status });

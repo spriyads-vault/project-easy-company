@@ -1,17 +1,20 @@
 # Claude Progress
 
 ## Current state
-MVP-01 through MVP-09 plus MVP-10A done. Auth, workspace isolation, the full
-core domain schema, product/revision/fact entry, failure-case + measurement
-entry, the deterministic harmonic correlation engine, the AI structured
-hypothesis service, a real streaming `POST /api/analysis-runs` endpoint, the
-real investigation workspace UI, and now the Engineering Knowledge Base
+MVP-01 through MVP-09, MVP-10A, and MVP-10B done. Auth, workspace isolation,
+the full core domain schema, product/revision/fact entry, failure-case +
+measurement entry, the deterministic harmonic correlation engine, the AI
+structured hypothesis service, a real streaming `POST /api/analysis-runs`
+endpoint, the real investigation workspace UI, the Engineering Knowledge Base
 (private document storage, ingestion, hybrid retrieval, a Documents/Sources
-UI at `/documents`) all work, tested, against a local Supabase instance
-(`supabase start`) and live-verified in a real browser. MVP-10B (Investigation
-Agent, calling `searchEngineeringDocuments()`) is the natural next ticket;
-MVP-10 (composer + observation updating a hypothesis) remains open too —
-either is eligible next depending on which the user wants.
+UI at `/documents`), and now the Investigation Agent (an AI SDK `ToolLoopAgent`
+that decides what product context/documents/history to gather before
+proposing evidence-labeled, source-cited hypotheses) all work, tested, against
+a local Supabase instance (`supabase start`) and live-verified against a real
+Anthropic call. MVP-10C (the polished agent-activity UI: source drawer, live
+tool-call panel) and MVP-10 (composer + observation updating a hypothesis)
+are both open next tickets — either is eligible depending on which the user
+wants.
 
 ## Session handoff format
 Append one entry per completed/paused ticket:
@@ -871,4 +874,140 @@ architecture change.
   CLAUDE.md's explicit "do not" list for this phase. MVP-10 (composer +
   observation updating a hypothesis) also remains open and has no
   dependency on MVP-10A. No blockers either way.
+- Commit: (see git log)
+
+### 2026-09-01 — MVP-10B
+- Completed: The Investigation Agent — an AI SDK 7 `ToolLoopAgent`
+  orchestration layer added on top of the working MVP-06/07/08/09
+  pipeline, not a replacement for it. `createInvestigationAgent({supabase,
+  model, caseContext})` (`src/lib/agents/investigation-agent.ts`) is a
+  per-request factory (no global/singleton agent holding customer state)
+  with exactly six bounded tools (`src/lib/agents/tools.ts`):
+  `getProductContext`, `getMeasurementContext`,
+  `getDeterministicCorrelations` (returns MVP-06's already-computed
+  candidates, never recomputes them), `searchEngineeringDocuments` (wraps
+  MVP-10A's function, callable multiple times with different queries),
+  `getPreviousRevisions`, `getPreviousInvestigations`. Structured output
+  only (`Output.object`, Zod — `src/lib/agents/schema.ts`): `hypotheses[]`
+  (title/reasoning/evidenceRefs/missingEvidence/nextInvestigation),
+  `clarificationQuestion`, `investigationStatus`. `stopWhen: stepCountIs(9)`
+  — not the SDK's 20-step default.
+  Independent post-hoc validation (`src/lib/agents/validate-agent-output.ts`,
+  "Zod validates shape, not truth"): rejects a whole hypothesis for a
+  hallucinated `productFactId` or certainty/root-cause language (reusing
+  MVP-07's `buildObservedEvidence`/`buildKnownEvidence`/
+  `containsProhibitedCertaintyLanguage` rather than reimplementing them);
+  drops just one bad citation (an id never actually retrieved this run, or
+  a chunkId/documentId that don't pair up) without discarding an otherwise
+  sound hypothesis. A citation's evidence text always comes from the
+  stored tool-call result, never the model's own restatement of it. Three
+  new observable-only event types (`agent.started`, `agent.tool.completed`,
+  `agent.completed`) added to `analysisEventTypeSchema`, `events.ts`, an
+  additive migration, and `reconstruct.ts`'s reducer — never hidden
+  reasoning or a raw prompt, safe display fields only (tool name, label,
+  result count, durationMs, query). `agent.completed` carries truthful,
+  actually-computed metrics (documentsAvailable/documentSearches/
+  passagesRetrieved/passagesUsedAsEvidence/
+  deterministicRelationshipsChecked/nextInvestigationCount) for MVP-10C.
+  Integration is fully additive/backward-compatible: `runAnalysis` takes
+  an optional `agentRunner` (falls back to MVP-07's plain adapter path
+  unchanged when omitted — this is what every existing MVP-08/09 test
+  still exercises), and `createAnalysisRunForFailureCase` takes an
+  optional `agentModel` (only the real `POST /api/analysis-runs` route
+  passes one, via a new `resolveInvestigationAgentModel()` in
+  `src/lib/ai/provider.ts` that reuses `resolveAnthropicProvider()`/
+  `buildAnthropicHeaders()` rather than duplicating them).
+- Tests: 185 unit / 32 integration, all passing, no real Anthropic call in
+  the committed suite. `investigation-agent.test.ts` drives the *real*
+  `ToolLoopAgent` end-to-end against a scripted `MockLanguageModelV4` (no
+  real network) — tool loop execution, activity-event construction,
+  hallucinated-citation dropping, hallucinated-productFactId rejection,
+  certainty-language rejection, a tool-execution failure handled without
+  crashing the run, and step-limit termination staying well under the
+  SDK's 20-step default. `validate-agent-output.test.ts` (16 cases) covers
+  the belt-and-suspenders validator directly: OBSERVED/KNOWN/INFERRED/
+  MISSING assembly, every citation-rejection path (chunk never retrieved,
+  document/chunk mismatch, fact never retrieved, investigation-event never
+  retrieved), certainty language in reasoning vs. nextInvestigation vs.
+  clarificationQuestion, multiple-hypotheses partial rejection, empty
+  input, and the truthful-metrics builder. `run-analysis.test.ts` gained 5
+  cases for the new branch, using a hand-written fake `agentRunner` (same
+  pattern as the existing fake `HypothesisModelAdapter`) — event ordering
+  with the agent phase, deterministic correlations still guaranteed before
+  the agent runs, falling back to the plain path with zero candidates,
+  `run.failed` (not an unhandled rejection) when the agent throws, and
+  agent-sourced clarification. `reconstruct.test.ts` gained cases for the
+  three new event types plus a full agent-phase reconstruction. All prior
+  MVP-08/09/10A unit and integration tests pass completely unmodified.
+- Live Gateway X test (real Anthropic call, real local Supabase, then
+  deleted — not part of the committed suite): seeded Rev17 with a 40 MHz
+  clock, a 2.4 GHz WiFi radio, and an unshielded display ribbon cable
+  fact, a 200 MHz/+7.4dB measurement during "WiFi TX + display active",
+  and one real Markdown test-report document (the session's `EMC-Test-04`
+  scratchpad note). Full event sequence: `run.started` ->
+  `measurement.loaded` -> `correlation.found` -> `agent.started` -> 9x
+  `agent.tool.completed` -> `agent.completed` -> 2x `hypothesis.created`
+  -> `run.completed` — no `run.failed`. The agent called
+  `getMeasurementContext`, `getDeterministicCorrelations`,
+  `getProductContext`, `getPreviousRevisions`, `getPreviousInvestigations`,
+  then 5 separate targeted `searchEngineeringDocuments` calls (not one
+  broad query) — 15 passages retrieved, 4 actually used as evidence.
+  Produced two hypotheses: "5th harmonic of 40 MHz system clock radiating
+  directly from clock trace/oscillator" (confidence high) and "Unshielded
+  display ribbon cable acting as an unintentional antenna for the coupled
+  clock harmonic" (confidence medium) — each with real document citations
+  quoting the actual stored passage text with filename+section, a clearly
+  separated INFERRED synthesis sentence, concrete MISSING evidence, and a
+  physical next-measurement suggestion. No root-cause/certainty language
+  anywhere (asserted programmatically against the same regex family as
+  `containsProhibitedCertaintyLanguage`). Persisted `analysis_events` rows
+  matched the streamed sequence exactly; `analysis_runs.status` was
+  `completed`.
+  The live run surfaced two real defects, both fixed and covered by a
+  regression test before the ticket closed: (1) the agent's
+  evidence-integrated `reasoning`/`nextInvestigation` legitimately runs
+  longer than MVP-07's single-shot limits — a real response failed Zod
+  validation at 600/300 chars and the whole run became `run.failed`;
+  widened to 1200/500 chars and added a system-prompt line asking for
+  conciseness. (2) the tool-activity label pluralizer naively appended
+  `s` to two-word nouns ("passage retrieveds", "revision founds"); fixed
+  to pluralize the noun and keep the suffix ("2 passages retrieved").
+- Files/areas added: `supabase/migrations/20260901010000_analysis_events_agent.sql`,
+  `src/lib/agents/{schema,tools,investigation-agent,validate-agent-output}.ts`
+  + matching `*.test.ts`. Files/areas changed: `src/lib/domain/schema.ts`
+  (three new event types), `src/lib/analysis/events.ts` (three new payload
+  schemas/variants), `src/lib/analysis/run-analysis.ts` (optional
+  `agentRunner`, `InvestigationAgentRunner` interface), `src/lib/analysis/
+  create-analysis-run.ts` (optional `agentModel`, richer failure-case/
+  measurement selects for the agent's tool context, `documentsAvailable`
+  count), `src/lib/investigation/reconstruct.ts` (three new reducer
+  cases, three new `WorkspaceState` fields), `src/lib/ai/provider.ts`
+  (`resolveInvestigationAgentModel`), `src/app/api/analysis-runs/route.ts`
+  (passes `agentModel` when `ANTHROPIC_API_KEY` is configured).
+- Decisions (reversible, made per CLAUDE.md autonomy rules):
+  - Agent-vs-plain-path is opt-in per call (`agentModel`/`agentRunner`
+    both optional, default omitted), not a hard replacement of MVP-07's
+    adapter path. This is what kept every existing MVP-08/09 test
+    passing unmodified — the plain path stays real, tested, load-bearing
+    code (the fallback when no agent context is available), not dead
+    code kept only for nostalgia.
+  - Document-passage/product-fact/investigation-event citations are
+    validated against a registry built from the *real* tool-call results
+    of this one run (via `onToolExecutionEnd`), not from the closure
+    context available to the tools — a fact the agent never actually
+    asked for via `getProductContext` can't be cited even though the data
+    technically exists, which is the actual guarantee CLAUDE.md's
+    provenance rule needs.
+  - The MVP-10A hashed-lexical embedding was intentionally left
+    unchanged — MVP-10B confirms and does not revisit that decision.
+- Remaining: MVP-10C's UI has real backend material to render now
+  (`agentActivity`/`agentActive`/`agentMetrics` on `WorkspaceState`, and
+  every citation traceable to filename+section/page) but no UI was built
+  here — out of this ticket's explicit scope. `diagnostic_hypotheses`/
+  `evidence_items` tables remain unused (hypotheses still live only in
+  `analysis_events` payloads, matching MVP-07/08/09's existing pattern —
+  not something this ticket changed).
+- Next recommended ticket: MVP-10C (polished agent-activity UI: observable
+  tool-call log, source/citation drawer) or MVP-10 (composer + observation
+  updating a hypothesis) — both are open, neither blocks the other.
 - Commit: (see git log)

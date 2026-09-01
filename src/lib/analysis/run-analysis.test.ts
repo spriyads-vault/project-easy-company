@@ -3,7 +3,13 @@ import type { HypothesisModelAdapter } from "@/lib/ai/provider";
 import { MissingProviderApiKeyError } from "@/lib/ai/provider";
 import type { ProductFactRecord } from "@/lib/correlation/harmonic-correlation";
 import type { HypothesisGenerationOutput } from "@/lib/hypotheses/schema";
-import { runAnalysis, sanitizeAnalysisError, type RunAnalysisInput } from "./run-analysis";
+import type { RunInvestigationAgentResult } from "@/lib/agents/investigation-agent";
+import {
+  runAnalysis,
+  sanitizeAnalysisError,
+  type InvestigationAgentRunner,
+  type RunAnalysisInput,
+} from "./run-analysis";
 import type { AnalysisEvent } from "./events";
 
 const gatewayXFacts: ProductFactRecord[] = [
@@ -202,6 +208,182 @@ describe("runAnalysis — failure handling", () => {
     );
   });
 });
+
+function fakeAgentRunner(
+  result: RunInvestigationAgentResult,
+): InvestigationAgentRunner {
+  return { investigate: async () => result };
+}
+
+function throwingAgentRunner(error: unknown): InvestigationAgentRunner {
+  return {
+    investigate: async () => {
+      throw error;
+    },
+  };
+}
+
+const emptyAgentMetrics = {
+  documentsAvailable: 0,
+  documentSearches: 0,
+  passagesRetrieved: 0,
+  passagesUsedAsEvidence: 0,
+  deterministicRelationshipsChecked: 1,
+  nextInvestigationCount: 0,
+};
+
+describe("runAnalysis — Investigation Agent phase (MVP-10B)", () => {
+  it("uses the agent's hypotheses instead of the plain adapter's when an agentRunner is provided, and never calls the plain adapter", async () => {
+    let plainAdapterCalled = false;
+    const adapter: HypothesisModelAdapter = {
+      generateHypotheses: async () => {
+        plainAdapterCalled = true;
+        return { hypotheses: [], clarificationQuestion: null };
+      },
+    };
+
+    const agentRunner = fakeAgentRunner({
+      activity: [
+        { toolName: "getMeasurementContext", label: "Loaded measurement context / 1 peak", resultCount: 1, durationMs: 5, query: null },
+        { toolName: "searchEngineeringDocuments", label: "Searched engineering documents / 2 passages retrieved", resultCount: 2, durationMs: 12, query: "40 MHz clock" },
+      ],
+      hypotheses: [
+        {
+          productFactId: "fact-clock-40mhz",
+          title: "5th harmonic of the system clock",
+          confidenceBand: "medium",
+          recommendedNextStep: "Disconnect the display path and re-measure.",
+          evidence: [
+            { category: "observed", description: "Measured 200 MHz." },
+            { category: "known", description: "40 MHz system clock." },
+            { category: "known", description: "EMC-Test-04.md: \"40 MHz times 5 equals 200 MHz.\"" },
+            { category: "inferred", description: "Consistent with the fifth harmonic." },
+            { category: "missing", description: "Measurement with display disconnected." },
+          ],
+        },
+      ],
+      clarificationQuestion: null,
+      metrics: { ...emptyAgentMetrics, documentSearches: 1, passagesRetrieved: 2, passagesUsedAsEvidence: 1, nextInvestigationCount: 1 },
+    });
+
+    const events = await collect(runAnalysis(baseInput(), adapter, agentRunner));
+
+    expect(events.map((e) => e.type)).toEqual([
+      "run.started",
+      "measurement.loaded",
+      "correlation.found",
+      "agent.started",
+      "agent.tool.completed",
+      "agent.tool.completed",
+      "agent.completed",
+      "hypothesis.created",
+      "run.completed",
+    ]);
+    expect(plainAdapterCalled).toBe(false);
+
+    const started = events[3];
+    if (started.type !== "agent.started") throw new Error("expected agent.started");
+    expect(started.payload).toEqual({ correlationCount: 1 });
+
+    const toolEvents = events.filter((e) => e.type === "agent.tool.completed");
+    expect(toolEvents.map((e) => (e.type === "agent.tool.completed" ? e.payload.toolName : null))).toEqual([
+      "getMeasurementContext",
+      "searchEngineeringDocuments",
+    ]);
+
+    const completed = events[6];
+    if (completed.type !== "agent.completed") throw new Error("expected agent.completed");
+    expect(completed.payload.passagesUsedAsEvidence).toBe(1);
+
+    const hypothesis = events[7];
+    if (hypothesis.type !== "hypothesis.created") throw new Error("expected hypothesis.created");
+    expect(hypothesis.payload.evidence.map((e) => e.category)).toEqual([
+      "observed",
+      "known",
+      "known",
+      "inferred",
+      "missing",
+    ]);
+  });
+
+  it("still emits guaranteed deterministic correlation.found events before the agent phase (correlation stays authoritative)", async () => {
+    const agentRunner = fakeAgentRunner({
+      activity: [],
+      hypotheses: [],
+      clarificationQuestion: null,
+      metrics: emptyAgentMetrics,
+    });
+
+    const events = await collect(
+      runAnalysis(baseInput(), fakeAdapterUnused(), agentRunner),
+    );
+
+    const correlationIndex = events.findIndex((e) => e.type === "correlation.found");
+    const agentStartedIndex = events.findIndex((e) => e.type === "agent.started");
+    expect(correlationIndex).toBeGreaterThanOrEqual(0);
+    expect(agentStartedIndex).toBeGreaterThan(correlationIndex);
+  });
+
+  it("falls back to the plain adapter path when there are no correlation candidates, even with an agentRunner provided (no relevant documents to ground on)", async () => {
+    let agentCalled = false;
+    const agentRunner: InvestigationAgentRunner = {
+      investigate: async () => {
+        agentCalled = true;
+        throw new Error("should never be called with zero correlation candidates");
+      },
+    };
+
+    const events = await collect(
+      runAnalysis(
+        baseInput({ productFacts: [], productFactSummaries: [] }),
+        fakeAdapter({ hypotheses: [], clarificationQuestion: null }),
+        agentRunner,
+      ),
+    );
+
+    expect(agentCalled).toBe(false);
+    expect(events.map((e) => e.type)).toEqual(["run.started", "measurement.loaded", "run.completed"]);
+  });
+
+  it("emits run.failed, not an unhandled rejection, when the agent phase itself throws (model/tool failure)", async () => {
+    const agentRunner = throwingAgentRunner(new Error("Anthropic request failed"));
+
+    const events = await collect(runAnalysis(baseInput(), fakeAdapterUnused(), agentRunner));
+
+    expect(events.at(-1)?.type).toBe("run.failed");
+    expect(events.some((e) => e.type === "hypothesis.created")).toBe(false);
+    expect(events.some((e) => e.type === "run.completed")).toBe(false);
+  });
+
+  it("emits a clarification.required event sourced from the agent's output", async () => {
+    const agentRunner = fakeAgentRunner({
+      activity: [],
+      hypotheses: [],
+      clarificationQuestion: "Was the display refresh clock documented?",
+      metrics: emptyAgentMetrics,
+    });
+
+    const events = await collect(runAnalysis(baseInput(), fakeAdapterUnused(), agentRunner));
+
+    expect(events.map((e) => e.type)).toEqual([
+      "run.started",
+      "measurement.loaded",
+      "correlation.found",
+      "agent.started",
+      "agent.completed",
+      "clarification.required",
+      "run.completed",
+    ]);
+  });
+});
+
+function fakeAdapterUnused(): HypothesisModelAdapter {
+  return {
+    generateHypotheses: async () => {
+      throw new Error("the plain adapter should never be called when an agentRunner handles the run");
+    },
+  };
+}
 
 describe("sanitizeAnalysisError", () => {
   it("passes through the safe MissingProviderApiKeyError message", () => {

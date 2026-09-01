@@ -45,6 +45,9 @@ export const analysisEventTypeSchema = z.enum([
   "change.recorded",
   "measurement.compared",
   "regulatory_state.updated",
+  "agent.started",
+  "agent.tool.completed",
+  "agent.completed",
   "run.completed",
   "run.failed",
 ]);
