@@ -336,6 +336,29 @@
       ]
     },
     {
+      "id": "VALIDATION-01",
+      "priority": 16.7,
+      "title": "Historical Failure Benchmark Harness",
+      "depends_on": [
+        "MVP-10C",
+        "MVP-11",
+        "PERF-01"
+      ],
+      "passes": true,
+      "acceptance": [
+        "a benchmark case wraps an ordinary failure_cases row (built through the unmodified product/revision/fact/measurement/case flow) plus a separate registration table — zero changes to the investigation pipeline or its schemas",
+        "hidden ground truth (root cause, diagnostic actions taken, successful engineering change, final measurement/outcome) lives in its own table that no agent-context-building code path queries — verified directly by an integration test that seeds a unique marker string and asserts it never appears in the model's doGenerateCalls or in persisted analysis_events",
+        "workspace RLS + composite foreign keys isolate benchmark_cases/benchmark_ground_truth/benchmark_expert_scores exactly like every other workspace-owned table, verified by integration tests",
+        "reveal is refused server-side until at least one investigation run has been blind-scored for the case",
+        "a run can be scored at most once (unique analysis_run_id constraint + integration test)",
+        "expert scoring form captures exactly: NEXT ACTION USEFUL? (1-5), HYPOTHESES USEFUL? (1-5), MISLEADING? (Yes/No), WOULD THIS HAVE CHANGED YOUR NEXT ACTION? (Yes/No), COMMENTS",
+        "benchmark metrics (search-space reduction proxies, unnecessary searches/tool calls, documents/passages retrieved, time to first hypothesis, total run time, citation count) are computed deterministically from the same analysis_events every real run already persists — no LLM call, no automated root-cause verdict",
+        "the one ground-truth-aware figure (keyword overlap with the actual root cause) is explicitly labeled non-authoritative, never an automated pass/fail",
+        "full flow verified live: register a real seeded case blind, score a real completed run, reveal ground truth, view the comparison report against every scored/unscored run",
+        "does not touch Regulatory State (MVP-12) or any other ticket's files"
+      ]
+    },
+    {
       "id": "MVP-16",
       "priority": 16,
       "title": "Production deployment",

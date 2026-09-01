@@ -35,6 +35,12 @@ export default async function WorkspacePage() {
           >
             Sources
           </Link>
+          <Link
+            href="/benchmarks"
+            className="rounded-md border border-foreground/15 px-3 py-1.5 text-sm font-medium"
+          >
+            Benchmarks
+          </Link>
           <form action={signOut}>
             <button
               type="submit"

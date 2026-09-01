@@ -117,6 +117,151 @@ export type Database = {
           },
         ]
       }
+      benchmark_cases: {
+        Row: {
+          created_at: string
+          failure_case_id: string
+          id: string
+          name: string
+          revealed_at: string | null
+          source_description: string
+          status: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          failure_case_id: string
+          id?: string
+          name: string
+          revealed_at?: string | null
+          source_description: string
+          status?: string
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          failure_case_id?: string
+          id?: string
+          name?: string
+          revealed_at?: string | null
+          source_description?: string
+          status?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "benchmark_cases_failure_case_id_workspace_id_fkey"
+            columns: ["failure_case_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "failure_cases"
+            referencedColumns: ["id", "workspace_id"]
+          },
+        ]
+      }
+      benchmark_expert_scores: {
+        Row: {
+          analysis_run_id: string
+          benchmark_case_id: string
+          comments: string | null
+          hypotheses_useful: number
+          id: string
+          misleading: boolean
+          next_action_useful: number
+          scored_at: string
+          scored_by: string
+          workspace_id: string
+          would_change_next_action: boolean
+        }
+        Insert: {
+          analysis_run_id: string
+          benchmark_case_id: string
+          comments?: string | null
+          hypotheses_useful: number
+          id?: string
+          misleading: boolean
+          next_action_useful: number
+          scored_at?: string
+          scored_by: string
+          workspace_id?: string
+          would_change_next_action: boolean
+        }
+        Update: {
+          analysis_run_id?: string
+          benchmark_case_id?: string
+          comments?: string | null
+          hypotheses_useful?: number
+          id?: string
+          misleading?: boolean
+          next_action_useful?: number
+          scored_at?: string
+          scored_by?: string
+          workspace_id?: string
+          would_change_next_action?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "benchmark_expert_scores_analysis_run_id_workspace_id_fkey"
+            columns: ["analysis_run_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "analysis_runs"
+            referencedColumns: ["id", "workspace_id"]
+          },
+          {
+            foreignKeyName: "benchmark_expert_scores_benchmark_case_id_workspace_id_fkey"
+            columns: ["benchmark_case_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "benchmark_cases"
+            referencedColumns: ["id", "workspace_id"]
+          },
+        ]
+      }
+      benchmark_ground_truth: {
+        Row: {
+          benchmark_case_id: string
+          created_at: string
+          diagnostic_actions_taken: string
+          final_frequency_mhz: number | null
+          final_margin_db: number | null
+          final_outcome_notes: string | null
+          id: string
+          root_cause: string
+          successful_engineering_change: string
+          workspace_id: string
+        }
+        Insert: {
+          benchmark_case_id: string
+          created_at?: string
+          diagnostic_actions_taken: string
+          final_frequency_mhz?: number | null
+          final_margin_db?: number | null
+          final_outcome_notes?: string | null
+          id?: string
+          root_cause: string
+          successful_engineering_change: string
+          workspace_id?: string
+        }
+        Update: {
+          benchmark_case_id?: string
+          created_at?: string
+          diagnostic_actions_taken?: string
+          final_frequency_mhz?: number | null
+          final_margin_db?: number | null
+          final_outcome_notes?: string | null
+          id?: string
+          root_cause?: string
+          successful_engineering_change?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "benchmark_ground_truth_benchmark_case_id_workspace_id_fkey"
+            columns: ["benchmark_case_id", "workspace_id"]
+            isOneToOne: false
+            referencedRelation: "benchmark_cases"
+            referencedColumns: ["id", "workspace_id"]
+          },
+        ]
+      }
       diagnostic_hypotheses: {
         Row: {
           analysis_run_id: string

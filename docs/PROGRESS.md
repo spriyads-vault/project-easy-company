@@ -108,6 +108,37 @@ source drawer itself is unit- and integration-tested. The next open
 ticket is MVP-12, Regulatory State evidence linkage — explicitly not
 started, per direct instruction to stop after UX-01.
 
+VALIDATION-01 (Historical Failure Benchmark Harness) is now also done: a
+new `/benchmarks` area lets a reviewer register an existing, ordinary
+failure case (built through the completely unmodified product/revision/
+fact/measurement/case flow) as a benchmark by recording hidden ground truth
+(actual root cause, diagnostic actions taken, the successful engineering
+change, final measurement/outcome) alongside it in a separate table
+(`benchmark_ground_truth`) that no agent-context-building code path ever
+queries — proved directly, not just asserted, by an integration test that
+seeds a unique marker string into ground truth and asserts it never appears
+in the model's `doGenerateCalls` or in any persisted `analysis_events` row
+across a real investigation run. The reviewer runs the case blind through
+the unmodified investigation workspace, scores each run with exactly the
+ticket's five fields (NEXT ACTION USEFUL? 1-5, HYPOTHESES USEFUL? 1-5,
+MISLEADING? Yes/No, WOULD THIS HAVE CHANGED YOUR NEXT ACTION? Yes/No,
+COMMENTS), then reveals ground truth — gated server-side on at least one
+score already existing — to see a comparison report combining the ground
+truth with deterministic metrics computed from the run's own persisted
+`analysis_events` (tool calls, unnecessary searches, documents/passages
+retrieved, citations used, time to first hypothesis, total run time) and a
+transparent, explicitly-labeled-non-authoritative keyword-overlap signal
+against the actual root cause — never an automated pass/fail verdict, per
+CLAUDE.md's "never claim definitive automated root-cause diagnosis." All
+three new tables (`benchmark_cases`, `benchmark_ground_truth`,
+`benchmark_expert_scores`) follow the existing workspace-RLS + composite-FK
+convention exactly and are integration-tested for cross-workspace isolation
+and the create/score/reveal business-rule guards (score-once, reveal only
+after a score exists). Regulatory State (MVP-12) was not started, and no
+existing file outside `src/lib/benchmarks`, `src/app/benchmarks`, and one
+nav link in `src/app/workspace/page.tsx` was touched, per direct
+instruction. The next open ticket is still MVP-12.
+
 ## Session handoff format
 Append one entry per completed/paused ticket:
 
@@ -1948,4 +1979,90 @@ was explicitly **not** started per this session's own instruction.)
 - Next recommended ticket: MVP-12, Regulatory State evidence linkage —
   explicitly **not** started this session per direct instruction. STOPPING
   here.
+- Commit: (see git log)
+
+### 2026-09-01 — VALIDATION-01
+- Completed: Historical Failure Benchmark Harness. Migration
+  (`benchmark_cases`, `benchmark_ground_truth`, `benchmark_expert_scores` —
+  standard workspace-RLS + composite-FK convention). Domain layer under
+  `src/lib/benchmarks/`: `schema.ts` (two deliberately separate Zod
+  schemas — visible case input vs. hidden ground truth), `queries.ts`
+  (VISIBLE-only reads), `ground-truth.ts` (the *only* module that ever
+  queries `benchmark_ground_truth`), `create-benchmark-case.ts`,
+  `record-expert-score.ts`, `reveal-ground-truth.ts` (server-side guarded:
+  refuses to reveal until at least one score exists), `load-run-events.ts`
+  (reuses the "skip, don't trust" Zod-parse pattern from
+  `src/lib/investigation/queries.ts` since `analysis_events` — not the
+  vestigial `diagnostic_hypotheses`/`evidence_items` tables — is where real
+  hypothesis data actually lives), `compute-benchmark-metrics.ts` (pure,
+  deterministic, no DB/model access). UI under `src/app/benchmarks/`: list
+  page, new-case registration form (visible fields + hidden ground truth in
+  one submission, picking from failure cases not yet registered), case
+  detail page (runs list, score links, reveal button, and — once revealed —
+  the full comparison report), and the five-field expert scoring page. One
+  nav link added to `/workspace`. All new code reuses the existing,
+  completely unmodified product/revision/fact/measurement/case creation
+  flow and investigation workspace — a benchmark case is a real case with a
+  registration row on top, not a new code path.
+- Tests: `pnpm typecheck`, `pnpm lint`, `pnpm test` (265 passing, incl. 4
+  new `computeBenchmarkMetrics` unit tests — positive/negative/missing-
+  data/boundary), `pnpm test:integration` (58 passing, incl. 7 new
+  benchmark tests: the critical leakage test plus 6 workspace-isolation/
+  business-rule tests) — all pass. `pnpm build` succeeds; all four
+  `/benchmarks*` routes registered. Live-verified end to end (chrome-
+  devtools MCP, signed in as the seeded `gateway-x-demo` user): registered
+  the real seeded Gateway X case blind, scored an existing completed run
+  with the exact five-field form, revealed ground truth (button correctly
+  disabled beforehand), and confirmed the comparison report rendered real
+  deterministic metrics plus the labeled non-authoritative keyword-overlap
+  signal against all four real runs on that case — zero console errors.
+  The QA registration was deleted afterward (cascade) to leave the seeded
+  demo case exactly as it was.
+- Files/areas changed: `supabase/migrations/20260901040000_benchmarks.sql`
+  (new), `src/lib/supabase/database.types.ts` (regenerated),
+  `src/lib/benchmarks/*` (new: schema, queries, ground-truth,
+  create-benchmark-case, record-expert-score, reveal-ground-truth,
+  load-run-events, compute-benchmark-metrics, and their tests),
+  `src/app/benchmarks/**` (new: list/new/detail/score pages, forms,
+  actions), `src/app/workspace/page.tsx` (added a "Benchmarks" nav link),
+  `features.json` (added `VALIDATION-01`, `passes: true`, priority 16.7,
+  after `UX-01` and before `MVP-16` — no existing entry renumbered or
+  otherwise modified), `docs/PROGRESS.md`.
+- Decisions (reversible, made per CLAUDE.md autonomy rules — no blockers
+  found):
+  - Structural isolation over runtime filtering: hidden ground truth lives
+    in a table no agent-context code path imports or queries, so leakage
+    is impossible by construction rather than merely policy-forbidden —
+    proved by a dedicated integration test inspecting a `MockLanguageModelV4`'s
+    recorded `doGenerateCalls` and the persisted `analysis_events` rows for
+    a unique marker string, not just asserted in a comment.
+  - `createBenchmarkCase`/`recordExpertScore`/`revealGroundTruth`/
+    `getGroundTruth` all take an optional `SupabaseClient` parameter
+    (defaulting to the request-scoped client), matching
+    `createAnalysisRunForFailureCase`'s own established pattern — the only
+    way to integration-test business logic that would otherwise require a
+    live Next.js request scope for its cookies-based Supabase client.
+  - No automated root-cause grading: "actual cause represented in top
+    hypotheses" is reported as a transparent, deterministic, explicitly-
+    non-authoritative keyword-overlap signal, never a computed pass/fail —
+    per CLAUDE.md's "never claim definitive automated root-cause
+    diagnosis" and "do not call an LLM for calculations." The expert's own
+    1-5 scores and the side-by-side comparison report are the actual
+    record of whether Crado's output was useful.
+  - Two-visit workflow (build the case through the ordinary product/case/
+    measurement UI, then register it separately at `/benchmarks/new`)
+    instead of benchmark-specific case-creation UI, to guarantee the
+    "blind investigation" exercises the exact same code a real customer
+    case would and to maximize reuse of already-tested creation flows.
+  - `/benchmarks*` uses the plain light theme matching `/workspace` and
+    `/products` (an internal analyst/QA tool), not the graphite
+    investigation theme; no "BENCHMARK CASE" badge was added to the
+    existing case/investigation pages, to avoid re-touching UX-01's
+    just-completed and tested files for a cosmetic nicety outside this
+    ticket's scope.
+- Remaining: none blocking for VALIDATION-01. Not built (deliberately out
+  of this ticket's scope, per instruction): Regulatory State (MVP-12).
+- Next recommended ticket: MVP-12, Regulatory State evidence linkage —
+  explicitly **not** started this session per direct instruction ("Do not
+  start Regulatory State... Then STOP"). STOPPING here.
 - Commit: (see git log)
