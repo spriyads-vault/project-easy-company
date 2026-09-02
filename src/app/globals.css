@@ -1,8 +1,18 @@
 @import "tailwindcss";
 
+/* UX-04: pure-white/neutral canvas, always — no OS-triggered dark-mode
+   flip. The design direction is explicit that dark surfaces are opt-in
+   for specific artifacts (an active agent state, a focused technical
+   inspection panel), never the whole app based on `prefers-color-scheme`;
+   a `dark` variant lives in src/lib/design/tokens.ts (`surface.dark`) for
+   exactly those cases instead. This previously had a
+   `@media (prefers-color-scheme: dark)` override here that silently
+   inverted every authenticated page for anyone with system dark mode on
+   — removed rather than kept "just in case", since half-dark/half-light
+   per-viewer inconsistency is worse than one deliberate light theme. */
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #18181b;
 }
 
 @theme inline {
@@ -12,17 +22,14 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* UX-04: actually use the Geist font already loaded in layout.tsx —
+     this rule previously hardcoded Arial/Helvetica as a literal
+     font-family, silently overriding the Geist variable that was defined
+     right above but never referenced. */
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
 /* UX-01: restrained product-state motion for the case-detail flow (see

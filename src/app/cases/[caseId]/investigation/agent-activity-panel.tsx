@@ -84,7 +84,7 @@ export function AgentActivityPanel({
   if (showCompressedSummary) {
     return (
       <div className="flex items-center gap-3">
-        <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1f9d52]/40 bg-[#1f9d52]/10 text-[10px] font-semibold text-[#177a3f]">
+        <span aria-hidden="true" className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1f9d52]/40 bg-[#1f9d52]/10 text-[10px] font-semibold text-[#15803d]">
           C
         </span>
         <p className="text-sm">
@@ -98,7 +98,7 @@ export function AgentActivityPanel({
           type="button"
           onClick={() => setCollapsed(false)}
           aria-expanded={false}
-          className={`rounded-[7px] border border-[#e7e2d6] px-2 py-0.5 text-xs ${text.muted} hover:text-[#1c1a15] ${focusRing}`}
+          className={`rounded-[7px] border border-[#e4e4e7] px-2 py-0.5 text-xs ${text.muted} hover:text-[#18181b] ${focusRing}`}
         >
           View activity
         </button>
@@ -114,8 +114,8 @@ export function AgentActivityPanel({
             aria-hidden="true"
             className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold ${
               active
-                ? "border-[#1f9d52]/50 bg-[#1f9d52]/15 text-[#177a3f]"
-                : "border-[#1f9d52]/40 bg-[#1f9d52]/10 text-[#177a3f]"
+                ? "border-[#1f9d52]/50 bg-[#1f9d52]/15 text-[#15803d]"
+                : "border-[#1f9d52]/40 bg-[#1f9d52]/10 text-[#15803d]"
             }`}
           >
             C
@@ -130,7 +130,7 @@ export function AgentActivityPanel({
             type="button"
             onClick={() => setCollapsed((prev) => !prev)}
             aria-expanded={!collapsed}
-            className={`text-xs ${text.muted} hover:text-[#1c1a15] ${focusRing}`}
+            className={`text-xs ${text.muted} hover:text-[#18181b] ${focusRing}`}
           >
             {collapsed ? "View activity" : "Hide activity"}
           </button>
@@ -142,7 +142,7 @@ export function AgentActivityPanel({
           const { primary, detail } = splitLabel(item.label);
           return (
             <li key={index} className="flex items-start gap-2.5">
-              <span aria-hidden="true" className="mt-0.5 shrink-0 text-sm text-[#177a3f]">
+              <span aria-hidden="true" className="mt-0.5 shrink-0 text-sm text-[#15803d]">
                 ✓
               </span>
               <div className="flex flex-col gap-0.5">
@@ -159,7 +159,7 @@ export function AgentActivityPanel({
         })}
         {active ? (
           <li className="flex items-start gap-2.5" role="status" aria-live="polite">
-            <span aria-hidden="true" className="mt-0.5 shrink-0 animate-pulse text-sm text-[#847c6a]">
+            <span aria-hidden="true" className="mt-0.5 shrink-0 animate-pulse text-sm text-[#a1a1aa]">
               ◌
             </span>
             <span className={`text-sm ${text.muted}`}>Working…</span>

@@ -1,20 +1,18 @@
-// APPLICATION SHELL (UX-03): a very compact left rail replacing the old
-// plain-text-only header — real destinations only. There is no dedicated
-// "Cases" or "Products" index route in this app (both live under
-// /workspace's product list), so the rail doesn't invent a fake split
-// between them: the mark and the one "Workspace" item both go to
-// /workspace, Sources goes to /documents, Benchmarks to /benchmarks, and
-// Sign out reuses the exact server action the workspace page's own
-// sign-out button already calls — no new auth/session logic.
-//
-// Deliberately a server component: every item is a plain Link or a form
-// action, so nothing here needs client-side state. Tooltips are native
-// `title` attributes (no JS, no new dependency) plus an `aria-label` for
-// screen readers, per the ticket's "icons + tooltips" with no traditional
-// SaaS sidebar.
+// APPLICATION SHELL (UX-04): the one compact left rail shared by every
+// authenticated route — promoted from UX-03's cases-only
+// src/app/cases/[caseId]/investigation/app-shell.tsx so "do not leave
+// some routes using the old visual system" actually holds. Real
+// destinations only: there's no dedicated "Cases" or "Products" index
+// route in this app (both live under /workspace's product list), so the
+// rail doesn't invent a split it doesn't have. `active` lets each
+// route's own layout mark its own rail item current — a server-only
+// prop (no client JS needed for this, since each layout already knows
+// which page it is).
 import Link from "next/link";
 import { signOut } from "@/app/workspace/actions";
-import { rail } from "./theme";
+import { rail } from "./tokens";
+
+export type RailSection = "workspace" | "sources" | "benchmarks";
 
 function HomeIcon() {
   return (
@@ -69,48 +67,60 @@ function SignOutIcon() {
 function RailLink({
   href,
   label,
+  active,
   children,
 }: {
   href: string;
   label: string;
+  active: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <Link href={href} title={label} aria-label={label} className={rail.item}>
+    <Link
+      href={href}
+      title={label}
+      aria-label={label}
+      aria-current={active ? "page" : undefined}
+      className={active ? rail.itemActive : rail.item}
+    >
       {children}
     </Link>
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+interface AppShellProps {
+  children: React.ReactNode;
+  /** Which rail item is "current" for this route — omit on a route the
+   * rail doesn't represent (e.g. a case/investigation page, which is
+   * reached *from* Workspace but isn't Workspace itself). */
+  active?: RailSection;
+}
+
+export function AppShell({ children, active }: AppShellProps) {
   // h-dvh (not flex-1 alone): the root layout's <body> only sets
-  // min-h-full, so with tall canvas content it would otherwise grow past
-  // the viewport and the *page* would scroll — leaving the floating
-  // composer's `sticky bottom-0` pinned over content that hasn't
-  // scrolled into view yet (nothing above it bounds its height). Forcing
-  // this shell to exactly one viewport tall makes the canvas's own
-  // `overflow-y-auto` the only thing that scrolls, so the top bar and
-  // composer stay put and content never renders behind them.
+  // min-h-full, so tall page content would otherwise grow past the
+  // viewport and the *page* would scroll instead of this shell's own
+  // content region — see the UX-03 PROGRESS.md entry for the floating-
+  // composer bug this caused there. Forcing one viewport-tall shell here
+  // makes each page's own scroll container (if any) the only thing that
+  // scrolls.
   return (
     <div className="flex h-dvh min-h-0">
-      {/* RESPONSIVE (UX-03): "no permanent huge sidebar if unnecessary" —
-          the ticket's own mobile priority list (agent status, failure,
-          investigation, next action, evidence, input) doesn't include app
-          navigation, so the rail hides below `sm` rather than eating ~15%
-          of a phone's width; the top bar's "← back" link still gets the
-          engineer out of the case on a small screen. */}
+      {/* RESPONSIVE: no permanent huge sidebar on a phone — hides below
+          `sm` rather than eating width a small screen doesn't have to
+          spare. */}
       <nav aria-label="Crado" className={`hidden sm:flex ${rail.container}`}>
         <Link href="/workspace" title="Workspace" aria-label="Crado — workspace" className={rail.mark}>
           C
         </Link>
         <span aria-hidden="true" className={rail.separator} />
-        <RailLink href="/workspace" label="Workspace">
+        <RailLink href="/workspace" label="Workspace" active={active === "workspace"}>
           <HomeIcon />
         </RailLink>
-        <RailLink href="/documents" label="Sources">
+        <RailLink href="/documents" label="Sources" active={active === "sources"}>
           <SourcesIcon />
         </RailLink>
-        <RailLink href="/benchmarks" label="Benchmarks">
+        <RailLink href="/benchmarks" label="Benchmarks" active={active === "benchmarks"}>
           <BenchmarksIcon />
         </RailLink>
         <form action={signOut} className="mt-auto">

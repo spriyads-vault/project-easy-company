@@ -76,13 +76,13 @@ export function InvestigationTimeline({ entries }: InvestigationTimelineProps) {
           <li
             key={`${entry.type}-${entry.id}`}
             className={`relative flex flex-col gap-1 py-3 pl-6 ${riseDelayClass(index)} ${
-              index < entries.length - 1 ? "border-l border-[#ddd7c8]" : "border-l border-transparent"
+              index < entries.length - 1 ? "border-l border-[#d4d4d8]" : "border-l border-transparent"
             } ${entry.type === "result" ? "-ml-3 border-l-0 bg-[#1f9d52]/[0.04] pl-9 pr-3" : ""}`}
           >
             <span
               aria-hidden="true"
               className={`absolute left-0 top-3 -translate-x-1/2 text-xs leading-none ${
-                entry.type === "result" ? "text-[#177a3f]" : "text-[#847c6a]"
+                entry.type === "result" ? "text-[#15803d]" : "text-[#a1a1aa]"
               }`}
             >
               {entryGlyph(entry)}
@@ -152,7 +152,7 @@ export function InvestigationTimeline({ entries }: InvestigationTimelineProps) {
                 {" → "}
                 <span className={text.mono}>{entry.comparison.after.revisionLabel}</span>
                 {": "}
-                <span className={entry.comparison.improved ? "text-[#177a3f]" : "text-[#a15a17]"}>
+                <span className={entry.comparison.improved ? "text-[#15803d]" : "text-[#b45309]"}>
                   {entry.comparison.deltaDb === 0
                     ? "no change"
                     : `${entry.comparison.improved ? "improved" : "worsened"} by ${Math.abs(entry.comparison.deltaDb).toFixed(1)} dB`}

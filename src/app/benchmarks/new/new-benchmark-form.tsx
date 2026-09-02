@@ -3,13 +3,13 @@
 import { useActionState } from "react";
 import { registerBenchmarkCase, type NewBenchmarkFormState } from "../actions";
 import type { FailureCaseOption } from "@/lib/benchmarks/queries";
+import { focusRing, radius, surface, typography } from "@/lib/design/tokens";
+import { EmptyState } from "@/lib/design/empty-state";
 
 const initialState: NewBenchmarkFormState = {};
 
-const inputClass =
-  "rounded-md border border-foreground/15 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-foreground/40 focus:border-foreground/40";
-const labelClass = "flex flex-col gap-1 text-sm";
-const sectionHeadingClass = "text-sm font-medium uppercase tracking-wide text-foreground/50";
+const inputClass = `${radius.control} border border-[#e4e4e7] bg-white px-3 py-2 text-sm outline-none placeholder:text-[#a1a1aa] ${focusRing}`;
+const labelClass = "flex flex-col gap-1 text-sm text-[#18181b]";
 
 interface NewBenchmarkFormProps {
   cases: FailureCaseOption[];
@@ -20,20 +20,15 @@ export function NewBenchmarkForm({ cases }: NewBenchmarkFormProps) {
 
   if (cases.length === 0) {
     return (
-      <p className="text-sm text-foreground/60">
-        No unregistered failure cases in this workspace yet. Build a
-        product, revision, failure case, and first measurement through the
-        normal workflow first, then come back here to register it as a
-        benchmark.
-      </p>
+      <EmptyState message="No unregistered failure cases in this workspace yet. Build a product, revision, failure case, and first measurement through the normal workflow first, then come back here to register it as a benchmark." />
     );
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-8">
-      <section className="flex flex-col gap-3">
-        <h2 className={sectionHeadingClass}>Visible to Crado</h2>
-        <p className="text-sm text-foreground/60">
+    <form action={formAction} className="flex flex-col gap-6">
+      <section className={`flex flex-col gap-3 p-5 ${surface.card}`}>
+        <h2 className={typography.sectionHeading}>Visible to Crado</h2>
+        <p className={typography.body}>
           The historical case Crado will investigate blind — its product
           state, first failed measurement, and documents are exactly what
           the linked failure case already contains.
@@ -74,9 +69,9 @@ export function NewBenchmarkForm({ cases }: NewBenchmarkFormProps) {
         </label>
       </section>
 
-      <section className="flex flex-col gap-3 rounded-md border border-foreground/15 p-4">
-        <h2 className={sectionHeadingClass}>Hidden ground truth</h2>
-        <p className="text-sm text-foreground/60">
+      <section className={`flex flex-col gap-3 p-5 ${surface.card}`}>
+        <h2 className={typography.sectionHeading}>Hidden ground truth</h2>
+        <p className={typography.body}>
           Recorded now, sealed until you explicitly reveal it after scoring.
           No investigation code path ever reads this — see the benchmark
           harness migration for why.
@@ -111,7 +106,7 @@ export function NewBenchmarkForm({ cases }: NewBenchmarkFormProps) {
       </section>
 
       {state.error ? (
-        <p role="alert" className="rounded-md border border-red-500/30 bg-red-500/5 p-2 text-sm text-red-600">
+        <p role="alert" className="rounded-lg border border-[#b45309]/40 bg-[#b45309]/10 p-2 text-sm text-[#b45309]">
           {state.error}
         </p>
       ) : null}
@@ -119,7 +114,7 @@ export function NewBenchmarkForm({ cases }: NewBenchmarkFormProps) {
       <button
         type="submit"
         disabled={pending}
-        className="self-start rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
+        className={`self-start ${radius.control} border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-sm font-medium text-[#15803d] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:opacity-60`}
       >
         {pending ? "Registering…" : "Register benchmark case"}
       </button>

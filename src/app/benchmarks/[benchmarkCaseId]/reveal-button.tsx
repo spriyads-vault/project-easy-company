@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { revealGroundTruthAction, type RevealFormState } from "./actions";
+import { radius, text } from "@/lib/design/tokens";
 
 const initialState: RevealFormState = {};
 
@@ -20,15 +21,15 @@ export function RevealButton({ benchmarkCaseId, disabled, disabledReason }: Reve
       <button
         type="submit"
         disabled={disabled || pending}
-        className="rounded-md border border-foreground/30 bg-foreground/5 px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40"
+        className={`${radius.control} border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-sm font-medium text-[#15803d] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:border-[#e4e4e7] disabled:bg-transparent disabled:text-[#a1a1aa]`}
       >
         {pending ? "Revealing…" : "Reveal ground truth"}
       </button>
       {disabled && disabledReason ? (
-        <p className="text-xs text-foreground/50">{disabledReason}</p>
+        <p className={`text-xs ${text.muted}`}>{disabledReason}</p>
       ) : null}
       {state.error ? (
-        <p role="alert" className="text-xs text-red-600">
+        <p role="alert" className="text-xs text-[#b45309]">
           {state.error}
         </p>
       ) : null}

@@ -1,16 +1,27 @@
-// VALIDATION-01: the benchmark harness index. An internal tool alongside
-// /workspace and /products, not part of the customer-facing demo flow —
-// same plain theme as those pages, deliberately.
+// VALIDATION-01: the benchmark harness index. An internal evaluation tool
+// alongside /workspace and /products, sharing the same UX-04 design
+// system as the rest of the product.
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentWorkspace } from "@/lib/workspace/get-current-workspace";
-import { listBenchmarkCases } from "@/lib/benchmarks/queries";
+import { listBenchmarkCases, type BenchmarkCaseSummary } from "@/lib/benchmarks/queries";
+import { PageHeader } from "@/lib/design/page-header";
+import { EmptyState } from "@/lib/design/empty-state";
+import { StatusBadge } from "@/lib/design/status-badge";
+import { surface, typography, type HeroStatusTone } from "@/lib/design/tokens";
 
 const STATUS_LABEL: Record<string, string> = {
   created: "Not yet investigated",
   investigated: "Investigated",
   scored: "Scored",
   revealed: "Ground truth revealed",
+};
+
+const STATUS_TONE: Record<BenchmarkCaseSummary["status"], HeroStatusTone> = {
+  created: "waiting",
+  investigated: "active",
+  scored: "active",
+  revealed: "complete",
 };
 
 export default async function BenchmarksPage() {
@@ -22,14 +33,23 @@ export default async function BenchmarksPage() {
   const cases = await listBenchmarkCases();
 
   return (
-    <div className="flex flex-1 flex-col gap-6 px-8 py-10 text-foreground">
-      <header className="flex items-center justify-between border-b border-foreground/10 pb-4">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-foreground/50">
-            Crado
-          </p>
-          <h1 className="text-lg font-semibold tracking-tight">Benchmark harness</h1>
-          <p className="mt-1 text-sm text-foreground/60">
+    <div className={`flex min-h-0 flex-1 flex-col ${surface.page}`}>
+      <PageHeader
+        eyebrow="Crado"
+        title="Benchmark harness"
+        rightSlot={
+          <Link
+            href="/benchmarks/new"
+            className="shrink-0 rounded-lg border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-sm font-medium text-[#15803d] transition-colors hover:bg-[#1f9d52]/20"
+          >
+            New benchmark case
+          </Link>
+        }
+      />
+
+      <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mx-auto flex w-full max-w-[900px] flex-col gap-6">
+          <p className={typography.body}>
             Evaluate Crado against historical failures it has never seen the
             answer to. Each case&rsquo;s underlying product/revision/measurement
             is a real, ordinary case built through the normal workflow — only
@@ -37,44 +57,35 @@ export default async function BenchmarksPage() {
             final measurement) is kept separate and hidden until you reveal
             it.
           </p>
-        </div>
-        <Link
-          href="/benchmarks/new"
-          className="shrink-0 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background"
-        >
-          New benchmark case
-        </Link>
-      </header>
 
-      {cases.length === 0 ? (
-        <p className="text-sm text-foreground/60">
-          No benchmark cases yet. Build a product, revision, failure case,
-          and first measurement through the normal workflow, then register
-          it here.
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {cases.map((benchmarkCase) => (
-            <li key={benchmarkCase.id}>
-              <Link
-                href={`/benchmarks/${benchmarkCase.id}`}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-foreground/10 px-4 py-3 text-sm hover:border-foreground/30"
-              >
-                <div className="flex flex-col gap-0.5">
-                  <span className="font-medium">{benchmarkCase.name}</span>
-                  <span className="text-foreground/60">
-                    {benchmarkCase.productName} · {benchmarkCase.revisionLabel} ·{" "}
-                    {benchmarkCase.failureCaseTitle}
-                  </span>
-                </div>
-                <span className="rounded-md border border-foreground/15 px-2 py-1 text-xs font-medium uppercase tracking-wide text-foreground/60">
-                  {STATUS_LABEL[benchmarkCase.status] ?? benchmarkCase.status}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+          {cases.length === 0 ? (
+            <EmptyState message="No benchmark cases yet. Build a product, revision, failure case, and first measurement through the normal workflow, then register it here." />
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {cases.map((benchmarkCase) => (
+                <li key={benchmarkCase.id}>
+                  <Link
+                    href={`/benchmarks/${benchmarkCase.id}`}
+                    className={`flex flex-wrap items-center justify-between gap-2 p-4 ${surface.card} transition-colors hover:border-[#d4d4d8]`}
+                  >
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm font-medium text-[#18181b]">{benchmarkCase.name}</span>
+                      <span className={typography.metadata}>
+                        {benchmarkCase.productName} · {benchmarkCase.revisionLabel} ·{" "}
+                        {benchmarkCase.failureCaseTitle}
+                      </span>
+                    </div>
+                    <StatusBadge
+                      label={STATUS_LABEL[benchmarkCase.status] ?? benchmarkCase.status}
+                      tone={STATUS_TONE[benchmarkCase.status]}
+                    />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

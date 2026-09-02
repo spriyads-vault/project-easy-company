@@ -5,7 +5,8 @@
 // uploaded document, which in a multi-tenant app is user-controlled
 // content, not something to inject as raw HTML.
 import type { EngineeringDocumentPassage } from "@/lib/documents/search";
-import { surface, text } from "./theme";
+import { text } from "./theme";
+import { typography } from "@/lib/design/tokens";
 
 interface SourcePreviewProps {
   passage: EngineeringDocumentPassage;
@@ -21,14 +22,14 @@ export function SourcePreview({ passage, query }: SourcePreviewProps) {
   return (
     <div
       aria-label="Source preview"
-      className={`flex flex-col gap-3 p-4 ${surface.panelElevated}`}
+      className={`flex flex-col gap-3 rounded-2xl border border-[#d4d4d8] bg-[#f4f4f5]/60 p-4`}
     >
-      <span className={text.kicker}>Source</span>
+      <h3 className={typography.sectionHeading}>Source</h3>
       <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-medium">{passage.filename}</span>
+        <span className="text-sm font-medium text-[#18181b]">{passage.filename}</span>
         <span className={`text-xs ${text.muted}`}>{location}</span>
       </div>
-      <p className="text-sm leading-relaxed">{highlightPassage(passage.passage, query)}</p>
+      <p className="text-sm leading-relaxed text-[#18181b]">{highlightPassage(passage.passage, query)}</p>
     </div>
   );
 }
@@ -45,7 +46,7 @@ function highlightPassage(passage: string, query: string): React.ReactNode[] {
 
   return parts.map((part, index) =>
     lowerTerms.has(part.toLowerCase()) ? (
-      <mark key={index} className="bg-[#3ecf6e]/25 px-0.5 text-[#f3f1e8]">
+      <mark key={index} className="rounded bg-[#1f9d52]/20 px-0.5 text-[#15803d]">
         {part}
       </mark>
     ) : (

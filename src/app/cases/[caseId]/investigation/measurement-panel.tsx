@@ -55,14 +55,14 @@ export function MeasurementPanel({ caseId, measurement, onSelect }: MeasurementP
             <button
               type="button"
               onClick={onSelect}
-              className={`text-xs ${text.muted} hover:text-[#1c1a15] ${focusRing}`}
+              className={`text-xs ${text.muted} hover:text-[#18181b] ${focusRing}`}
             >
               Details
             </button>
           ) : null}
           <Link
             href={`/cases/${caseId}`}
-            className={`text-xs ${text.muted} hover:text-[#1c1a15] hover:underline`}
+            className={`text-xs ${text.muted} hover:text-[#18181b] hover:underline`}
           >
             Add measurement
           </Link>
@@ -98,7 +98,7 @@ export function MeasurementPanel({ caseId, measurement, onSelect }: MeasurementP
               {operatingConditions(measurement.operatingMode).map((condition) => (
                 <li
                   key={condition}
-                  className="rounded-full border border-[#e7e2d6] px-2 py-1 text-xs uppercase tracking-wide text-[#6b6354]"
+                  className="rounded-full border border-[#e4e4e7] px-2 py-1 text-xs uppercase tracking-wide text-[#71717a]"
                 >
                   {condition}
                 </li>

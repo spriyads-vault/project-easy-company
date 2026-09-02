@@ -72,7 +72,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
         <button
           type="button"
           onClick={handleStartNew}
-          className={`text-xs ${text.muted} hover:text-[#1c1a15] ${focusRing}`}
+          className={`text-xs ${text.muted} hover:text-[#18181b] ${focusRing}`}
         >
           New message
         </button>
@@ -89,12 +89,12 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
         <span className={text.kicker}>Observation detected</span>
 
         <div className="flex flex-col gap-2">
-          <div className={`flex flex-col gap-0.5 rounded-lg border-l-2 border-l-[#177a3f] bg-[#1f9d52]/[0.03] py-1.5 pl-2.5`}>
+          <div className={`flex flex-col gap-0.5 rounded-lg border-l-2 border-l-[#15803d] bg-[#1f9d52]/[0.03] py-1.5 pl-2.5`}>
             <span className={`${text.kicker} text-[10px]`}>Observation</span>
             <p className="text-sm">{parsed.observation}</p>
           </div>
           {parsed.measurementChange ? (
-            <div className="flex flex-col gap-0.5 rounded-lg border-l-2 border-l-[#1c1a15]/60 py-1.5 pl-2.5">
+            <div className="flex flex-col gap-0.5 rounded-lg border-l-2 border-l-[#18181b]/60 py-1.5 pl-2.5">
               <span className={`${text.kicker} text-[10px]`}>Measurement change</span>
               <p className={`text-sm font-medium ${text.mono}`}>{parsed.measurementChange}</p>
             </div>
@@ -107,7 +107,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
         ) : null}
 
         {state.error ? (
-          <p role="alert" className={`rounded-lg border border-[#a15a17]/40 bg-[#a15a17]/10 p-2 text-sm ${accent.warnText}`}>
+          <p role="alert" className={`rounded-lg border border-[#b45309]/40 bg-[#b45309]/10 p-2 text-sm ${accent.warnText}`}>
             {state.error}
           </p>
         ) : null}
@@ -116,7 +116,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
           <button
             type="submit"
             disabled={pending}
-            className={`${radius.control} border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#177a3f] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:border-[#ddd7c8] disabled:bg-transparent disabled:text-[#847c6a]`}
+            className={`${radius.control} border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#15803d] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:border-[#d4d4d8] disabled:bg-transparent disabled:text-[#a1a1aa]`}
           >
             {pending ? "Adding…" : "Add to investigation"}
           </button>
@@ -124,7 +124,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
             type="button"
             onClick={handleDiscard}
             disabled={pending}
-            className={`${radius.control} px-4 py-2 text-xs font-medium uppercase tracking-wide ${text.muted} hover:text-[#1c1a15] ${focusRing}`}
+            className={`${radius.control} px-4 py-2 text-xs font-medium uppercase tracking-wide ${text.muted} hover:text-[#18181b] ${focusRing}`}
           >
             Cancel
           </button>
@@ -144,7 +144,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
           onClick={() => setAttachOpen((prev) => !prev)}
           aria-expanded={attachOpen}
           aria-haspopup="menu"
-          className={`flex h-9 items-center gap-1 ${radius.control} px-2.5 text-xs font-medium ${text.muted} hover:text-[#1c1a15] ${focusRing}`}
+          className={`flex h-9 items-center gap-1 ${radius.control} px-2.5 text-xs font-medium ${text.muted} hover:text-[#18181b] ${focusRing}`}
         >
           <span aria-hidden="true">+</span> Attach
         </button>
@@ -160,7 +160,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
                 setAttachOpen(false);
                 document.getElementById(inputId)?.focus();
               }}
-              className={`rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-[#f5f1e6] ${focusRing}`}
+              className={`rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-[#f4f4f5] ${focusRing}`}
             >
               Observation
             </button>
@@ -168,7 +168,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
               href={`/cases/${caseId}`}
               role="menuitem"
               onClick={() => setAttachOpen(false)}
-              className="rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-[#f5f1e6]"
+              className="rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-[#f4f4f5]"
             >
               Measurement
             </Link>
@@ -184,12 +184,12 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         placeholder="Tell Crado what changed, attach a result, or ask about this case…"
-        className={`flex-1 border-0 bg-transparent px-1 py-1.5 text-sm outline-none placeholder:text-[#847c6a] ${focusRing}`}
+        className={`flex-1 border-0 bg-transparent px-1 py-1.5 text-sm outline-none placeholder:text-[#a1a1aa] ${focusRing}`}
       />
       <button
         type="submit"
         disabled={!draft.trim()}
-        className={`shrink-0 ${radius.control} border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#177a3f] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:border-[#ddd7c8] disabled:bg-transparent disabled:text-[#847c6a]`}
+        className={`shrink-0 ${radius.control} border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#15803d] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:border-[#d4d4d8] disabled:bg-transparent disabled:text-[#a1a1aa]`}
       >
         Send
       </button>

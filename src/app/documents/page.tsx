@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentWorkspace } from "@/lib/workspace/get-current-workspace";
 import { createClient } from "@/lib/supabase/server";
@@ -9,6 +8,9 @@ import { DocumentList } from "./document-list";
 import { SearchPanel } from "./search-panel";
 import { TypeFilterTabs } from "./type-filter-tabs";
 import { surface, text } from "./theme";
+import { PageHeader } from "@/lib/design/page-header";
+import { EmptyState } from "@/lib/design/empty-state";
+import { typography } from "@/lib/design/tokens";
 
 interface DocumentsPageProps {
   searchParams: Promise<{ page?: string; type?: string }>;
@@ -39,49 +41,48 @@ export default async function DocumentsPage({ searchParams }: DocumentsPageProps
     : { totalCount };
 
   return (
-    <div className={`flex flex-1 flex-col gap-6 px-8 py-10 ${surface.page}`}>
-      <header className="flex flex-col gap-1 border-b border-[#262922] pb-4">
-        <Link href="/workspace" className={`text-xs ${text.muted} hover:underline`}>
-          ← {workspace.name}
-        </Link>
-        <div className="flex items-baseline justify-between">
-          <h1 className="text-lg font-semibold uppercase tracking-wide">Sources</h1>
+    <div className={`flex min-h-0 flex-1 flex-col ${surface.page}`}>
+      <PageHeader
+        backHref="/workspace"
+        backLabel={workspace.name}
+        title="Sources"
+        rightSlot={
           <span className={`text-2xl font-semibold ${text.mono}`}>
-            {workspaceTotalCount} <span className={text.kicker}>documents</span>
+            {workspaceTotalCount} <span className={typography.metadata}>documents</span>
           </span>
-        </div>
-      </header>
+        }
+      />
 
-      <TypeFilterTabs active={typeFilter} />
+      <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-6">
+          <TypeFilterTabs active={typeFilter} />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(320px,420px)_1fr]">
-        <UploadForm />
-        <section aria-labelledby="documents-list-heading" className={`flex flex-col gap-3 p-4 ${surface.panel}`}>
-          <div className="flex items-baseline justify-between">
-            <h2 id="documents-list-heading" className={text.kicker}>
-              Documents
-            </h2>
-            {typeFilter ? <span className={`text-xs ${text.muted}`}>{totalCount} matching</span> : null}
+          <div className="grid gap-6 lg:grid-cols-[minmax(320px,420px)_1fr]">
+            <UploadForm />
+            <section aria-labelledby="documents-list-heading" className={`flex flex-col gap-3 p-5 ${surface.card}`}>
+              <div className="flex items-baseline justify-between">
+                <h2 id="documents-list-heading" className={typography.sectionHeading}>
+                  Documents
+                </h2>
+                {typeFilter ? <span className={typography.metadata}>{totalCount} matching</span> : null}
+              </div>
+              {workspaceTotalCount === 0 ? (
+                <EmptyState message="No engineering documents are available for this product yet." />
+              ) : (
+                <DocumentList
+                  documents={documents}
+                  page={page}
+                  pageSize={pageSize}
+                  totalCount={totalCount}
+                  typeFilter={typeFilter ?? undefined}
+                />
+              )}
+            </section>
           </div>
-          {workspaceTotalCount === 0 ? (
-            <div className="flex flex-col items-start gap-3 py-6">
-              <p className={`text-sm ${text.muted}`}>
-                No engineering documents are available for this product yet.
-              </p>
-            </div>
-          ) : (
-            <DocumentList
-              documents={documents}
-              page={page}
-              pageSize={pageSize}
-              totalCount={totalCount}
-              typeFilter={typeFilter ?? undefined}
-            />
-          )}
-        </section>
-      </div>
 
-      <SearchPanel />
+          <SearchPanel />
+        </div>
+      </div>
     </div>
   );
 }

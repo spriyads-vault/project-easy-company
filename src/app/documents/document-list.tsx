@@ -6,7 +6,9 @@ import Link from "next/link";
 import type { DocumentListItem } from "@/lib/documents/queries";
 import type { DocumentStatus } from "@/lib/domain/schema";
 import { describeDocumentType } from "@/lib/documents/describe-document-type";
-import { text, accent } from "./theme";
+import { text } from "./theme";
+import { StatusBadge } from "@/lib/design/status-badge";
+import type { HeroStatusTone } from "@/lib/design/tokens";
 
 interface DocumentListProps {
   documents: DocumentListItem[];
@@ -25,11 +27,11 @@ const STATUS_LABEL: Record<DocumentStatus, string> = {
   failed: "FAILED",
 };
 
-const STATUS_CLASS: Record<DocumentStatus, string> = {
-  uploading: text.muted,
-  processing: "text-[#c8c6bb]",
-  indexed: accent.greenText,
-  failed: accent.warnText,
+const STATUS_TONE: Record<DocumentStatus, HeroStatusTone> = {
+  uploading: "waiting",
+  processing: "active",
+  indexed: "complete",
+  failed: "failed",
 };
 
 export function DocumentList({
@@ -51,15 +53,12 @@ export function DocumentList({
 
   return (
     <div className="flex flex-col gap-3">
-      <ul className="flex flex-col">
+      <ul className="flex flex-col divide-y divide-[#ececee]">
         {documents.map((doc) => (
-          <li
-            key={doc.id}
-            className="flex items-center justify-between gap-3 border-b border-[#21231e] py-2.5 last:border-b-0"
-          >
+          <li key={doc.id} className="flex items-center justify-between gap-3 py-3">
             <div className="flex min-w-0 flex-col gap-0.5">
-              <span className="truncate text-sm">{doc.filename}</span>
-              <span className={`${text.kicker} text-[10px]`}>
+              <span className="truncate text-sm font-medium text-[#18181b]">{doc.filename}</span>
+              <span className={`${text.kicker} normal-case tracking-normal text-[11px]`}>
                 {describeDocumentType(doc.documentType)}
                 {doc.productName
                   ? ` · ${doc.productName}${doc.revisionLabel ? ` ${doc.revisionLabel}` : ""}`
@@ -75,11 +74,7 @@ export function DocumentList({
                     : null}
               </span>
             </div>
-            <span
-              className={`shrink-0 border border-[#2c2f27] px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${STATUS_CLASS[doc.status]}`}
-            >
-              {STATUS_LABEL[doc.status]}
-            </span>
+            <StatusBadge label={STATUS_LABEL[doc.status]} tone={STATUS_TONE[doc.status]} />
           </li>
         ))}
       </ul>
@@ -112,7 +107,7 @@ function PageLink({
 }) {
   if (disabled) {
     return (
-      <span className="border border-[#2c2f27] px-3 py-1 text-xs uppercase tracking-wide text-[#4a4d43]">
+      <span className="rounded-lg border border-[#ececee] px-3 py-1 text-xs font-medium text-[#a1a1aa]">
         {label}
       </span>
     );
@@ -121,7 +116,7 @@ function PageLink({
   return (
     <Link
       href={href}
-      className="border border-[#2c2f27] px-3 py-1 text-xs uppercase tracking-wide hover:border-[#3ecf6e]/60 hover:text-[#5fdb87]"
+      className="rounded-lg border border-[#e4e4e7] px-3 py-1 text-xs font-medium text-[#18181b] transition-colors hover:border-[#1f9d52]/50 hover:text-[#15803d]"
     >
       {label}
     </Link>

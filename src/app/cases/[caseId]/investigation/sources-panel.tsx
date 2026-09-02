@@ -41,7 +41,7 @@ export function SourcesPanel({ hypotheses, metrics }: SourcesPanelProps) {
 
       {metrics.documentsAvailable === 0 ? (
         <div className="flex flex-col gap-0.5">
-          <span className={`${text.kicker} text-[10px] text-[#6b6354]`}>No sources</span>
+          <span className={`${text.kicker} text-[10px] text-[#71717a]`}>No sources</span>
           <p className={`text-sm ${text.muted}`}>
             No engineering documents have been added for this product.
           </p>
@@ -53,7 +53,7 @@ export function SourcesPanel({ hypotheses, metrics }: SourcesPanelProps) {
             : "No document passages were used as evidence in this investigation."}
         </p>
       ) : (
-        <ul className="flex flex-col divide-y divide-[#efe9db]">
+        <ul className="flex flex-col divide-y divide-[#ececee]">
           {sources.map((source) => (
             <li
               key={source.documentId}
@@ -75,7 +75,7 @@ export function SourcesPanel({ hypotheses, metrics }: SourcesPanelProps) {
 
       <Link
         href="/documents"
-        className={`self-start text-xs ${text.muted} hover:text-[#1c1a15] hover:underline`}
+        className={`self-start text-xs ${text.muted} hover:text-[#18181b] hover:underline`}
       >
         View all sources →
       </Link>

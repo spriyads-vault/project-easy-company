@@ -61,11 +61,11 @@ const STATUS_LABEL: Record<RunStatus, string> = {
 };
 
 const STATUS_DOT_COLOR: Record<RunStatus, string> = {
-  idle: "bg-[#c7c0ae]",
+  idle: "bg-[#d4d4d8]",
   running: "bg-[#1f9d52] animate-pulse",
   completed: "bg-[#1f9d52]",
-  failed: "bg-[#a15a17]",
-  interrupted: "bg-[#a15a17]",
+  failed: "bg-[#b45309]",
+  interrupted: "bg-[#b45309]",
 };
 
 function buttonLabel(status: RunStatus, busy: boolean, hasMultipleRevisions: boolean): string {
@@ -110,7 +110,7 @@ export function InvestigationPanel({
           onClick={onRunInvestigation}
           disabled={!canRunAnalysis || busy}
           title={disabledReason ?? undefined}
-          className={`${radius.control} border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#177a3f] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:border-[#ddd7c8] disabled:bg-transparent disabled:text-[#847c6a]`}
+          className={`${radius.control} border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#15803d] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:border-[#d4d4d8] disabled:bg-transparent disabled:text-[#a1a1aa]`}
         >
           {buttonLabel(state.status, busy, hasMultipleRevisions)}
         </button>
@@ -121,7 +121,7 @@ export function InvestigationPanel({
       ) : null}
 
       {state.status === "failed" || state.status === "interrupted" ? (
-        <div role="alert" className={`flex flex-col gap-1 ${radius.card} border border-[#a15a17]/40 bg-[#a15a17]/10 p-3`}>
+        <div role="alert" className={`flex flex-col gap-1 ${radius.card} border border-[#b45309]/40 bg-[#b45309]/10 p-3`}>
           <span className={`${text.kicker} text-[10px] ${accent.warnText}`}>Failed run</span>
           <p className={`text-sm ${accent.warnText}`}>{state.errorMessage}</p>
           {state.correlations.length > 0 || state.hypotheses.length > 0 ? (
@@ -145,7 +145,7 @@ export function InvestigationPanel({
       ) : null}
 
       {state.clarification ? (
-        <div className={`flex flex-col gap-1 ${radius.card} border border-dashed border-[#ddd7c8] p-3`}>
+        <div className={`flex flex-col gap-1 ${radius.card} border border-dashed border-[#d4d4d8] p-3`}>
           <span className={text.kicker}>Additional information needed</span>
           <p className="text-sm">{state.clarification}</p>
         </div>

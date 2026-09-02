@@ -4,6 +4,11 @@ export interface ProductSummary {
   id: string;
   name: string;
   createdAt: string;
+  /** UX-04 "rich product status": real counts/labels only, never a
+   * placeholder — both derived from the same product_revisions rows the
+   * product detail page already reads, just aggregated here too. */
+  revisionCount: number;
+  latestRevisionLabel: string | null;
 }
 
 export interface ProductRevision {
@@ -36,7 +41,11 @@ export interface RevisionDetail {
   facts: ProductFactRow[];
 }
 
-/** All products in the signed-in user's workspace, most recent first. */
+/** All products in the signed-in user's workspace, most recent first, with
+ * a real revision count and latest-revision label for each — the
+ * workspace list's "rich product status" (UX-04), not a placeholder. One
+ * extra query for every product's revisions (RLS already scopes this to
+ * the signed-in workspace) rather than N+1 per-product queries. */
 export async function listProducts(): Promise<ProductSummary[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -45,11 +54,35 @@ export async function listProducts(): Promise<ProductSummary[]> {
     .order("created_at", { ascending: false });
 
   if (error || !data) return [];
-  return data.map((row) => ({
-    id: row.id,
-    name: row.name,
-    createdAt: row.created_at,
-  }));
+  if (data.length === 0) return [];
+
+  const { data: revisionRows } = await supabase
+    .from("product_revisions")
+    .select("product_id, label, created_at")
+    .in(
+      "product_id",
+      data.map((row) => row.id),
+    )
+    .order("created_at", { ascending: false });
+
+  const revisionsByProduct = new Map<string, { label: string; createdAt: string }[]>();
+  for (const row of revisionRows ?? []) {
+    const existing = revisionsByProduct.get(row.product_id) ?? [];
+    existing.push({ label: row.label, createdAt: row.created_at });
+    revisionsByProduct.set(row.product_id, existing);
+  }
+
+  return data.map((row) => {
+    const revisions = revisionsByProduct.get(row.id) ?? [];
+    return {
+      id: row.id,
+      name: row.name,
+      createdAt: row.created_at,
+      revisionCount: revisions.length,
+      // Already ordered most-recent-first by the query above.
+      latestRevisionLabel: revisions[0]?.label ?? null,
+    };
+  });
 }
 
 /** A single product with its revisions, most recent revision first. */
@@ -71,17 +104,22 @@ export async function getProduct(
     .eq("product_id", productId)
     .order("created_at", { ascending: false });
 
+  const mappedRevisions = (revisions ?? []).map((row) => ({
+    id: row.id,
+    productId: row.product_id,
+    label: row.label,
+    notes: row.notes,
+    createdAt: row.created_at,
+  }));
+
   return {
     id: product.id,
     name: product.name,
     createdAt: product.created_at,
-    revisions: (revisions ?? []).map((row) => ({
-      id: row.id,
-      productId: row.product_id,
-      label: row.label,
-      notes: row.notes,
-      createdAt: row.created_at,
-    })),
+    // Already ordered most-recent-first by the query above.
+    revisionCount: mappedRevisions.length,
+    latestRevisionLabel: mappedRevisions[0]?.label ?? null,
+    revisions: mappedRevisions,
   };
 }
 

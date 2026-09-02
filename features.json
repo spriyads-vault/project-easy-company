@@ -404,6 +404,28 @@
       ]
     },
     {
+      "id": "UX-04",
+      "priority": 17,
+      "title": "Crado Product-Wide UI Redesign",
+      "depends_on": [
+        "UX-03"
+      ],
+      "passes": true,
+      "acceptance": [
+        "every authenticated route (workspace, products/[productId], products/[productId]/revisions/[revisionId], documents/Sources, benchmarks incl. detail/score/new, login, cases/investigation) shares one canonical design-token module (src/lib/design/tokens.ts) and shared components (AppShell, PageHeader, Card, StatusBadge, EmptyState) instead of route-scoped one-off styling — no route left on the old admin-table visual system",
+        "palette pivots app-wide from UX-02/03's warm off-white (#faf8f3) to a pure-white/neutral-zinc canvas per the ticket's explicit 'no yellow/cream tint' instruction, applied via a canonical theme.ts re-export + bulk hex sweep to every existing cases/investigation file so no import path needed to change",
+        "Sources (documents/**) fully migrated off its 100%-dark-graphite bespoke palette onto the shared light system — upload, document list with real status/type/provenance, type filter tabs, and hybrid search + source-preview panel all restyled, all 25 existing component tests still passing unmodified (no test asserted on color, only text/roles)",
+        "Benchmarks (list, case detail incl. ground truth + comparison report, score-run form, new-benchmark form) redesigned as a professional evaluation UI — StatusBadge-driven status, Card-based sections, mono metric grid — replacing the old plain foreground/background admin-table styling",
+        "Products (product detail + revision detail incl. product-context facts, add-fact form, failure-case list) migrated to the shared PageHeader/Card/EmptyState system; workspace's product list gained real per-product revisionCount/latestRevisionLabel (new batched read aggregation in listProducts()/getProduct(), no schema change) to satisfy 'rich product status' honestly rather than fabricating a status field",
+        "login redesigned as a minimal premium sign-in card on the shared canvasBackground dot-grid, consistent with the rest of the product, no application rail (nothing to navigate to pre-auth)",
+        "fixed two latent globals.css bugs found while building the token foundation: an OS-triggered prefers-color-scheme dark-mode override that silently inverted the whole app (contradicted the ticket's 'dark surfaces only for specific scoped things, never a whole page' rule) removed; body's hardcoded `font-family: Arial, Helvetica` literal that silently shadowed the already-loaded Geist font fixed to actually reference it",
+        "cases/investigation kept its UX-03 structure (app shell, dot-grid canvas, drawn connectors, collapsible context rail, floating composer) — only its color values were pivoted to the new neutral system, not re-architected",
+        "no Investigation Agent, deterministic engine, evidence model, database schema, benchmark architecture, Regulatory State, or model-provider change",
+        "quality gate green: pnpm lint, pnpm typecheck, pnpm test (268/268), pnpm test:integration (58/58), pnpm build",
+        "live QA (chrome-devtools MCP, signed in as the seeded gateway-x-demo user): workspace, product detail, revision detail, Sources (empty state), Benchmarks list + new-benchmark form (empty state for this workspace), login, and the cases/investigation canvas with a real prior run all screenshotted and visually verified against the new system"
+      ]
+    },
+    {
       "id": "MVP-16",
       "priority": 16,
       "title": "Production deployment",

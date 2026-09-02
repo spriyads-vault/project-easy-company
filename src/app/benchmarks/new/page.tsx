@@ -1,8 +1,9 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentWorkspace } from "@/lib/workspace/get-current-workspace";
 import { listCasesAvailableForBenchmark } from "@/lib/benchmarks/queries";
 import { NewBenchmarkForm } from "./new-benchmark-form";
+import { PageHeader } from "@/lib/design/page-header";
+import { surface } from "@/lib/design/tokens";
 
 export default async function NewBenchmarkPage() {
   const workspace = await getCurrentWorkspace();
@@ -13,18 +14,17 @@ export default async function NewBenchmarkPage() {
   const cases = await listCasesAvailableForBenchmark();
 
   return (
-    <div className="flex flex-1 flex-col gap-6 px-8 py-10 text-foreground">
-      <header className="flex flex-col gap-1 border-b border-foreground/10 pb-4">
-        <Link href="/benchmarks" className="text-sm text-foreground/60 hover:text-foreground">
-          ← Benchmarks
-        </Link>
-        <h1 className="text-lg font-semibold tracking-tight">
-          Register a historical benchmark case
-        </h1>
-      </header>
+    <div className={`flex min-h-0 flex-1 flex-col ${surface.page}`}>
+      <PageHeader
+        backHref="/benchmarks"
+        backLabel="Benchmarks"
+        title="Register a historical benchmark case"
+      />
 
-      <div className="max-w-2xl">
-        <NewBenchmarkForm cases={cases} />
+      <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+        <div className="mx-auto w-full max-w-2xl">
+          <NewBenchmarkForm cases={cases} />
+        </div>
       </div>
     </div>
   );

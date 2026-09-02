@@ -60,7 +60,7 @@ export function EvidenceView({ hypotheses, onOpenCitation }: EvidenceViewProps) 
               </h3>
               <span className={`text-xs ${text.muted}`}>{section.hint}</span>
             </div>
-            <ul className="flex flex-col divide-y divide-[#efe9db]">
+            <ul className="flex flex-col divide-y divide-[#ececee]">
               {items.map(({ item, hypothesis, hypothesisIndex }, itemIndex) => (
                 <li
                   key={itemIndex}
@@ -85,7 +85,7 @@ export function EvidenceView({ hypotheses, onOpenCitation }: EvidenceViewProps) 
                           onClick={() =>
                             onOpenCitation(item.citation!, item.category, hypothesisIndex, hypothesis.title)
                           }
-                          className={`inline-flex items-center gap-1 rounded-[7px] border border-[#1f9d52]/40 bg-[#1f9d52]/5 px-1.5 py-0.5 align-middle text-[11px] text-[#177a3f] transition-colors hover:border-[#1f9d52]/70 hover:bg-[#1f9d52]/15 ${focusRing}`}
+                          className={`inline-flex items-center gap-1 rounded-[7px] border border-[#1f9d52]/40 bg-[#1f9d52]/5 px-1.5 py-0.5 align-middle text-[11px] text-[#15803d] transition-colors hover:border-[#1f9d52]/70 hover:bg-[#1f9d52]/15 ${focusRing}`}
                         >
                           <span aria-hidden="true">⌗</span>
                           {item.citation.filename}

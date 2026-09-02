@@ -69,12 +69,12 @@ export function HypothesisCard({ hypothesis, index, onOpenCitation, onSelect }: 
               <button
                 type="button"
                 onClick={onSelect}
-                className={`text-xs ${text.muted} hover:text-[#1c1a15] ${focusRing}`}
+                className={`text-xs ${text.muted} hover:text-[#18181b] ${focusRing}`}
               >
                 Details
               </button>
             ) : null}
-            <span className="rounded-full border border-[#ddd7c8] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#6b6354]">
+            <span className="rounded-full border border-[#d4d4d8] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#71717a]">
               {CONFIDENCE_LABEL[hypothesis.confidenceBand]}
             </span>
           </div>
@@ -113,7 +113,7 @@ export function HypothesisCard({ hypothesis, index, onOpenCitation, onSelect }: 
                     key={itemIndex}
                     className={
                       section.category === "inferred"
-                        ? "text-sm italic text-[#6b6354]"
+                        ? "text-sm italic text-[#71717a]"
                         : section.category === "missing"
                           ? `text-sm ${text.muted}`
                           : "text-sm"
@@ -128,7 +128,7 @@ export function HypothesisCard({ hypothesis, index, onOpenCitation, onSelect }: 
                           onClick={() =>
                             onOpenCitation(item.citation!, item.category, index, hypothesis.title)
                           }
-                          className="inline-flex items-center gap-1 rounded-[7px] border border-[#1f9d52]/40 bg-[#1f9d52]/5 px-1.5 py-0.5 align-middle text-[11px] text-[#177a3f] transition-colors hover:border-[#1f9d52]/70 hover:bg-[#1f9d52]/15 hover:text-[#15703a]"
+                          className="inline-flex items-center gap-1 rounded-[7px] border border-[#1f9d52]/40 bg-[#1f9d52]/5 px-1.5 py-0.5 align-middle text-[11px] text-[#15803d] transition-colors hover:border-[#1f9d52]/70 hover:bg-[#1f9d52]/15 hover:text-[#166534]"
                         >
                           <span aria-hidden="true">⌗</span>
                           {item.citation.filename}
@@ -144,14 +144,14 @@ export function HypothesisCard({ hypothesis, index, onOpenCitation, onSelect }: 
         })}
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-[#efe9db] pt-3">
+      <div className="flex flex-col gap-3 border-t border-[#ececee] pt-3">
         <div className={`flex flex-col gap-1 rounded-lg border-l-2 ${artifact.nextTest.accent} bg-[#1f9d52]/[0.03] py-1.5 pl-2.5`}>
           <span className={text.kicker}>Next investigation</span>
           <p className="text-sm">{hypothesis.recommendedNextStep}</p>
         </div>
         {whyThisTest ? (
           <div className="flex flex-col gap-1">
-            <span className={`${text.kicker} text-[10px] text-[#847c6a]`}>Why this test</span>
+            <span className={`${text.kicker} text-[10px] text-[#a1a1aa]`}>Why this test</span>
             <p className={`text-xs italic ${text.muted}`}>{whyThisTest}</p>
           </div>
         ) : null}

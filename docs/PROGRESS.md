@@ -2355,3 +2355,117 @@ was explicitly **not** started per this session's own instruction.)
 - Next recommended ticket: MVP-12, Regulatory State evidence linkage —
   not started this session (not requested).
 - Commit: (see git log)
+
+### 2026-09-02 — UX-04: Crado Product-Wide UI Redesign
+- Completed: extended UX-02/03's investigation-workspace redesign to
+  every authenticated Crado route — workspace, products (detail +
+  revision detail), documents/Sources, benchmarks (list, detail, score,
+  new), and login — onto one coherent, shared 2026 agentic-engineering
+  design system. No architecture change: Investigation Agent,
+  deterministic engine, evidence model, database schema, benchmark
+  architecture, Regulatory State, and model provider are all untouched;
+  every existing server action and query is reused (one additive read
+  aggregation, see below).
+  - **Canonical token module**: new `src/lib/design/tokens.ts` —
+    promotes the palette/typography/motion/evidence-glyph/rail/topbar/
+    segmented/canvas/connector/artifact system UX-01/02/03 built
+    route-scoped in `cases/[caseId]/investigation/theme.ts` into the
+    single source of truth for the whole app. That file, and the new
+    `documents/theme.ts`, are now thin re-export shims, so zero
+    import-path changes were needed across ~20 already-built
+    investigation-canvas consumer files.
+  - **Palette pivot**: superseded UX-02/03's warm off-white (`#faf8f3`)
+    with a pure-white/neutral-zinc canvas per this ticket's explicit "NO
+    yellow/cream tint" instruction — 11 old warm hex codes swept to 11
+    new neutral ones across every `.ts`/`.tsx` file under
+    `src/app/cases/**` (excluding tests), verified by grepping for any
+    remaining non-neutral hex. `#1f9d52` (the green accent) unchanged.
+  - **Shared components**: promoted, parameterized `AppShell` (moved to
+    `src/lib/design/app-shell.tsx`, now takes an `active?: "workspace" |
+    "sources" | "benchmarks"` prop) plus new `PageHeader`, `Card`
+    (primary/secondary/tertiary variants), `StatusBadge`, `EmptyState`.
+    Applied via a `layout.tsx` in each of `workspace/`, `products/`,
+    `documents/`, `benchmarks/` — deliberately *not* a Next.js route
+    group, to avoid moving files and risking import/test breakage for a
+    purely visual change.
+  - **Products**: product-detail and revision-detail pages (+
+    `new-revision-form`, `add-fact-form`, `open-case-button`) migrated to
+    the shared system. `listProducts()`/`getProduct()` in
+    `src/lib/products/queries.ts` gained real `revisionCount` and
+    `latestRevisionLabel` fields (one batched extra query, not N+1) so
+    the workspace product list shows genuine "rich product status"
+    instead of a fabricated field — `ProductSummary`/`ProductDetail`
+    extended accordingly.
+  - **Sources** (`documents/**`): the largest lift — fully rewritten off
+    its 100%-dark-graphite bespoke palette (`bg-[#0d0f0d]`) onto the
+    shared light system: upload form, document list (status via
+    `StatusBadge`, type/revision/page-count/historical provenance line),
+    type-filter chips, and the hybrid search + source-preview split
+    panel. All 25 existing component tests pass unmodified — none of
+    them asserted on color, only on text content/roles, so the visual
+    rewrite was a pure style pass.
+  - **Benchmarks**: list, case-detail (investigation runs, ground truth,
+    comparison report with a mono metric grid), score-run form, and
+    new-benchmark form all redesigned as a professional evaluation UI —
+    `StatusBadge` for run/case status, `Card` sections instead of plain
+    bordered divs. No existing tests in this route (none added — the
+    forms' behavior is unchanged, only presentation).
+  - **Login**: rebuilt as a minimal premium sign-in card centered on the
+    shared dot-grid `canvasBackground`, no app rail (nothing to navigate
+    to pre-auth).
+  - **Two real bugs found and fixed** while building the token
+    foundation, in `globals.css`: (1) a `prefers-color-scheme: dark`
+    media override that silently inverted the entire app's background/
+    foreground based on OS setting — directly contradicted the ticket's
+    "dark surfaces only for specific scoped things, never a whole page"
+    rule, removed; (2) `body`'s `font-family` was a hardcoded
+    `Arial, Helvetica` literal that silently shadowed the already-loaded-
+    but-unused Geist `var(--font-sans)` — fixed so the app actually
+    renders in Geist.
+  - `cases/[caseId]/investigation` kept its UX-03 structure verbatim —
+    app shell, dot-grid canvas, drawn connectors, collapsible context
+    rail, floating composer — only its color tokens were pivoted; no
+    additional structural/interaction changes were made there this pass.
+  - Quality gate: `pnpm lint` clean, `pnpm typecheck` clean (after two
+    `.next` cache clears for stale route-type errors), `pnpm test`
+    268/268, `pnpm test:integration` 58/58, `pnpm build` succeeds
+    (all 14 routes compile, including the four new `layout.tsx` files).
+  - Live QA (chrome-devtools MCP, signed in as the seeded
+    `gateway-x-demo` user, reusing an already-authenticated session from
+    an earlier walkthrough in this session): workspace (real revision
+    counts render), product detail, revision detail (product-context
+    facts + add-fact form), Sources (honest empty state for this
+    workspace, filter chips, upload form), Benchmarks list (empty state)
+    and new-benchmark-case form, login, and the cases/investigation
+    canvas with a real prior completed run — all screenshotted and
+    visually confirmed against the new system. `resize_page` still
+    floors around ~1000px-wide screenshots in this environment
+    regardless of requested width (same constraint noted in UX-03); no
+    new breakpoint sweep was redone since the investigation canvas's
+    layout itself didn't change, only its colors.
+- Remaining below reference quality / disclosed gaps:
+  - Benchmarks and Sources got a lighter design pass than
+    cases/investigation — no dedicated "one shared reusable panel
+    system" component was extracted for Sources' search/preview split or
+    Benchmarks' ground-truth/comparison panels; they draw from the same
+    tokens and `Card`/`StatusBadge` primitives but are still bespoke
+    layouts per page, not one shared context-panel API. Given the very
+    different data shapes (search results vs. ground truth vs. metric
+    grids), a single rigid panel component was judged higher-risk than
+    valuable for this pass.
+  - No new automated tests were added for Products' or Benchmarks'
+    now-restyled pages (Products had none before; Benchmarks had none
+    before) — this was a visual-only pass with no behavior change, so
+    existing behavior coverage (server actions, queries) was left as-is
+    rather than backfilling presentation-layer tests out of scope for
+    this ticket.
+  - Live QA of Benchmarks' case-detail/comparison-report and
+    score-run/new-benchmark *submit* flows (as opposed to their static
+    empty/list states) wasn't exercised this session — the signed-in
+    demo workspace had no benchmark cases registered under it. The
+    styling was verified by reading the components carefully against
+    what real data would render (StatusBadge tones, metric-row grid),
+    but not clicked through end-to-end with real data.
+- Next recommended ticket: MVP-12, Regulatory State evidence linkage —
+  not started this session (not requested).
+- Commit: (see git log)
