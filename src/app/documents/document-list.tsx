@@ -1,13 +1,17 @@
-// Real counts only — never a placeholder number. The header count and this
-// list both come straight from listEngineeringDocuments' `count: "exact"`
-// query; there is no path in this component that can display a number
-// that doesn't match what's actually in the workspace.
+// SOURCES TABLE (UX-04): "professional dense document browser via Data
+// Table (NAME/TYPE/PRODUCT/REVISION/STATUS/USED/UPDATED)" — the exact
+// column list from the ticket. Real counts only, never a placeholder: the
+// header count, USED (see countDocumentCitationsByWorkspace), and every
+// other cell come straight from real queries; there is no path in this
+// component that can display a number that doesn't match what's actually
+// in the workspace.
 import Link from "next/link";
 import type { DocumentListItem } from "@/lib/documents/queries";
 import type { DocumentStatus } from "@/lib/domain/schema";
 import { describeDocumentType } from "@/lib/documents/describe-document-type";
 import { text } from "./theme";
 import { StatusBadge } from "@/lib/design/status-badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { HeroStatusTone } from "@/lib/design/tokens";
 
 interface DocumentListProps {
@@ -53,31 +57,53 @@ export function DocumentList({
 
   return (
     <div className="flex flex-col gap-3">
-      <ul className="flex flex-col divide-y divide-[#1c212a]">
-        {documents.map((doc) => (
-          <li key={doc.id} className="flex items-center justify-between gap-3 py-3">
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <span className="truncate text-sm font-medium text-[#f5f6f7]">{doc.filename}</span>
-              <span className={`${text.kicker} normal-case tracking-normal text-[11px]`}>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Type</TableHead>
+            <TableHead>Product</TableHead>
+            <TableHead>Revision</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Used</TableHead>
+            <TableHead>Updated</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {documents.map((doc) => (
+            <TableRow key={doc.id}>
+              <TableCell className="max-w-[280px] truncate font-medium text-foreground">
+                {doc.filename}
+                {!doc.isCurrent ? <span className={`ml-2 text-[11px] ${text.muted}`}>historical</span> : null}
+              </TableCell>
+              <TableCell className="whitespace-nowrap text-muted-foreground">
                 {describeDocumentType(doc.documentType)}
-                {doc.productName
-                  ? ` · ${doc.productName}${doc.revisionLabel ? ` ${doc.revisionLabel}` : ""}`
-                  : ""}
-                {doc.pageCount !== null ? ` · ${doc.pageCount} pages` : ""}
-                {!doc.isCurrent ? " · historical" : ""}
-              </span>
-              <span className={`text-[11px] ${text.muted}`}>
-                {doc.status === "indexed" && doc.indexedAt
-                  ? `Indexed ${formatDate(doc.indexedAt)}`
-                  : doc.status === "failed" && doc.failureReason
-                    ? doc.failureReason
-                    : null}
-              </span>
-            </div>
-            <StatusBadge label={STATUS_LABEL[doc.status]} tone={STATUS_TONE[doc.status]} />
-          </li>
-        ))}
-      </ul>
+                {doc.pageCount !== null ? (
+                  <span className={`ml-1 ${text.muted}`}>· {doc.pageCount} pages</span>
+                ) : null}
+              </TableCell>
+              <TableCell className="whitespace-nowrap">{doc.productName ?? <span className={text.muted}>—</span>}</TableCell>
+              <TableCell className={`whitespace-nowrap ${text.mono}`}>
+                {doc.revisionLabel ?? <span className={text.muted}>—</span>}
+              </TableCell>
+              <TableCell className="whitespace-nowrap">
+                <div className="flex flex-col gap-0.5">
+                  <StatusBadge label={STATUS_LABEL[doc.status]} tone={STATUS_TONE[doc.status]} />
+                  {doc.status === "failed" && doc.failureReason ? (
+                    <span className={`text-[11px] ${text.muted}`}>{doc.failureReason}</span>
+                  ) : null}
+                </div>
+              </TableCell>
+              <TableCell className={`whitespace-nowrap ${text.mono}`}>
+                {doc.usedCount ?? 0} {doc.usedCount === 1 ? "citation" : "citations"}
+              </TableCell>
+              <TableCell className={`whitespace-nowrap ${text.mono} ${text.muted}`}>
+                {doc.status === "indexed" && doc.indexedAt ? formatDate(doc.indexedAt) : formatDate(doc.uploadedAt)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
 
       {totalPages > 1 ? (
         <nav aria-label="Document pages" className="flex items-center justify-between gap-3 pt-2">

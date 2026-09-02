@@ -10,6 +10,17 @@
 // inventing a plausible-looking value. The one exception is the product
 // match, which is checked against the workspace's REAL product list
 // (never invented) and clearly separated from an unmatched name guess.
+//
+// The revision/frequency/margin/operating-mode extraction itself lives in
+// src/lib/text-extraction/measurement-fields.ts, shared with the
+// composer's Measurement and Engineering Change intents (UX-04) so all
+// three free-text flows read the same numbers the same way.
+import {
+  extractFrequencyMhz,
+  extractMarginDb,
+  extractOperatingMode,
+  extractRevisionLabel,
+} from "@/lib/text-extraction/measurement-fields";
 
 export interface ProductCandidate {
   id: string;
@@ -28,53 +39,6 @@ export interface ParsedIntake {
   /** Signed: positive = above the selected limit, negative = below it. */
   marginDb: number | null;
   operatingMode: string | null;
-}
-
-const REVISION_PATTERN = /\bRev[\s-]?(\d+)\b/i;
-const FREQUENCY_PATTERN = /(\d+(?:\.\d+)?)\s*MHz\b/i;
-const ABOVE_BELOW_LIMIT_PATTERN =
-  /(\d+(?:\.\d+)?)\s*dB\s+(above|below)\s+(?:the\s+)?(?:selected\s+)?limit/i;
-const SIGNED_DB_PATTERN = /([+-])\s*(\d+(?:\.\d+)?)\s*dB\b/i;
-
-// A short list of activity/state words that mark a clause as describing
-// what the product was doing, not the failure itself — used only to find
-// the *sentence* to keep verbatim as the operating mode, never to
-// synthesize new wording.
-const OPERATING_MODE_HINT = /\b(active|on|transmitting|tx|rx|charging|idle|standby|connected|running)\b/i;
-
-function extractRevisionLabel(text: string): string | null {
-  const match = text.match(REVISION_PATTERN);
-  return match ? `Rev${match[1]}` : null;
-}
-
-function extractFrequencyMhz(text: string): number | null {
-  const match = text.match(FREQUENCY_PATTERN);
-  return match ? Number(match[1]) : null;
-}
-
-function extractMarginDb(text: string): number | null {
-  const aboveBelow = text.match(ABOVE_BELOW_LIMIT_PATTERN);
-  if (aboveBelow) {
-    const magnitude = Number(aboveBelow[1]);
-    return aboveBelow[2].toLowerCase() === "above" ? magnitude : -magnitude;
-  }
-  const signed = text.match(SIGNED_DB_PATTERN);
-  if (signed) {
-    const magnitude = Number(signed[2]);
-    return signed[1] === "-" ? -magnitude : magnitude;
-  }
-  return null;
-}
-
-function extractOperatingMode(text: string): string | null {
-  const sentences = text
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => sentence.trim())
-    .filter(Boolean);
-  const modeSentence = sentences.find((sentence) => OPERATING_MODE_HINT.test(sentence));
-  if (!modeSentence) return null;
-  // Strip a trailing period so the confirmation surface doesn't show one.
-  return modeSentence.replace(/[.!?]+$/, "").trim();
 }
 
 /** The leading noun-phrase before the revision token or a known failure

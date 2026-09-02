@@ -6,6 +6,11 @@ import { measurementInputSchema } from "@/lib/domain/schema";
 
 export interface MeasurementFormState {
   error?: string;
+  /** UX-04: added so callers (the investigation composer's Measurement
+   * intent) can distinguish "just succeeded" from "hasn't submitted yet" —
+   * AddMeasurementForm doesn't need this (it never showed a success state),
+   * but leaving it optional keeps that call site unaffected. */
+  success?: boolean;
 }
 
 function optionalNumber(value: FormDataEntryValue | null): number | undefined {
@@ -82,5 +87,11 @@ export async function createMeasurement(
   }
 
   revalidatePath(`/cases/${caseId}`);
-  return {};
+  // UX-04: also revalidate the investigation workspace, not just the case
+  // page — the composer's Measurement intent submits from inside the
+  // workspace, and its `measurement` prop (the canvas's trunk root) needs
+  // this route's RSC payload to refresh for the new reading to appear
+  // without a manual browser refresh.
+  revalidatePath(`/cases/${caseId}/investigation`);
+  return { success: true };
 }

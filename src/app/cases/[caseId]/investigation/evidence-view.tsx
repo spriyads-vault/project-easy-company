@@ -1,35 +1,45 @@
-// EVIDENCE VIEW (UX-03): OBSERVED/KNOWN/INFERRED/MISSING as the central
-// information architecture — "avoid four generic rectangular cards; use
-// compact inline evidence markers." Same trust boundary hypothesis-card.tsx
-// enforces per hypothesis (the model can never populate observed/known,
-// see src/lib/hypotheses/schema.ts), aggregated across every hypothesis
-// this run produced and grouped by category instead of by hypothesis, so
-// every claim reads as inspectable at a glance. Every item still names
-// which hypothesis it came from and, when document-backed, still opens the
-// exact same source drawer.
+// EVIDENCE VIEW (UX-03 → UX-04 table): OBSERVED/KNOWN/INFERRED/MISSING as
+// the central information architecture — "avoid four generic rectangular
+// cards; use a professional table/list." Same trust boundary
+// hypothesis-card.tsx/canvas-nodes.tsx enforce per hypothesis (the model
+// can never populate observed/known — see src/lib/hypotheses/schema.ts),
+// flattened into one dense TYPE/EVIDENCE/SOURCE/REVISION/USED BY table
+// instead of four category cards. Every row still names which hypothesis
+// it came from (click to select it in the context rail) and, when
+// document-backed, still opens the exact same source drawer — nothing
+// here changes what's OBSERVED vs KNOWN vs INFERRED vs MISSING, only how
+// densely it's laid out.
 import type { HypothesisCreatedPayload } from "@/lib/analysis/events";
 import type { EvidenceCategory } from "@/lib/domain/schema";
 import type { EvidenceCitation } from "@/lib/hypotheses/schema";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { evidence, focusRing, text } from "./theme";
 
 interface EvidenceViewProps {
   hypotheses: readonly HypothesisCreatedPayload[];
+  /** The revision this investigation run's evidence pertains to — shown as
+   * a real column value (every row in a single run shares one revision),
+   * never fabricated per-row. Optional/defaults to "—" so pre-UX-04 call
+   * sites (with no revision context) keep working. */
+  revisionLabel?: string;
   onOpenCitation: (
     citation: EvidenceCitation,
     category: EvidenceCategory,
     hypothesisIndex: number,
     hypothesisTitle: string,
   ) => void;
+  onSelectHypothesis?: (hypothesis: HypothesisCreatedPayload, index: number) => void;
 }
 
-const SECTIONS: { category: EvidenceCategory; heading: string; hint: string }[] = [
-  { category: "observed", heading: "Observed", hint: "Directly measured." },
-  { category: "known", heading: "Known", hint: "Recorded product context." },
-  { category: "inferred", heading: "Inferred", hint: "A candidate reading, not a fact." },
-  { category: "missing", heading: "Missing", hint: "Needed to support or rule this out." },
-];
+const CATEGORY_ORDER: EvidenceCategory[] = ["observed", "known", "inferred", "missing"];
+const CATEGORY_LABEL: Record<EvidenceCategory, string> = {
+  observed: "Observed",
+  known: "Known",
+  inferred: "Inferred",
+  missing: "Missing",
+};
 
-export function EvidenceView({ hypotheses, onOpenCitation }: EvidenceViewProps) {
+export function EvidenceView({ hypotheses, revisionLabel = "—", onOpenCitation, onSelectHypothesis }: EvidenceViewProps) {
   if (hypotheses.length === 0) {
     return (
       <p className={`p-5 text-sm ${text.muted}`}>
@@ -38,72 +48,87 @@ export function EvidenceView({ hypotheses, onOpenCitation }: EvidenceViewProps) 
     );
   }
 
-  return (
-    <div className="flex flex-col gap-6 p-5">
-      {SECTIONS.map((section) => {
-        const items = hypotheses.flatMap((hypothesis, hypothesisIndex) =>
-          hypothesis.evidence
-            .filter((item) => item.category === section.category)
-            .map((item) => ({ item, hypothesis, hypothesisIndex })),
-        );
-        if (items.length === 0) return null;
-        const style = evidence[section.category];
+  const rows = CATEGORY_ORDER.flatMap((category) =>
+    hypotheses.flatMap((hypothesis, hypothesisIndex) =>
+      hypothesis.evidence
+        .filter((item) => item.category === category)
+        .map((item, itemIndex) => ({
+          key: `${category}-${hypothesisIndex}-${itemIndex}`,
+          category,
+          item,
+          hypothesis,
+          hypothesisIndex,
+        })),
+    ),
+  );
 
-        return (
-          <section key={section.category} aria-labelledby={`evidence-${section.category}-heading`} className="flex flex-col gap-2.5">
-            <div className="flex items-baseline gap-2">
-              <span aria-hidden="true" className={style.glyphColor}>
-                {style.glyph}
-              </span>
-              <h3 id={`evidence-${section.category}-heading`} className={text.kicker}>
-                {section.heading}
-              </h3>
-              <span className={`text-xs ${text.muted}`}>{section.hint}</span>
-            </div>
-            <ul className="flex flex-col divide-y divide-[#1c212a]">
-              {items.map(({ item, hypothesis, hypothesisIndex }, itemIndex) => (
-                <li
-                  key={itemIndex}
-                  className={`flex items-start gap-2.5 border-l-2 py-2 pl-3 ${style.borderColor} ${style.dashed ? "border-dashed" : ""}`}
-                >
-                  <p
-                    className={
-                      section.category === "inferred"
-                        ? "text-sm italic"
-                        : section.category === "missing"
-                          ? `text-sm ${text.muted}`
-                          : "text-sm"
-                    }
-                  >
-                    {item.description}
-                    <span className={`ml-2 text-xs ${text.muted}`}>— {hypothesis.title}</span>
-                    {item.citation ? (
-                      <>
-                        {" "}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onOpenCitation(item.citation!, item.category, hypothesisIndex, hypothesis.title)
-                          }
-                          className={`inline-flex items-center gap-1 rounded-[7px] border border-[#22c55e]/40 bg-[#22c55e]/5 px-1.5 py-0.5 align-middle text-[11px] text-[#22c55e] transition-colors hover:border-[#22c55e]/70 hover:bg-[#22c55e]/15 ${focusRing}`}
-                        >
-                          <span aria-hidden="true">⌗</span>
-                          {item.citation.filename}
-                          {item.citation.section
-                            ? ` · ${item.citation.section}`
-                            : item.citation.pageNumber
-                              ? ` · p.${item.citation.pageNumber}`
-                              : ""}
-                        </button>
-                      </>
-                    ) : null}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </section>
-        );
-      })}
-    </div>
+  return (
+    <section aria-labelledby="evidence-view-heading" className="flex flex-col gap-2 p-5">
+      <h2 id="evidence-view-heading" className={text.kicker}>
+        Evidence
+      </h2>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Type</TableHead>
+            <TableHead>Evidence</TableHead>
+            <TableHead>Source</TableHead>
+            <TableHead>Revision</TableHead>
+            <TableHead>Used by</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map(({ key, category, item, hypothesis, hypothesisIndex }) => {
+            const style = evidence[category];
+            return (
+              <TableRow key={key}>
+                <TableCell className="whitespace-nowrap">
+                  <span className={`inline-flex items-center gap-1.5 ${style.glyphColor}`}>
+                    <span aria-hidden="true">{style.glyph}</span>
+                    <span className="text-xs font-medium uppercase tracking-wide">{CATEGORY_LABEL[category]}</span>
+                  </span>
+                </TableCell>
+                <TableCell className={`max-w-[420px] whitespace-normal ${category === "inferred" ? "italic" : ""}`}>
+                  {item.description}
+                </TableCell>
+                <TableCell className="whitespace-nowrap">
+                  {item.citation ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpenCitation(item.citation!, item.category, hypothesisIndex, hypothesis.title)}
+                      className={`inline-flex items-center gap-1 rounded-[7px] border border-primary/40 bg-primary/5 px-1.5 py-0.5 text-[11px] text-primary transition-colors hover:border-primary/70 hover:bg-primary/15 ${focusRing}`}
+                    >
+                      <span aria-hidden="true">⌗</span>
+                      {item.citation.filename}
+                      {item.citation.section
+                        ? ` · ${item.citation.section}`
+                        : item.citation.pageNumber
+                          ? ` · p.${item.citation.pageNumber}`
+                          : ""}
+                    </button>
+                  ) : (
+                    <span className={text.muted}>—</span>
+                  )}
+                </TableCell>
+                <TableCell className={`whitespace-nowrap ${text.mono}`}>{revisionLabel}</TableCell>
+                <TableCell className="max-w-[220px] whitespace-normal">
+                  {onSelectHypothesis ? (
+                    <button
+                      type="button"
+                      onClick={() => onSelectHypothesis(hypothesis, hypothesisIndex)}
+                      className={`text-left text-foreground underline-offset-2 hover:underline ${focusRing}`}
+                    >
+                      {hypothesis.title}
+                    </button>
+                  ) : (
+                    hypothesis.title
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </section>
   );
 }

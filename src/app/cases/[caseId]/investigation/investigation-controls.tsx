@@ -115,14 +115,19 @@ export function InvestigationControls({
         </div>
       ) : null}
 
-      {/* Recording an observation now goes through the floating bottom
-          composer (case-composer.tsx) — the same investigation_events
-          write, just reached via the "tell Crado what changed" input
-          instead of a second structured form. Recording an ENGINEERING
-          CHANGE stays its own explicit action here: it creates a new
-          product revision, too consequential a structured operation to
-          infer from free text. Only makes sense once there's at least one
-          hypothesis to follow up on. */}
+      {/* Recording an observation OR an engineering change now primarily
+          goes through the floating bottom composer (case-composer.tsx) —
+          "Changed the display termination and created Rev18." classifies
+          as an Engineering change intent there, the same
+          createEngineeringChange write this structured form makes.
+          UX-04: kept here too, as a reliable manual fallback for a change
+          too irregularly worded for the deterministic parser to read
+          cleanly — RecordEngineeringChangeForm already starts collapsed
+          behind its own single button (see that component), which is
+          already the "not the default/easiest visible path" behavior
+          Advanced elsewhere in this pass provides, so it isn't
+          double-wrapped in a second disclosure here. Only makes sense
+          once there's at least one hypothesis to follow up on. */}
       {state.status !== "running" && state.hypotheses.length > 0 ? (
         <div className="flex flex-wrap gap-3">
           <RecordEngineeringChangeForm

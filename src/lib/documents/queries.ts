@@ -8,6 +8,7 @@
 // request lifecycle, and pagination is directly integration-tested here
 // against real Postgres, which needs to construct its own client outside
 // that lifecycle.
+import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import type {
@@ -32,6 +33,12 @@ export interface DocumentListItem {
   productName: string | null;
   revisionLabel: string | null;
   isCurrent: boolean;
+  /** Real distinct-citation count from countDocumentCitationsByWorkspace,
+   * merged in by the caller (listEngineeringDocuments doesn't compute it
+   * itself — it's a separate, workspace-wide query, not a per-page one).
+   * Optional/defaults to 0 in callers that don't need the Sources table's
+   * USED column (e.g. a product's own document list). */
+  usedCount?: number;
 }
 
 export interface ListDocumentsInput {
@@ -144,4 +151,46 @@ function mapDocumentRow(row: {
     revisionLabel: row.product_revisions?.label ?? null,
     isCurrent: row.is_current,
   };
+}
+
+// A minimal, local shape — only what's needed to pull a document_id out of
+// a hypothesis.created payload's evidence citations. Deliberately not the
+// full hypothesisCreatedPayloadSchema (src/lib/analysis/events.ts, not
+// exported): this never needs to validate a hypothesis's title/confidence/
+// evidence description, only that a citation's documentId exists, so a
+// smaller, purpose-built schema is what "no fabricated dashboard numbers"
+// actually calls for — a real, minimal read, not importing the world.
+const citationCountPayloadSchema = z.object({
+  evidence: z.array(z.object({ citation: z.object({ documentId: z.string() }).optional() })),
+});
+
+/** How many distinct hypothesis-evidence citations reference each document
+ * across every past investigation in the current workspace — the Sources
+ * table's USED column (UX-04's ticket spec). Never a placeholder: RLS
+ * already scopes analysis_events to the caller's workspace (workspace_id
+ * is a column on the row itself, not reached via a join), so this reads
+ * real, already-persisted hypothesis.created events and counts real
+ * citations — the same source of truth deriveSourcesUsed.ts already uses
+ * for a single run, generalized to the whole workspace. A document with no
+ * entry in the returned map has genuinely never been cited, not merely
+ * "not yet counted." */
+export async function countDocumentCitationsByWorkspace(
+  supabase: SupabaseClient<Database>,
+): Promise<Map<string, number>> {
+  const { data, error } = await supabase
+    .from("analysis_events")
+    .select("payload")
+    .eq("event_type", "hypothesis.created");
+  if (error || !data) return new Map();
+
+  const byDocument = new Map<string, number>();
+  for (const row of data) {
+    const parsed = citationCountPayloadSchema.safeParse(row.payload);
+    if (!parsed.success) continue;
+    for (const item of parsed.data.evidence) {
+      if (!item.citation) continue;
+      byDocument.set(item.citation.documentId, (byDocument.get(item.citation.documentId) ?? 0) + 1);
+    }
+  }
+  return byDocument;
 }

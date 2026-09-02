@@ -26,6 +26,7 @@ import {
   type WorkspaceState,
 } from "@/lib/investigation/reconstruct";
 import { SseEventParser } from "@/lib/investigation/parse-sse-events";
+import type { MeasurementComparison } from "@/lib/measurements/compare-measurements";
 import { InvestigationCanvas } from "./canvas/investigation-canvas";
 import { InvestigationControls } from "./investigation-controls";
 import { InvestigationTimeline } from "./investigation-timeline";
@@ -127,6 +128,36 @@ export function InvestigationWorkspace({
 
   function handleSelectMeasurement() {
     setSelection({ kind: "measurement" });
+  }
+
+  // UX-04 live-update: the composer's Measurement/Observation intents call
+  // these right after their own server action succeeds, so the new
+  // artifact appears on the canvas immediately — the same
+  // append-to-local-timeline precedent the hypothesis.created SSE handler
+  // above already established, not a new pattern. A page refresh still
+  // reconstructs the authoritative version of the same entry from
+  // Postgres; this is purely a same-session "don't wait for a refresh"
+  // fix, exactly like the MVP-11 timeline live-update comment above
+  // describes for hypotheses.
+  function handleObservationRecorded(entry: { observation: string; measurementChange: string | null }) {
+    setTimeline((prev) => [
+      ...prev,
+      {
+        type: "observation",
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        observation: entry.observation,
+        measurementChange: entry.measurementChange,
+      },
+    ]);
+  }
+
+  function handleMeasurementRecorded(comparison: MeasurementComparison | null) {
+    if (!comparison) return;
+    setTimeline((prev) => [
+      ...prev,
+      { type: "result", id: crypto.randomUUID(), createdAt: new Date().toISOString(), comparison },
+    ]);
   }
 
   const hasPeak = (measurement?.peaks.length ?? 0) > 0;
@@ -321,8 +352,13 @@ export function InvestigationWorkspace({
             ) : null}
 
             {activeTab === "evidence" ? (
-              <div className="mx-auto w-full max-w-[760px]">
-                <EvidenceView hypotheses={state.hypotheses} onOpenCitation={handleOpenCitation} />
+              <div className="mx-auto w-full max-w-[900px]">
+                <EvidenceView
+                  hypotheses={state.hypotheses}
+                  revisionLabel={currentRevisionLabel}
+                  onOpenCitation={handleOpenCitation}
+                  onSelectHypothesis={handleSelectHypothesis}
+                />
               </div>
             ) : null}
 
@@ -333,7 +369,7 @@ export function InvestigationWorkspace({
             ) : null}
 
             {activeTab === "sources" ? (
-              <div className="mx-auto w-full max-w-[760px]">
+              <div className="mx-auto w-full max-w-[900px]">
                 <SourcesPanel hypotheses={state.hypotheses} metrics={state.agentMetrics} />
               </div>
             ) : null}
@@ -355,7 +391,15 @@ export function InvestigationWorkspace({
 
         <div className="pointer-events-none sticky bottom-0 flex flex-col items-center gap-1.5 px-4 pb-4 pt-2 sm:px-6">
           <div className="pointer-events-auto w-full">
-            <CaseComposer caseId={caseId} />
+            <CaseComposer
+              caseId={caseId}
+              productId={productId}
+              revisionId={revisionId}
+              currentRevisionLabel={currentRevisionLabel}
+              measurement={measurement}
+              onMeasurementRecorded={handleMeasurementRecorded}
+              onObservationRecorded={handleObservationRecorded}
+            />
           </div>
           {busy ? (
             <p className={`text-xs ${text.muted}`} role="status" aria-live="polite">

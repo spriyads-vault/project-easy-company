@@ -6,6 +6,7 @@ import { getLatestRevisionInLineage } from "@/lib/products/revision-lineage";
 import { AddMeasurementForm } from "./add-measurement-form";
 import { TopBar } from "./investigation/top-bar";
 import { surface, text } from "./investigation/theme";
+import { AdvancedDisclosure } from "@/lib/design/advanced-disclosure";
 
 interface CasePageProps {
   params: Promise<{ caseId: string }>;
@@ -97,16 +98,22 @@ export default async function CasePage({ params }: CasePageProps) {
 
           <section className={`flex flex-col gap-3 p-5 ${surface.card}`}>
             <h2 className={text.kicker}>Add a measurement</h2>
-            {currentRevision.id !== failureCase.productRevisionId ? (
-              <p className={`text-xs ${text.muted}`}>
-                This will be recorded against {currentRevision.label}, the
-                current revision following an engineering change.
-              </p>
-            ) : null}
-            <AddMeasurementForm
-              caseId={failureCase.id}
-              productRevisionId={currentRevision.id}
-            />
+            <p className={`text-sm ${text.muted}`}>
+              In the investigation workspace, tell Crado what you measured and confirm it — the composer covers
+              this. Use manual entry below only as a fallback.
+            </p>
+            <AdvancedDisclosure label="Manual entry (advanced)">
+              {currentRevision.id !== failureCase.productRevisionId ? (
+                <p className={`mb-3 text-xs ${text.muted}`}>
+                  This will be recorded against {currentRevision.label}, the
+                  current revision following an engineering change.
+                </p>
+              ) : null}
+              <AddMeasurementForm
+                caseId={failureCase.id}
+                productRevisionId={currentRevision.id}
+              />
+            </AdvancedDisclosure>
           </section>
         </div>
       </div>

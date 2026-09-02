@@ -6,6 +6,7 @@ import { listFailureCases, type FailureCaseSummary } from "@/lib/cases/queries";
 import { AddFactForm } from "./add-fact-form";
 import { OpenCaseButton } from "./open-case-button";
 import { PageHeader } from "@/lib/design/page-header";
+import { AdvancedDisclosure } from "@/lib/design/advanced-disclosure";
 import { EmptyState } from "@/lib/design/empty-state";
 import { StatusBadge } from "@/lib/design/status-badge";
 import { surface, typography, type HeroStatusTone } from "@/lib/design/tokens";
@@ -66,7 +67,13 @@ export default async function RevisionPage({ params }: RevisionPageProps) {
 
             <section className={`flex flex-col gap-4 p-5 ${surface.card}`}>
               <h2 className={typography.sectionHeading}>Add a fact</h2>
-              <AddFactForm productId={productId} revisionId={revisionId} />
+              <p className={`${typography.body} text-muted-foreground`}>
+                A structured product fact (a clock frequency, a radio, a connector) Crado can correlate against a
+                measurement.
+              </p>
+              <AdvancedDisclosure label="Add a fact" defaultOpen>
+                <AddFactForm productId={productId} revisionId={revisionId} />
+              </AdvancedDisclosure>
             </section>
           </div>
 

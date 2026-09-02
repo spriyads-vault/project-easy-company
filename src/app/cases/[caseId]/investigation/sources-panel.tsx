@@ -1,11 +1,16 @@
-// SOURCES: which documents were actually used as evidence in this run —
-// derived from real citations (see derive-sources-used.ts), never a
-// generic "documents in the workspace" list. Honest empty states: a run
-// that searched and found nothing says so; a run that never searched
-// renders nothing at all (see AgentActivityPanel's own guard for that).
+// SOURCES (UX-03 → UX-04 table): which documents were actually used as
+// evidence in this run — derived from real citations (see
+// derive-sources-used.ts), never a generic "documents in the workspace"
+// list. Honest empty states: a run that searched and found nothing says
+// so; a run that never searched renders nothing at all. This is the
+// per-investigation scoped view — NAME/TYPE/PASSAGES USED are the columns
+// that make sense once already scoped to one run; the workspace-wide
+// Sources index (with PRODUCT/REVISION/STATUS/USED/UPDATED) lives at
+// /documents (see document-list.tsx).
 import Link from "next/link";
 import type { AgentCompletedPayload, HypothesisCreatedPayload } from "@/lib/analysis/events";
 import { describeDocumentType } from "@/lib/documents/describe-document-type";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { deriveSourcesUsed } from "./derive-sources-used";
 import { surface, text } from "./theme";
 
@@ -53,24 +58,30 @@ export function SourcesPanel({ hypotheses, metrics }: SourcesPanelProps) {
             : "No document passages were used as evidence in this investigation."}
         </p>
       ) : (
-        <ul className="flex flex-col divide-y divide-[#1c212a]">
-          {sources.map((source) => (
-            <li
-              key={source.documentId}
-              className="flex items-center justify-between gap-3 py-2.5"
-            >
-              <div className="flex min-w-0 flex-col">
-                <span className="truncate text-sm">{source.filename}</span>
-                <span className={`${text.kicker} text-[10px]`}>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Passages used</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sources.map((source) => (
+              <TableRow key={source.documentId}>
+                <TableCell className="max-w-[360px] truncate font-medium text-foreground">
+                  {source.filename}
+                </TableCell>
+                <TableCell className="whitespace-nowrap text-muted-foreground">
                   {describeDocumentType(source.documentType)}
-                </span>
-              </div>
-              <span className={`shrink-0 text-xs ${text.mono} ${text.muted}`}>
-                {source.passageCount} {source.passageCount === 1 ? "passage" : "passages"} used
-              </span>
-            </li>
-          ))}
-        </ul>
+                </TableCell>
+                <TableCell className={`whitespace-nowrap ${text.mono}`}>
+                  {source.passageCount} {source.passageCount === 1 ? "passage" : "passages"} used
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
 
       <Link

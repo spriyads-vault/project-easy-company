@@ -8,7 +8,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { listEngineeringDocuments } from "./queries";
+import { countDocumentCitationsByWorkspace, listEngineeringDocuments } from "./queries";
 import {
   createAdminClient,
   createConfirmedUser,
@@ -107,5 +107,120 @@ describe("listEngineeringDocuments", () => {
     } finally {
       await admin.auth.admin.deleteUser(freshUser.id);
     }
+  });
+});
+
+describe("countDocumentCitationsByWorkspace", () => {
+  const admin = createAdminClient();
+  let userA: { id: string; client: SupabaseClient<Database> };
+  let userB: { id: string; client: SupabaseClient<Database> };
+
+  beforeAll(async () => {
+    const suffix = Date.now();
+    userA = await createConfirmedUser(admin, `docs-cite-a-${suffix}@example.com`);
+    userB = await createConfirmedUser(admin, `docs-cite-b-${suffix}@example.com`);
+  }, 20_000);
+
+  afterAll(async () => {
+    if (userA) await admin.auth.admin.deleteUser(userA.id);
+    if (userB) await admin.auth.admin.deleteUser(userB.id);
+  });
+
+  async function seedCitedDocument(
+    db: SupabaseClient<Database>,
+    filename: string,
+  ): Promise<{ documentId: string; runId: string }> {
+    const { data: doc, error: docError } = await db
+      .from("engineering_documents")
+      .insert({
+        filename,
+        document_type: "schematic",
+        mime_type: "application/pdf",
+        byte_size: 100,
+        storage_path: `x/x/${filename}`,
+        status: "indexed",
+      })
+      .select("id")
+      .single();
+    if (docError || !doc) throw docError ?? new Error("no document");
+
+    const { data: product } = await db.from("products").insert({ name: `Cite Test ${filename}` }).select("id").single();
+    const { data: revision } = await db
+      .from("product_revisions")
+      .insert({ product_id: product!.id, label: "Rev1" })
+      .select("id")
+      .single();
+    const { data: failureCase } = await db
+      .from("failure_cases")
+      .insert({ product_revision_id: revision!.id, title: `Case for ${filename}` })
+      .select("id")
+      .single();
+    const { data: run } = await db
+      .from("analysis_runs")
+      .insert({ failure_case_id: failureCase!.id, status: "completed" })
+      .select("id")
+      .single();
+    return { documentId: doc.id, runId: run!.id };
+  }
+
+  async function insertCitationEvent(
+    db: SupabaseClient<Database>,
+    runId: string,
+    sequence: number,
+    documentId: string,
+    chunkId: string,
+  ) {
+    await db.from("analysis_events").insert({
+      analysis_run_id: runId,
+      sequence,
+      event_type: "hypothesis.created",
+      payload: {
+        productFactId: "fact-x",
+        title: "Test hypothesis",
+        confidenceBand: "medium",
+        recommendedNextStep: "Re-measure.",
+        evidence: [
+          {
+            category: "known",
+            description: "Cited passage.",
+            citation: {
+              documentId,
+              chunkId,
+              filename: "irrelevant.pdf",
+              documentType: "schematic",
+              pageNumber: null,
+              section: null,
+              passage: "irrelevant",
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  it("counts real, distinct citations for a document across multiple hypotheses/runs (real, not fabricated)", async () => {
+    const { documentId, runId } = await seedCitedDocument(userA.client, `cited-${Date.now()}.pdf`);
+    await insertCitationEvent(userA.client, runId, 0, documentId, "chunk-1");
+    await insertCitationEvent(userA.client, runId, 1, documentId, "chunk-2");
+
+    const counts = await countDocumentCitationsByWorkspace(userA.client);
+    expect(counts.get(documentId)).toBe(2);
+  });
+
+  it("never counts another workspace's citations toward this workspace's documents (workspace isolation)", async () => {
+    const { documentId, runId } = await seedCitedDocument(userB.client, `isolated-${Date.now()}.pdf`);
+    await insertCitationEvent(userB.client, runId, 0, documentId, "chunk-1");
+
+    const asA = await countDocumentCitationsByWorkspace(userA.client);
+    expect(asA.has(documentId)).toBe(false);
+
+    const asB = await countDocumentCitationsByWorkspace(userB.client);
+    expect(asB.get(documentId)).toBe(1);
+  });
+
+  it("returns an empty map, not a fabricated zero-count entry, for a document that was never cited (missing-data case)", async () => {
+    const { documentId } = await seedCitedDocument(userA.client, `uncited-${Date.now()}.pdf`);
+    const counts = await countDocumentCitationsByWorkspace(userA.client);
+    expect(counts.has(documentId)).toBe(false);
   });
 });

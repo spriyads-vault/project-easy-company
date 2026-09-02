@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentWorkspace } from "@/lib/workspace/get-current-workspace";
 import { createClient } from "@/lib/supabase/server";
-import { listEngineeringDocuments } from "@/lib/documents/queries";
+import { countDocumentCitationsByWorkspace, listEngineeringDocuments } from "@/lib/documents/queries";
 import { DOCUMENT_TYPE_GROUPS } from "@/lib/documents/describe-document-type";
 import { UploadForm } from "./upload-form";
 import { DocumentList } from "./document-list";
@@ -28,10 +28,11 @@ export default async function DocumentsPage({ searchParams }: DocumentsPageProps
   const documentTypes = typeFilter ? DOCUMENT_TYPE_GROUPS[typeFilter] : undefined;
 
   const supabase = await createClient();
-  const { documents, totalCount, pageSize } = await listEngineeringDocuments(supabase, {
-    page,
-    documentTypes,
-  });
+  const [{ documents: rawDocuments, totalCount, pageSize }, citationCounts] = await Promise.all([
+    listEngineeringDocuments(supabase, { page, documentTypes }),
+    countDocumentCitationsByWorkspace(supabase),
+  ]);
+  const documents = rawDocuments.map((doc) => ({ ...doc, usedCount: citationCounts.get(doc.id) ?? 0 }));
 
   // The header count always reflects the whole workspace, not the active
   // filter — a filter narrows what's shown, it never implies the library

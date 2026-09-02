@@ -19,8 +19,13 @@ export interface ParsedEngineerInput {
 
 const SIGNED_DB_PATTERN = /([+-])\s*(\d+(?:\.\d+)?)\s*dB\b/i;
 const MAGNITUDE_DB_PATTERN = /(\d+(?:\.\d+)?)\s*dB\b/i;
-const DECREASE_WORDS = /\b(dropped|decreased|reduced|fell|lower|down)\b/i;
-const INCREASE_WORDS = /\b(increased|rose|climbed|higher|up)\b/i;
+// Exported for classify-composer-intent.ts (UX-04): a delta-direction word
+// like "dropped" is exactly the signal that tells the composer's intent
+// classifier this dB figure describes a *change* (an Observation), not an
+// absolute margin reading (a Measurement) — see that module's own comments
+// for the full reasoning.
+export const DECREASE_WORDS = /\b(dropped|decreased|reduced|fell|lower|down)\b/i;
+export const INCREASE_WORDS = /\b(increased|rose|climbed|higher|up)\b/i;
 
 function formatDelta(deltaDb: number): string {
   return deltaDb > 0 ? `+${deltaDb} dB` : `${deltaDb} dB`;

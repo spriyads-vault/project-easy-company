@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { DocumentListItem } from "@/lib/documents/queries";
 import { DocumentList } from "./document-list";
@@ -62,8 +62,12 @@ describe("DocumentList", () => {
         totalCount={2}
       />,
     );
-    expect(screen.getByText(/schematic · 5 pages/i)).toBeInTheDocument();
-    expect(screen.queryByText(/no-pages.*pages/i)).not.toBeInTheDocument();
+    expect(screen.getByText("· 5 pages")).toBeInTheDocument();
+    // The filename itself ("no-pages.txt") legitimately contains the
+    // substring "pages" — check the specific "N pages" suffix isn't
+    // rendered for this row, not the row's raw text content.
+    expect(screen.queryByText("· null pages")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^· \d+ pages$/)).toHaveTextContent("· 5 pages");
   });
 
   it("shows the product/revision it's scoped to, and omits that segment for a workspace-level document", () => {
@@ -78,19 +82,39 @@ describe("DocumentList", () => {
         totalCount={2}
       />,
     );
-    expect(screen.getByText(/Gateway X Rev17/)).toBeInTheDocument();
+    const scopedRow = screen.getByText("scoped.pdf").closest("tr")!;
+    expect(within(scopedRow).getByText("Gateway X")).toBeInTheDocument();
+    expect(within(scopedRow).getByText("Rev17")).toBeInTheDocument();
+    const workspaceRow = screen.getByText("workspace-level.pdf").closest("tr")!;
+    expect(within(workspaceRow).getAllByText("—")).toHaveLength(2);
   });
 
-  it("shows the real indexed date for an indexed document", () => {
+  it("shows the real indexed date (not the upload date) for an indexed document, in the Updated column", () => {
     render(
       <DocumentList
-        documents={[doc({ status: "indexed", indexedAt: "2026-08-31T00:01:00.000Z" })]}
+        documents={[
+          doc({ status: "indexed", uploadedAt: "2026-08-01T00:00:00.000Z", indexedAt: "2026-08-31T00:01:00.000Z" }),
+        ]}
         page={1}
         pageSize={25}
         totalCount={1}
       />,
     );
-    expect(screen.getByText(/^Indexed /)).toBeInTheDocument();
+    expect(screen.getByText("31 Aug 2026")).toBeInTheDocument();
+    expect(screen.queryByText("1 Aug 2026")).not.toBeInTheDocument();
+  });
+
+  it("shows a real, non-fabricated citation count in the Used column, defaulting to 0 when uncited", () => {
+    render(
+      <DocumentList
+        documents={[doc({ filename: "cited.pdf", usedCount: 3 }), doc({ id: "2", filename: "uncited.pdf" })]}
+        page={1}
+        pageSize={25}
+        totalCount={2}
+      />,
+    );
+    expect(screen.getByText("3 citations")).toBeInTheDocument();
+    expect(screen.getByText("0 citations")).toBeInTheDocument();
   });
 
   it("shows pagination controls only when there is more than one page, with real page numbers", () => {
