@@ -551,14 +551,13 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
   });
 });
 
-/** Simulates a viewport below Tailwind's `lg` breakpoint by making
- * `window.matchMedia` report a match for the workspace's own
- * `(max-width: 1023px)` query — the same mechanism a real narrow browser
- * window drives, without needing an actual layout engine (jsdom has
- * none). */
-function mockBelowLgViewport() {
+/** Simulates a viewport matching exactly the given media query strings by
+ * making `window.matchMedia` report `matches: true` only for queries in
+ * `matchingQueries` — the same mechanism a real narrow browser window
+ * drives, without needing an actual layout engine (jsdom has none). */
+function mockViewport(matchingQueries: string[]) {
   const matchMedia = vi.fn().mockImplementation((query: string) => ({
-    matches: query === "(max-width: 1023px)",
+    matches: matchingQueries.includes(query),
     media: query,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
@@ -566,14 +565,22 @@ function mockBelowLgViewport() {
   Object.defineProperty(window, "matchMedia", { writable: true, configurable: true, value: matchMedia });
 }
 
-describe("InvestigationWorkspace — mobile fallback (UX-04)", () => {
+// Three tiers, matching investigation-workspace.tsx's own CANVAS_QUERY
+// ("(max-width: 767px)") and RAIL_QUERY ("(max-width: 1023px)"): below
+// 768 both queries match (mobile stack); 768-1023 only the rail query
+// matches (canvas, no persistent rail — the ticket's "laptop/tablet"
+// tier); 1024+ neither matches (canvas + persistent rail).
+const mockMobileViewport = () => mockViewport(["(max-width: 767px)", "(max-width: 1023px)"]);
+const mockTabletViewport = () => mockViewport(["(max-width: 1023px)"]);
+
+describe("InvestigationWorkspace — responsive breakpoints (UX-04 visual correction)", () => {
   afterEach(() => {
     // @ts-expect-error -- test-only cleanup of the property this suite defines.
     delete window.matchMedia;
   });
 
-  it("renders the investigation stack (not the React Flow canvas) below the desktop breakpoint, with the same artifacts", () => {
-    mockBelowLgViewport();
+  it("renders the investigation stack (not the React Flow canvas) below the mobile breakpoint, with the same artifacts", () => {
+    mockMobileViewport();
     const persistedState = reconstructFromPersistedEvents([
       runStarted(),
       measurementLoaded(),
@@ -590,7 +597,7 @@ describe("InvestigationWorkspace — mobile fallback (UX-04)", () => {
   });
 
   it("opens the hypothesis detail in a bottom sheet — the mobile substitute for the persistent rail — when a stack artifact is tapped", () => {
-    mockBelowLgViewport();
+    mockMobileViewport();
     const persistedState = reconstructFromPersistedEvents([
       runStarted(),
       measurementLoaded(),
@@ -609,8 +616,46 @@ describe("InvestigationWorkspace — mobile fallback (UX-04)", () => {
   });
 
   it("still lets an engineer reach the composer and record an observation on mobile (no primary capability becomes desktop-only)", () => {
-    mockBelowLgViewport();
+    mockMobileViewport();
     render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
     expect(screen.getByPlaceholderText(/tell crado/i)).toBeInTheDocument();
+  });
+
+  it("renders the real canvas (not the mobile stack) at the laptop/tablet tier, with the Sheet substituting for the persistent rail", () => {
+    mockTabletViewport();
+    const persistedState = reconstructFromPersistedEvents([
+      runStarted(),
+      measurementLoaded(),
+      correlationFound(),
+      hypothesisCreated(),
+      runCompleted(),
+    ]);
+    render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+
+    // The canvas, identified by React Flow's own application role — not
+    // the mobile stack's plain <ol>.
+    expect(screen.getByRole("application")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Investigation, in order" })).not.toBeInTheDocument();
+    // No persistent rail at this width either — same Sheet substitute the
+    // mobile tier uses.
+    expect(screen.queryByLabelText("Case context")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("5th harmonic of 40 MHz system clock"));
+    const sheet = screen.getByRole("dialog");
+    expect(within(sheet).getByLabelText("Case context")).toBeInTheDocument();
+  });
+
+  it("renders the canvas with the real persistent resizable rail at the large-desktop tier (matchMedia unmocked, default false)", () => {
+    const persistedState = reconstructFromPersistedEvents([
+      runStarted(),
+      measurementLoaded(),
+      correlationFound(),
+      hypothesisCreated(),
+      runCompleted(),
+    ]);
+    render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+
+    expect(screen.getByRole("application")).toBeInTheDocument();
+    expect(screen.getByLabelText("Case context")).toBeInTheDocument();
   });
 });

@@ -3,12 +3,16 @@
 // CANVAS ARTIFACT NODES (UX-04 Agent-Native): one real, distinct React
 // component per artifact kind — never one generic card with a different
 // label swapped in. Each desktop node renders inside a React Flow node
-// wrapper (a target handle on top, a source handle on bottom, both nearly
-// invisible — the drawn edge is the visual connector, not the handle dot
-// itself). Selection/click-through is handled at the canvas level
-// (onNodeClick), so these stay pure render components with no callback
-// props of their own except the two that open something outside the graph
-// (a citation drawer, the composer).
+// wrapper (a target handle on the LEFT, a source handle on the RIGHT,
+// both nearly invisible — the drawn edge is the visual connector, not
+// the handle dot itself). Left/right, not top/bottom, matches the
+// layout's left-to-right reading order (build-canvas-graph.ts) — a
+// visual-correction change from the original top-to-bottom handles,
+// which only made sense for the old single vertical chain.
+// Selection/click-through is handled at the canvas level (onNodeClick),
+// so these stay pure render components with no callback props of their
+// own except the two that open something outside the graph (a citation
+// drawer, the composer).
 //
 // Each node's actual content is a separate `*Content` component taking the
 // typed payload directly (not React Flow's NodeProps) — the mobile
@@ -19,7 +23,7 @@
 // both the desktop node components and the mobile stack read from here,
 // so the two surfaces can never silently drift apart.
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import type { CanvasNodeData } from "./build-canvas-graph";
+import { NODE_WIDTH, type CanvasNodeData } from "./build-canvas-graph";
 import type { MeasurementRow } from "@/lib/cases/queries";
 import type { CorrelationFoundPayload, HypothesisCreatedPayload } from "@/lib/analysis/events";
 import type { FinalEvidenceItem } from "@/lib/hypotheses/schema";
@@ -44,11 +48,12 @@ function NodeShell({
 }) {
   return (
     <div
-      className={`crado-fade-in w-[320px] cursor-pointer rounded-2xl border-l-2 bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.3),0_10px_24px_-14px_rgba(0,0,0,0.6)] ${accent} ${dashed ? "border border-dashed border-border" : "border border-border"}`}
+      style={{ width: NODE_WIDTH }}
+      className={`crado-fade-in cursor-pointer rounded-2xl border-l-2 bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.3),0_10px_24px_-14px_rgba(0,0,0,0.6)] ${accent} ${dashed ? "border border-dashed border-border" : "border border-border"}`}
     >
-      {showTarget ? <Handle type="target" position={Position.Top} className={DOT_HANDLE} /> : null}
+      {showTarget ? <Handle type="target" position={Position.Left} className={DOT_HANDLE} /> : null}
       {children}
-      {showSource ? <Handle type="source" position={Position.Bottom} className={DOT_HANDLE} /> : null}
+      {showSource ? <Handle type="source" position={Position.Right} className={DOT_HANDLE} /> : null}
     </div>
   );
 }

@@ -2724,3 +2724,144 @@ set to `true` in `features.json`; `UX-04-LIGHT`'s superseded entry left
 untouched.
 
 - Commit: `d77d737`
+
+## UX-04 — reopened: investigation-canvas visual correction
+
+Reopened after pilot review flagged three defects from screenshots: the
+investigation canvas rendered as a narrow, vertically-stretched single
+chain (excessive empty horizontal space, cards small enough to need
+manual zoom), and the Observation/Next-test area was clipped at the
+canvas's bottom edge.
+
+**Root cause (diagnosed, not assumed to be `rankdir`)**: three independent
+issues stacked on top of each other, not one:
+1. `build-canvas-graph.ts`'s layout was purely top-to-bottom — every trunk
+   node (measurement, correlation, each hypothesis, every history entry)
+   was placed at `x = 0`, one below the previous. Hypotheses fanned out
+   *horizontally* into their own columns instead of stacking under a
+   shared stage, so anything after the fan-out collapsed back onto a
+   single vertical trunk. Available viewport width was never used.
+2. Static per-kind height estimates (`missing: 130`) were too small for
+   real multi-item missing-evidence content, so raw-coordinate overlap
+   between a hypothesis's missing-evidence card and the next lane's
+   cards was a real, reproducible defect, not a visual illusion.
+3. `<ReactFlow fitView>` (boolean prop) takes precedence over
+   `defaultViewport` on mount and centers on the *entire* bounding box;
+   for a graph taller/wider than fits at the configured `minZoom` floor,
+   that crops symmetrically from *both* ends rather than anchoring to
+   the graph's natural reading-start (the Measurement node) — this is
+   what produced both "must zoom in to read anything" and "bottom
+   section clipped," on the X and Y axes respectively depending on
+   which dimension overflowed first.
+
+**Layout changes** (`build-canvas-graph.ts`, rewritten): stage/column
+layout — Measurement, Deterministic correlation, Hypothesis,
+Missing-evidence/Observation, Next-test, Change/Revision, Outcome each
+get one fixed column in that left-to-right reading order. Multiple nodes
+at the same stage (parallel hypotheses, a run of history entries) stack
+*vertically* within that one column via per-column cursors, never
+sideways into their own columns. A hypothesis and its own
+missing-evidence/next-test cards share one visual row ("lane") across
+three columns, grouped by shared `y`; a lane's height is the tallest of
+its three cards, so the next lane starts only after every card in the
+previous one has actually ended — this structurally fixes the
+overlap (missing/next-action columns are now distinct from
+observation's column, so that specific pairing can never overlap
+regardless of content length). `NODE_WIDTH` widened 320→360px so real
+copy reads without forcing extra height. Two-pass sizing: a static
+`ROW_HEIGHTS` estimate for first paint (still what the pure-function
+tests exercise), then a second `buildCanvasGraph` pass once
+`useNodesInitialized()` reports true, backed by real measured DOM
+heights via a pluggable `getNodeHeight` lookup — implemented as a
+`useMemo` reading `getNodes()` at render time, not `setState` inside a
+`useEffect` (this repo's `react-hooks/set-state-in-effect` rule hard-
+errors on that pattern; xyflow's own docs example uses it, but the
+lint-compliant equivalent here is a pure derived value).
+
+**Zoom / navigation**: added `<Controls>` (zoom in/out, fit-view,
+interactive-lock hidden) plus two custom `ControlButton`s — "Fit
+investigation" (`fitView` with padding/minZoom) and "Reset to readable
+zoom" (`setViewport` back to a fixed origin-anchored `{CANVAS_PADDING,
+CANVAS_PADDING, DEFAULT_ZOOM}`, deliberately distinct from Fit: Reset
+always returns to the same place, Fit adapts to however large the
+investigation currently is). `colorMode="dark"` added — without it
+`<Controls>` rendered using xyflow's own light-theme CSS variable
+defaults (a plain white panel) since it's the only canvas element that
+reads xyflow's theme tokens rather than this app's own classes.
+
+**Clipping fix**: removed the `fitView`/`fitViewOptions` boolean props
+from `<ReactFlow>` entirely — mount now uses a fixed
+`defaultViewport={{x: CANVAS_PADDING, y: CANVAS_PADDING, zoom:
+DEFAULT_ZOOM}}`, anchored at the graph's origin (the Measurement node),
+never an auto-fit that can leave both ends of a too-wide/too-tall graph
+symmetrically cropped. Live-verified: on a 5-hypothesis-free chain the
+Measurement node, previously invisible off-screen at load, now renders
+first and fully in view. For graphs too large to read in full at once
+(verified against a real seeded case with 2 hypothesis lanes + 6 history
+entries), the reachable-not-hidden requirement holds: every node is
+reachable by pan (confirmed programmatically — wheel-pan in each of the
+four directions moves the correct, matching amount) even when "Fit
+investigation" itself has to crop to stay within the readable `minZoom`
+floor, consistent with the ticket's own "show main path at sensible zoom
+with panning available" allowance for content that doesn't fit
+overview-legible on one screen.
+
+**Responsive breakpoints redesigned** (`investigation-workspace.tsx`):
+generalized the old single `useBelowLgBreakpoint()` into a
+`useMediaQuery(query)` hook (`useSyncExternalStore`-backed, SSR-safe),
+with two independent thresholds instead of one binary split —
+`CANVAS_QUERY = (max-width: 767px)` (below → mobile stack fallback) and
+`RAIL_QUERY = (max-width: 1023px)` (below → no persistent side rail,
+Sheet substitutes). The canvas-usability threshold moved down from
+1024px to 768px: the new horizontal, pan/zoom-capable layout is usable
+at tablet width, so laptop/tablet viewports (768–1023px) now get the
+real canvas full-width with the Sheet standing in for the rail, instead
+of falling back to the vertical stack. Narrow mobile (<768px) keeps the
+existing stack/Sheet fallback unchanged.
+
+**Domain/product truth**: unchanged — no OBSERVED/KNOWN/INFERRED/MISSING
+labeling, hypothesis ranking, or evidence semantics touched; this was a
+pure layout/rendering correction. `UX-04-LIGHT`'s entry left untouched.
+
+**Tests**: `build-canvas-graph.test.ts` rewritten (9→20 tests) —
+left-to-right column ordering, lane grouping (shared `y`, increasing
+`x`), lane-height-driven vertical stacking (a direct regression test
+using a custom height lookup returning 900 for one card, asserting the
+next lane starts past it, not at a fixed guess), a direct regression
+test asserting missing-evidence and observation nodes can never land in
+the same column, height/width reflecting the pluggable lookup.
+`investigation-workspace.test.tsx` — 3 existing tests updated to the new
+mock-viewport helper, 2 new tests added covering the laptop/tablet tier
+(real canvas + Sheet, no persistent rail) and the large-desktop tier
+(canvas + persistent resizable rail), 23/23 passing.
+
+**Automated results**: `pnpm exec tsc --noEmit` clean · `pnpm run lint`
+clean · `pnpm exec vitest run` 365/365 (48 files) · `pnpm run
+test:integration` 61/61 (12 files) · `pnpm run build` succeeds.
+
+**Live QA** (chrome-devtools MCP, real seeded Gateway X cases):
+- **1440**: fresh load — Measurement node visible first, readable
+  default zoom, dark-themed Controls, no clipping. Loaded a richer real
+  case (2 hypothesis lanes, missing-evidence, next-test, engineer
+  observations, an engineering change, a new revision, and a measured
+  outcome) — hypothesis lanes render side by side with correct
+  HIGH/LOW badges, missing-evidence and next-test columns fully
+  separated from each other with zero overlap, "Fit investigation" and
+  "Reset to readable zoom" both verified (Reset returns to the exact
+  origin-anchored view), pan verified in all four directions.
+- **1280 / 1024**: persistent resizable rail present (1024 is the
+  boundary itself, correctly still desktop-tier per `(max-width:
+  1023px)`), canvas readable, no clipping, no page-level horizontal
+  overflow.
+- **768**: canvas renders full-width horizontally (not the mobile
+  stack), no persistent rail — matches the new laptop/tablet tier.
+- **390**: mobile stack fallback renders (no React Flow mounted),
+  vertical full-width cards, `scrollWidth === clientWidth` confirmed (no
+  page-level horizontal overflow).
+- Console clean at every breakpoint apart from the one pre-existing,
+  documented React Flow attribution warning (`proOptions.hideAttribution`
+  is intentional; present before this session, not a regression).
+
+**Outcome**: all 8 implementation items complete and live-verified.
+`UX-04.passes` restored to `true` in `features.json`; `UX-04-LIGHT` left
+untouched.

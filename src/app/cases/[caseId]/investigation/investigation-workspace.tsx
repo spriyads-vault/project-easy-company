@@ -13,7 +13,7 @@
 // artifact selection are both local state only — never a
 // navigation/fetch — so the live run stays connected regardless of which
 // view is showing or what's selected in the rail.
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { MeasurementRow } from "@/lib/cases/queries";
 import type { ProductFactRecord } from "@/lib/correlation/harmonic-correlation";
@@ -47,41 +47,56 @@ import { canvasBackground, surface, text } from "./theme";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
-const BELOW_LG_QUERY = "(max-width: 1023px)";
+// Two independent breakpoints, not one binary desktop/mobile split — the
+// visual-correction ticket asked to review `< lg` rather than preserve it
+// automatically, since the OLD narrow vertical canvas genuinely was
+// unusable below 1024px, but the NEW horizontal, pannable/zoomable
+// layout is not. So:
+//   - CANVAS_QUERY (below `md`, 768px): the investigation graph itself
+//     stops being usable — the mobile stack takes over.
+//   - RAIL_QUERY (below `lg`, 1024px): unchanged from before — there just
+//     isn't room for a persistent side rail next to the canvas, so the
+//     Sheet substitutes for it. Between 768 and 1024 ("laptop/tablet"),
+//     the canvas renders full-width with pan/zoom and the Sheet stands in
+//     for the rail; at 1024+ ("large desktop") the canvas sits beside the
+//     real resizable rail.
+const CANVAS_QUERY = "(max-width: 767px)";
+const RAIL_QUERY = "(max-width: 1023px)";
 
-function subscribeToBelowLg(onChange: () => void): () => void {
-  // jsdom (the unit-test environment) does not implement matchMedia — fall
-  // back to "never changes" rather than throwing, same as a very old
-  // browser without matchMedia support would.
-  if (typeof window.matchMedia !== "function") return () => {};
-  const query = window.matchMedia(BELOW_LG_QUERY);
-  query.addEventListener("change", onChange);
-  return () => query.removeEventListener("change", onChange);
+function subscribeToMediaQuery(query: string): (onChange: () => void) => () => void {
+  return (onChange) => {
+    // jsdom (the unit-test environment) does not implement matchMedia —
+    // fall back to "never changes" rather than throwing, same as a very
+    // old browser without matchMedia support would.
+    if (typeof window.matchMedia !== "function") return () => {};
+    const mql = window.matchMedia(query);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  };
 }
 
-function getBelowLgSnapshot(): boolean {
-  if (typeof window.matchMedia !== "function") return false;
-  return window.matchMedia(BELOW_LG_QUERY).matches;
+function getMediaQuerySnapshot(query: string): () => boolean {
+  return () => {
+    if (typeof window.matchMedia !== "function") return false;
+    return window.matchMedia(query).matches;
+  };
 }
 
-function getBelowLgServerSnapshot(): boolean {
-  // No viewport on the server — default to desktop so the mobile Sheet
-  // below starts closed; useSyncExternalStore reconciles this against the
-  // real client value after hydration, which is what it's for (this is
-  // the React-endorsed way to read an external, subscription-based value
-  // like matchMedia without a synchronous setState-in-effect, which this
-  // repo's lint config hard-errors on).
+// No viewport on the server — default to "not matched" (the widest/most
+// capable tier) so nothing mobile-only accidentally renders in the SSR
+// HTML; useSyncExternalStore reconciles this against the real client
+// value after hydration, which is what it's for (this is the
+// React-endorsed way to read an external, subscription-based value like
+// matchMedia without a synchronous setState-in-effect, which this repo's
+// lint config hard-errors on).
+function getMediaQueryServerSnapshot(): boolean {
   return false;
 }
 
-/** True below Tailwind's `lg` breakpoint (1024px) — used only to keep the
- * mobile selection Sheet's Radix Dialog genuinely closed on desktop
- * (where the persistent resizable rail already shows the same selection),
- * rather than mounted-but-CSS-hidden: a `display:none` sheet would still
- * open Radix's overlay/focus-trap/scroll-lock, which no `lg:hidden`
- * className on the content itself can suppress. */
-function useBelowLgBreakpoint(): boolean {
-  return useSyncExternalStore(subscribeToBelowLg, getBelowLgSnapshot, getBelowLgServerSnapshot);
+function useMediaQuery(query: string): boolean {
+  const subscribe = useMemo(() => subscribeToMediaQuery(query), [query]);
+  const getSnapshot = useMemo(() => getMediaQuerySnapshot(query), [query]);
+  return useSyncExternalStore(subscribe, getSnapshot, getMediaQueryServerSnapshot);
 }
 
 interface OpenCitationState {
@@ -156,7 +171,8 @@ export function InvestigationWorkspace({
   // drag handle collapsing past its threshold, or the button itself.
   const railPanelRef = useRef<ImperativePanelHandle>(null);
   const [railCollapsed, setRailCollapsed] = useState(false);
-  const belowLg = useBelowLgBreakpoint();
+  const belowCanvasBreakpoint = useMediaQuery(CANVAS_QUERY);
+  const belowRailBreakpoint = useMediaQuery(RAIL_QUERY);
 
   function handleOpenCitation(
     citation: EvidenceCitation,
@@ -416,22 +432,37 @@ export function InvestigationWorkspace({
           rightSlot={<ViewSwitcher activeTab={activeTab} onSelectTab={setActiveTab} />}
         />
 
-        {/* Two responsive branches, not one layout reflowed by CSS alone:
-            below `lg` there is no rail to resize and React Flow's
-            drag/zoom/pan surface doesn't degrade to something usable at
-            that width, so mobile gets a plain full-width stack (no split,
-            no React Flow) while desktop gets the real canvas beside a
-            resizable rail. `belowLg` picks exactly one branch to mount —
-            never both at once behind `hidden`/`lg:hidden` — so
-            InvestigationCanvas is never initialized inside a
-            `display:none` container (react-flow sizes itself from its
-            container's real bounds at mount) and the test environment,
-            which doesn't evaluate CSS media queries, never sees both
-            branches' content simultaneously. */}
-        {belowLg ? (
+        {/* Three responsive tiers, not one binary split reflowed by CSS
+            alone: below `md` (768) the canvas itself stops being usable —
+            the mobile stack takes over (no split, no React Flow). At
+            768-1023 ("laptop/tablet") the horizontal, pannable/zoomable
+            canvas is perfectly usable, it just doesn't have room for a
+            persistent side rail — the canvas renders full-width and the
+            Sheet substitutes for the rail. At 1024+ ("large desktop") the
+            canvas sits beside the real resizable rail. Exactly one branch
+            ever mounts per render (never two behind `hidden`/`lg:hidden`)
+            — the canvas is only ever initialized inside a container with
+            real bounds (react-flow sizes itself from those bounds at
+            mount), and the test environment, which doesn't evaluate CSS
+            media queries, never sees more than one branch's content at
+            once. */}
+        {belowCanvasBreakpoint ? (
           <div className="flex min-h-0 flex-1">
             {renderTabContent(
               <MobileInvestigationStack
+                measurement={measurement}
+                state={state}
+                timeline={timeline}
+                onSelectMeasurement={handleSelectMeasurement}
+                onSelectHypothesis={handleSelectHypothesis}
+                onRecordResult={handleRecordResult}
+              />,
+            )}
+          </div>
+        ) : belowRailBreakpoint ? (
+          <div className="flex min-h-0 flex-1">
+            {renderTabContent(
+              <InvestigationCanvas
                 measurement={measurement}
                 state={state}
                 timeline={timeline}
@@ -491,16 +522,18 @@ export function InvestigationWorkspace({
           </div>
         )}
 
-        {/* Mobile's substitute for the persistent rail: tapping a
-            measurement or hypothesis in the stack sets the same
-            `selection` state a desktop canvas click does, opened here as a
-            bottom sheet reusing ContextRail's own detail views verbatim —
-            never a second, divergent implementation of the same content.
-            Gated on `belowLg` (not just `lg:hidden` on the sheet itself)
-            so Radix's overlay/focus-trap never activates on desktop,
-            where the persistent rail already shows the same selection. */}
+        {/* The rail substitute for both the mobile-stack tier and the
+            tablet/laptop canvas-without-rail tier: tapping a measurement
+            or hypothesis sets the same `selection` state a desktop canvas
+            click does, opened here as a bottom sheet reusing ContextRail's
+            own detail views verbatim — never a second, divergent
+            implementation of the same content. Gated on
+            `belowRailBreakpoint` (not just an `lg:hidden` className on the
+            sheet itself) so Radix's overlay/focus-trap never activates on
+            large desktop, where the persistent rail already shows the
+            same selection. */}
         <Sheet
-          open={belowLg && selection !== null}
+          open={belowRailBreakpoint && selection !== null}
           onOpenChange={(open) => {
             if (!open) setSelection(null);
           }}
