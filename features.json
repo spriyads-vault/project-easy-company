@@ -404,14 +404,15 @@
       ]
     },
     {
-      "id": "UX-04",
+      "id": "UX-04-LIGHT",
       "priority": 17,
-      "title": "Crado Product-Wide UI Redesign",
+      "title": "Crado Product-Wide UI Redesign (light theme — superseded by UX-04)",
       "depends_on": [
         "UX-03"
       ],
       "passes": true,
       "acceptance": [
+        "SUPERSEDED: a later ticket, also named UX-04 by the user (\"Agent-Native Crado Product Experience\"), explicitly discarded this light theme in favor of a dark, agent-first redesign. This entry is kept, id renamed to UX-04-LIGHT, as an accurate record of what shipped and passed at the time — its acceptance criteria below describe the superseded light-theme pass, not the current app.",
         "every authenticated route (workspace, products/[productId], products/[productId]/revisions/[revisionId], documents/Sources, benchmarks incl. detail/score/new, login, cases/investigation) shares one canonical design-token module (src/lib/design/tokens.ts) and shared components (AppShell, PageHeader, Card, StatusBadge, EmptyState) instead of route-scoped one-off styling — no route left on the old admin-table visual system",
         "palette pivots app-wide from UX-02/03's warm off-white (#faf8f3) to a pure-white/neutral-zinc canvas per the ticket's explicit 'no yellow/cream tint' instruction, applied via a canonical theme.ts re-export + bulk hex sweep to every existing cases/investigation file so no import path needed to change",
         "Sources (documents/**) fully migrated off its 100%-dark-graphite bespoke palette onto the shared light system — upload, document list with real status/type/provenance, type filter tabs, and hybrid search + source-preview panel all restyled, all 25 existing component tests still passing unmodified (no test asserted on color, only text/roles)",
@@ -423,6 +424,22 @@
         "no Investigation Agent, deterministic engine, evidence model, database schema, benchmark architecture, Regulatory State, or model-provider change",
         "quality gate green: pnpm lint, pnpm typecheck, pnpm test (268/268), pnpm test:integration (58/58), pnpm build",
         "live QA (chrome-devtools MCP, signed in as the seeded gateway-x-demo user): workspace, product detail, revision detail, Sources (empty state), Benchmarks list + new-benchmark form (empty state for this workspace), login, and the cases/investigation canvas with a real prior run all screenshotted and visually verified against the new system"
+      ]
+    },
+    {
+      "id": "UX-04",
+      "priority": 17.5,
+      "title": "Agent-Native Crado Product Experience",
+      "depends_on": [
+        "UX-04-LIGHT"
+      ],
+      "passes": false,
+      "acceptance": [
+        "STATUS (in progress, see docs/PROGRESS.md and docs/UX_AGENT_NATIVE.md for the full audit/journey doc): dark-theme pivot, application shell (collapsible sidebar, Cmd/Ctrl+K command palette), a real Investigations work-queue home, the free-text New Investigation intake flow (deterministic extraction -> CRADO UNDERSTOOD confirmation -> create case/measurement -> redirect with autorun) and the React Flow investigation canvas (9 typed node components, deterministic auto-layout, wired into investigation-workspace.tsx with autoRun-on-mount) are DONE and verified live against the real seeded Gateway X data, including a full from-scratch intake-to-completed-investigation run.",
+        "shadcn/ui primitives hand-rolled from canonical source (button/badge/dialog/sheet/tooltip/popover/tabs/dropdown-menu/scroll-area/skeleton/avatar/table/command/resizable) on real @radix-ui packages — no CLI dependency; @xyflow/react installed and used only for the investigation canvas, non-draggable/non-connectable/non-deletable, auto-laid-out, no minimap",
+        "quality gate green on everything built so far: pnpm lint, pnpm typecheck, pnpm test (298/298), pnpm test:integration (58/58), pnpm build — including a real ResizeObserver-polyfill + node-copy update to investigation-workspace.test.tsx so the canvas is exercised for real (not mocked out) inside jsdom",
+        "REMAINING (not done yet): case-composer.tsx natural-language intent classification for Measurement and Engineering Change flows (Observation already worked pre-ticket) with an editable confirmation artifact before persisting; moving the remaining manual/advanced forms behind a secondary disclosure so the agent-first path is the default everywhere, not just on the investigation canvas; Evidence and Sources modes converted to dense Table-based views; Context Rail wrapped in a real resizable panel; the mobile/tablet chronological-stack fallback below the canvas breakpoint; a full 1440/1280/1024/768/390 screenshot QA sweep; and the ticket's 12-point final report",
+        "no Investigation Agent, deterministic engine, evidence model, database schema, benchmark architecture, Regulatory State, or model-provider change made or planned as part of this ticket"
       ]
     },
     {

@@ -39,7 +39,7 @@ export default async function ScoreRunPage({ params }: ScorePageProps) {
             revealed — review the run in the{" "}
             <Link
               href={`/cases/${benchmarkCase.failureCaseId}/investigation`}
-              className="text-[#15803d] underline underline-offset-2"
+              className="text-[#22c55e] underline underline-offset-2"
             >
               investigation workspace
             </Link>{" "}

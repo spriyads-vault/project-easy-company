@@ -53,11 +53,11 @@ export function DocumentList({
 
   return (
     <div className="flex flex-col gap-3">
-      <ul className="flex flex-col divide-y divide-[#ececee]">
+      <ul className="flex flex-col divide-y divide-[#1c212a]">
         {documents.map((doc) => (
           <li key={doc.id} className="flex items-center justify-between gap-3 py-3">
             <div className="flex min-w-0 flex-col gap-0.5">
-              <span className="truncate text-sm font-medium text-[#18181b]">{doc.filename}</span>
+              <span className="truncate text-sm font-medium text-[#f5f6f7]">{doc.filename}</span>
               <span className={`${text.kicker} normal-case tracking-normal text-[11px]`}>
                 {describeDocumentType(doc.documentType)}
                 {doc.productName
@@ -107,7 +107,7 @@ function PageLink({
 }) {
   if (disabled) {
     return (
-      <span className="rounded-lg border border-[#ececee] px-3 py-1 text-xs font-medium text-[#a1a1aa]">
+      <span className="rounded-lg border border-[#1c212a] px-3 py-1 text-xs font-medium text-[#6b7684]">
         {label}
       </span>
     );
@@ -116,7 +116,7 @@ function PageLink({
   return (
     <Link
       href={href}
-      className="rounded-lg border border-[#e4e4e7] px-3 py-1 text-xs font-medium text-[#18181b] transition-colors hover:border-[#1f9d52]/50 hover:text-[#15803d]"
+      className="rounded-lg border border-[#232933] px-3 py-1 text-xs font-medium text-[#f5f6f7] transition-colors hover:border-[#22c55e]/50 hover:text-[#22c55e]"
     >
       {label}
     </Link>

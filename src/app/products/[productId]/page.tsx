@@ -19,7 +19,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   return (
     <div className={`flex min-h-0 flex-1 flex-col ${surface.page}`}>
-      <PageHeader backHref="/workspace" backLabel="Workspace" title={product.name} />
+      <PageHeader backHref="/products" backLabel="Products" title={product.name} />
 
       <div className="flex flex-1 flex-col gap-8 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
         <div className="mx-auto grid w-full max-w-[1000px] gap-6 md:grid-cols-2">
@@ -33,9 +33,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
                   <li key={revision.id}>
                     <Link
                       href={`/products/${product.id}/revisions/${revision.id}`}
-                      className="flex flex-col gap-0.5 rounded-xl border border-[#ececee] px-3 py-2 text-sm transition-colors hover:border-[#d4d4d8] hover:bg-[#f4f4f5]/60"
+                      className="flex flex-col gap-0.5 rounded-xl border border-[#1c212a] px-3 py-2 text-sm transition-colors hover:border-[#2d3440] hover:bg-[#151a21]/60"
                     >
-                      <span className="font-medium text-[#18181b]">{revision.label}</span>
+                      <span className="font-medium text-[#f5f6f7]">{revision.label}</span>
                       {revision.notes ? (
                         <span className={typography.metadata}>{revision.notes}</span>
                       ) : null}

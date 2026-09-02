@@ -6,7 +6,7 @@ import { accent, focusRing } from "./investigation/theme";
 
 const initialState: MeasurementFormState = {};
 
-const inputClass = `border border-[#d4d4d8] bg-transparent px-3 py-2 text-sm outline-none placeholder:text-[#a1a1aa] ${focusRing}`;
+const inputClass = `border border-[#2d3440] bg-transparent px-3 py-2 text-sm outline-none placeholder:text-[#6b7684] ${focusRing}`;
 const labelClass = "flex flex-col gap-1 text-sm";
 
 interface AddMeasurementFormProps {
@@ -85,7 +85,7 @@ export function AddMeasurementForm({
       </label>
 
       {state.error ? (
-        <p role="alert" className={`border border-[#b45309]/40 bg-[#b45309]/10 p-2 text-sm ${accent.warnText}`}>
+        <p role="alert" className={`border border-[#f59e0b]/40 bg-[#f59e0b]/10 p-2 text-sm ${accent.warnText}`}>
           {state.error}
         </p>
       ) : null}
@@ -93,7 +93,7 @@ export function AddMeasurementForm({
       <button
         type="submit"
         disabled={pending}
-        className={`self-start border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#15803d] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:border-[#d4d4d8] disabled:bg-transparent disabled:text-[#a1a1aa]`}
+        className={`self-start border border-[#22c55e]/50 bg-[#22c55e]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#22c55e] transition-colors hover:bg-[#22c55e]/20 disabled:cursor-not-allowed disabled:border-[#2d3440] disabled:bg-transparent disabled:text-[#6b7684]`}
       >
         {pending ? "Saving…" : "Add measurement"}
       </button>

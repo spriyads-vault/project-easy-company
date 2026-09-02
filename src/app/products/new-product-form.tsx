@@ -6,7 +6,7 @@ import { focusRing, radius } from "@/lib/design/tokens";
 
 const initialState: ProductFormState = {};
 
-const inputClass = `${radius.control} border border-[#e4e4e7] bg-white px-3 py-2 text-sm outline-none placeholder:text-[#a1a1aa] ${focusRing}`;
+const inputClass = `${radius.control} border border-[#232933] bg-card px-3 py-2 text-sm outline-none placeholder:text-[#6b7684] ${focusRing}`;
 
 export function NewProductForm() {
   const [state, formAction, pending] = useActionState(
@@ -16,7 +16,7 @@ export function NewProductForm() {
 
   return (
     <form action={formAction} className="flex flex-col gap-3">
-      <label className="flex flex-col gap-1 text-sm text-[#18181b]">
+      <label className="flex flex-col gap-1 text-sm text-[#f5f6f7]">
         Product name
         <input
           name="name"
@@ -25,7 +25,7 @@ export function NewProductForm() {
           className={inputClass}
         />
       </label>
-      <label className="flex flex-col gap-1 text-sm text-[#18181b]">
+      <label className="flex flex-col gap-1 text-sm text-[#f5f6f7]">
         First revision label
         <input
           name="revisionLabel"
@@ -36,7 +36,7 @@ export function NewProductForm() {
       </label>
 
       {state.error ? (
-        <p role="alert" className="rounded-lg border border-[#b45309]/40 bg-[#b45309]/10 p-2 text-sm text-[#b45309]">
+        <p role="alert" className="rounded-lg border border-[#f59e0b]/40 bg-[#f59e0b]/10 p-2 text-sm text-[#f59e0b]">
           {state.error}
         </p>
       ) : null}
@@ -44,7 +44,7 @@ export function NewProductForm() {
       <button
         type="submit"
         disabled={pending}
-        className={`self-start ${radius.control} border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-sm font-medium text-[#15803d] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:opacity-60`}
+        className={`self-start ${radius.control} border border-[#22c55e]/50 bg-[#22c55e]/10 px-4 py-2 text-sm font-medium text-[#22c55e] transition-colors hover:bg-[#22c55e]/20 disabled:cursor-not-allowed disabled:opacity-60`}
       >
         {pending ? "Creating…" : "Create product"}
       </button>

@@ -28,9 +28,9 @@ interface BenchmarkCasePageProps {
 function metricRow(label: string, value: string | number | null | undefined) {
   if (value === null || value === undefined) return null;
   return (
-    <div key={label} className="flex items-baseline justify-between gap-3 border-b border-[#ececee] py-1.5 text-sm last:border-b-0">
+    <div key={label} className="flex items-baseline justify-between gap-3 border-b border-[#1c212a] py-1.5 text-sm last:border-b-0">
       <span className={typography.metadata}>{label}</span>
-      <span className={`font-medium text-[#18181b] ${text.mono}`}>{value}</span>
+      <span className={`font-medium text-[#f5f6f7] ${text.mono}`}>{value}</span>
     </div>
   );
 }
@@ -93,7 +93,7 @@ export default async function BenchmarkCasePage({ params }: BenchmarkCasePagePro
               <h2 className={typography.sectionHeading}>Investigation runs</h2>
               <Link
                 href={`/cases/${benchmarkCase.failureCaseId}/investigation`}
-                className="rounded-lg border border-[#e4e4e7] px-3 py-1.5 text-sm font-medium text-[#18181b] transition-colors hover:border-[#d4d4d8] hover:bg-[#f4f4f5]"
+                className="rounded-lg border border-[#232933] px-3 py-1.5 text-sm font-medium text-[#f5f6f7] transition-colors hover:border-[#2d3440] hover:bg-[#151a21]"
               >
                 Open investigation workspace
               </Link>
@@ -106,10 +106,10 @@ export default async function BenchmarkCasePage({ params }: BenchmarkCasePagePro
                 {runs.map((run) => (
                   <li
                     key={run.analysisRunId}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#ececee] px-4 py-3 text-sm"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#1c212a] px-4 py-3 text-sm"
                   >
                     <div className="flex flex-col gap-0.5">
-                      <span className="font-medium text-[#18181b]">
+                      <span className="font-medium text-[#f5f6f7]">
                         Run started {new Date(run.createdAt).toLocaleString()}
                       </span>
                       <span className={typography.metadata}>Status: {run.status}</span>
@@ -119,7 +119,7 @@ export default async function BenchmarkCasePage({ params }: BenchmarkCasePagePro
                     ) : (
                       <Link
                         href={`/benchmarks/${benchmarkCaseId}/score/${run.analysisRunId}`}
-                        className="rounded-lg border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-3 py-1.5 text-xs font-medium text-[#15803d] transition-colors hover:bg-[#1f9d52]/20"
+                        className="rounded-lg border border-[#22c55e]/50 bg-[#22c55e]/10 px-3 py-1.5 text-xs font-medium text-[#22c55e] transition-colors hover:bg-[#22c55e]/20"
                       >
                         Score this run
                       </Link>
@@ -188,7 +188,7 @@ export default async function BenchmarkCasePage({ params }: BenchmarkCasePagePro
                 <h2 className={typography.sectionHeading}>Comparison report</h2>
                 {runReports.map(({ run, score, metrics }) => (
                   <div key={run.analysisRunId} className={`flex flex-col gap-4 p-5 ${surface.card}`}>
-                    <p className="text-sm font-medium text-[#18181b]">
+                    <p className="text-sm font-medium text-[#f5f6f7]">
                       Run started {new Date(run.createdAt).toLocaleString()}
                     </p>
 
@@ -207,7 +207,7 @@ export default async function BenchmarkCasePage({ params }: BenchmarkCasePagePro
                       <p className={typography.body}>Not scored.</p>
                     )}
 
-                    <div className="grid grid-cols-2 gap-x-6 rounded-xl bg-[#f4f4f5]/60 px-3">
+                    <div className="grid grid-cols-2 gap-x-6 rounded-xl bg-[#151a21]/60 px-3">
                       {metricRow("Hypotheses produced", metrics.hypothesesCount)}
                       {metricRow("Correlations found", metrics.correlationsCount)}
                       {metricRow("Citations used", metrics.citationsUsedCount)}
@@ -240,7 +240,7 @@ export default async function BenchmarkCasePage({ params }: BenchmarkCasePagePro
                         <ul className="flex flex-col gap-0.5 text-sm">
                           {metrics.groundTruthComparison.keywordOverlapByHypothesis.map((h, i) => (
                             <li key={i} className="flex justify-between gap-3">
-                              <span className="text-[#18181b]">{h.title}</span>
+                              <span className="text-[#f5f6f7]">{h.title}</span>
                               <span className={`${typography.metadata} ${text.mono}`}>
                                 {h.sharedTermCount} shared term{h.sharedTermCount === 1 ? "" : "s"}
                               </span>

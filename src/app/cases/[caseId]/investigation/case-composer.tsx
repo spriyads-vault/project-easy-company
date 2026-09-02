@@ -24,13 +24,21 @@
 // INVESTIGATION button and the Evidence tab's citations already cover
 // those two needs explicitly; this composer stays honest about doing the
 // one thing it actually does.
-import { useActionState, useId, useState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { recordInvestigationObservation, type RecordObservationFormState } from "./actions";
 import { parseEngineerInput } from "./parse-engineer-input";
 import { accent, focusRing, radius, surface, text } from "./theme";
 
 const initialState: RecordObservationFormState = {};
+
+// A stable (not useId-generated) id: exactly one CaseComposer is ever
+// mounted per investigation page, and NextActionNode's "Record result"
+// button (canvas-nodes.tsx, via investigation-workspace.tsx's
+// onRecordResult) needs a real DOM target to focus — "opens the agent
+// composer, not a traditional form" only holds if there's something
+// concrete to focus.
+export const CASE_COMPOSER_INPUT_ID = "case-composer-input";
 
 interface CaseComposerProps {
   caseId: string;
@@ -42,7 +50,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
   const [draft, setDraft] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
-  const inputId = useId();
+  const inputId = CASE_COMPOSER_INPUT_ID;
 
   const parsed = confirming ? parseEngineerInput(draft) : null;
 
@@ -72,7 +80,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
         <button
           type="button"
           onClick={handleStartNew}
-          className={`text-xs ${text.muted} hover:text-[#18181b] ${focusRing}`}
+          className={`text-xs ${text.muted} hover:text-[#f5f6f7] ${focusRing}`}
         >
           New message
         </button>
@@ -89,12 +97,12 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
         <span className={text.kicker}>Observation detected</span>
 
         <div className="flex flex-col gap-2">
-          <div className={`flex flex-col gap-0.5 rounded-lg border-l-2 border-l-[#15803d] bg-[#1f9d52]/[0.03] py-1.5 pl-2.5`}>
+          <div className={`flex flex-col gap-0.5 rounded-lg border-l-2 border-l-[#22c55e] bg-[#22c55e]/[0.03] py-1.5 pl-2.5`}>
             <span className={`${text.kicker} text-[10px]`}>Observation</span>
             <p className="text-sm">{parsed.observation}</p>
           </div>
           {parsed.measurementChange ? (
-            <div className="flex flex-col gap-0.5 rounded-lg border-l-2 border-l-[#18181b]/60 py-1.5 pl-2.5">
+            <div className="flex flex-col gap-0.5 rounded-lg border-l-2 border-l-[#f5f6f7]/60 py-1.5 pl-2.5">
               <span className={`${text.kicker} text-[10px]`}>Measurement change</span>
               <p className={`text-sm font-medium ${text.mono}`}>{parsed.measurementChange}</p>
             </div>
@@ -107,7 +115,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
         ) : null}
 
         {state.error ? (
-          <p role="alert" className={`rounded-lg border border-[#b45309]/40 bg-[#b45309]/10 p-2 text-sm ${accent.warnText}`}>
+          <p role="alert" className={`rounded-lg border border-[#f59e0b]/40 bg-[#f59e0b]/10 p-2 text-sm ${accent.warnText}`}>
             {state.error}
           </p>
         ) : null}
@@ -116,7 +124,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
           <button
             type="submit"
             disabled={pending}
-            className={`${radius.control} border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#15803d] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:border-[#d4d4d8] disabled:bg-transparent disabled:text-[#a1a1aa]`}
+            className={`${radius.control} border border-[#22c55e]/50 bg-[#22c55e]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#22c55e] transition-colors hover:bg-[#22c55e]/20 disabled:cursor-not-allowed disabled:border-[#2d3440] disabled:bg-transparent disabled:text-[#6b7684]`}
           >
             {pending ? "Adding…" : "Add to investigation"}
           </button>
@@ -124,7 +132,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
             type="button"
             onClick={handleDiscard}
             disabled={pending}
-            className={`${radius.control} px-4 py-2 text-xs font-medium uppercase tracking-wide ${text.muted} hover:text-[#18181b] ${focusRing}`}
+            className={`${radius.control} px-4 py-2 text-xs font-medium uppercase tracking-wide ${text.muted} hover:text-[#f5f6f7] ${focusRing}`}
           >
             Cancel
           </button>
@@ -144,7 +152,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
           onClick={() => setAttachOpen((prev) => !prev)}
           aria-expanded={attachOpen}
           aria-haspopup="menu"
-          className={`flex h-9 items-center gap-1 ${radius.control} px-2.5 text-xs font-medium ${text.muted} hover:text-[#18181b] ${focusRing}`}
+          className={`flex h-9 items-center gap-1 ${radius.control} px-2.5 text-xs font-medium ${text.muted} hover:text-[#f5f6f7] ${focusRing}`}
         >
           <span aria-hidden="true">+</span> Attach
         </button>
@@ -160,7 +168,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
                 setAttachOpen(false);
                 document.getElementById(inputId)?.focus();
               }}
-              className={`rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-[#f4f4f5] ${focusRing}`}
+              className={`rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-[#151a21] ${focusRing}`}
             >
               Observation
             </button>
@@ -168,7 +176,7 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
               href={`/cases/${caseId}`}
               role="menuitem"
               onClick={() => setAttachOpen(false)}
-              className="rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-[#f4f4f5]"
+              className="rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-[#151a21]"
             >
               Measurement
             </Link>
@@ -184,12 +192,12 @@ export function CaseComposer({ caseId }: CaseComposerProps) {
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         placeholder="Tell Crado what changed, attach a result, or ask about this case…"
-        className={`flex-1 border-0 bg-transparent px-1 py-1.5 text-sm outline-none placeholder:text-[#a1a1aa] ${focusRing}`}
+        className={`flex-1 border-0 bg-transparent px-1 py-1.5 text-sm outline-none placeholder:text-[#6b7684] ${focusRing}`}
       />
       <button
         type="submit"
         disabled={!draft.trim()}
-        className={`shrink-0 ${radius.control} border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#15803d] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:border-[#d4d4d8] disabled:bg-transparent disabled:text-[#a1a1aa]`}
+        className={`shrink-0 ${radius.control} border border-[#22c55e]/50 bg-[#22c55e]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#22c55e] transition-colors hover:bg-[#22c55e]/20 disabled:cursor-not-allowed disabled:border-[#2d3440] disabled:bg-transparent disabled:text-[#6b7684]`}
       >
         Send
       </button>

@@ -47,7 +47,7 @@ export default async function CasePage({ params }: CasePageProps) {
           </p>
           <Link
             href={`/cases/${failureCase.id}/investigation`}
-            className="mt-2 self-start rounded-[10px] border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#15803d] transition-colors hover:bg-[#1f9d52]/20"
+            className="mt-2 self-start rounded-[10px] border border-[#22c55e]/50 bg-[#22c55e]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#22c55e] transition-colors hover:bg-[#22c55e]/20"
           >
             Open investigation workspace
           </Link>
@@ -61,7 +61,7 @@ export default async function CasePage({ params }: CasePageProps) {
             ) : (
               <ul className="flex flex-col gap-3">
                 {failureCase.measurements.map((measurement) => (
-                  <li key={measurement.id} className="rounded-lg border border-[#ececee] px-3 py-2 text-sm">
+                  <li key={measurement.id} className="rounded-lg border border-[#1c212a] px-3 py-2 text-sm">
                     <div className="font-medium">
                       <span className={`mr-2 font-normal ${text.muted}`}>
                         {measurement.revisionLabel}
@@ -75,11 +75,11 @@ export default async function CasePage({ params }: CasePageProps) {
                     </div>
                     <ul className="mt-1 flex flex-col gap-1">
                       {measurement.peaks.map((peak) => (
-                        <li key={peak.id} className="text-[#71717a]">
+                        <li key={peak.id} className="text-[#9aa3af]">
                           <span className={text.mono}>{peak.frequencyMhz} MHz</span> at{" "}
                           <span
                             className={`font-medium ${text.mono} ${
-                              peak.marginDb > 0 ? "text-[#b45309]" : "text-[#15803d]"
+                              peak.marginDb > 0 ? "text-[#f59e0b]" : "text-[#22c55e]"
                             }`}
                           >
                             {peak.marginDb > 0 ? "+" : ""}

@@ -23,4 +23,5 @@ export {
   connector,
   artifact,
   type ArtifactKind,
+  typography,
 } from "@/lib/design/tokens";

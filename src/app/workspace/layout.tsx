@@ -1,9 +1,10 @@
-// UX-04: /workspace joins the shared application shell — the same
-// compact left rail every authenticated route now uses (see
-// src/lib/design/app-shell.tsx). Zero-fetch pass-through: the rail needs
-// no per-page data.
+// UX-04 (Agent-Native): /workspace is the real "Workspace" account page,
+// reached from the sidebar's account menu — not a main rail item (that's
+// now Investigations/Products/Sources/Benchmarks), so no `active` is
+// passed, the same precedent cases/[caseId]/layout.tsx already set for a
+// route the rail doesn't represent.
 import { AppShell } from "@/lib/design/app-shell";
 
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
-  return <AppShell active="workspace">{children}</AppShell>;
+  return <AppShell>{children}</AppShell>;
 }

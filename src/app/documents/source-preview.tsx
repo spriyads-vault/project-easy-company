@@ -22,14 +22,14 @@ export function SourcePreview({ passage, query }: SourcePreviewProps) {
   return (
     <div
       aria-label="Source preview"
-      className={`flex flex-col gap-3 rounded-2xl border border-[#d4d4d8] bg-[#f4f4f5]/60 p-4`}
+      className={`flex flex-col gap-3 rounded-2xl border border-[#2d3440] bg-[#151a21]/60 p-4`}
     >
       <h3 className={typography.sectionHeading}>Source</h3>
       <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-medium text-[#18181b]">{passage.filename}</span>
+        <span className="text-sm font-medium text-[#f5f6f7]">{passage.filename}</span>
         <span className={`text-xs ${text.muted}`}>{location}</span>
       </div>
-      <p className="text-sm leading-relaxed text-[#18181b]">{highlightPassage(passage.passage, query)}</p>
+      <p className="text-sm leading-relaxed text-[#f5f6f7]">{highlightPassage(passage.passage, query)}</p>
     </div>
   );
 }
@@ -46,7 +46,7 @@ function highlightPassage(passage: string, query: string): React.ReactNode[] {
 
   return parts.map((part, index) =>
     lowerTerms.has(part.toLowerCase()) ? (
-      <mark key={index} className="rounded bg-[#1f9d52]/20 px-0.5 text-[#15803d]">
+      <mark key={index} className="rounded bg-[#22c55e]/20 px-0.5 text-[#22c55e]">
         {part}
       </mark>
     ) : (

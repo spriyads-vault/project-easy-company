@@ -38,11 +38,11 @@ export function SpectrumChart({ frequencyMhz, marginDb }: SpectrumChartProps) {
         y1={LIMIT_Y}
         x2={VIEW_WIDTH - 16}
         y2={LIMIT_Y}
-        stroke="#d4d4d8"
+        stroke="#2d3440"
         strokeWidth={1}
         strokeDasharray="4 4"
       />
-      <text x={16} y={LIMIT_Y - 8} fill="#a1a1aa" fontSize={9} letterSpacing="0.08em">
+      <text x={16} y={LIMIT_Y - 8} fill="#6b7684" fontSize={9} letterSpacing="0.08em">
         SELECTED LIMIT
       </text>
 
@@ -53,7 +53,7 @@ export function SpectrumChart({ frequencyMhz, marginDb }: SpectrumChartProps) {
       <text
         x={peakX}
         y={peakY - 10}
-        fill="#18181b"
+        fill="#f5f6f7"
         fontSize={11}
         fontFamily="var(--font-geist-mono, monospace)"
         textAnchor="middle"

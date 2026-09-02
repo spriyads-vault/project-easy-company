@@ -6,10 +6,12 @@ import { InvestigationWorkspace } from "./investigation-workspace";
 
 interface InvestigationPageProps {
   params: Promise<{ caseId: string }>;
+  searchParams: Promise<{ autorun?: string }>;
 }
 
-export default async function InvestigationPage({ params }: InvestigationPageProps) {
+export default async function InvestigationPage({ params, searchParams }: InvestigationPageProps) {
   const { caseId } = await params;
+  const { autorun } = await searchParams;
   const data = await getInvestigationWorkspaceData(caseId);
   if (!data) {
     notFound();
@@ -44,6 +46,7 @@ export default async function InvestigationPage({ params }: InvestigationPagePro
       measurement={measurement}
       initialState={workspaceState}
       timelineEntries={timelineEntries}
+      autoRun={autorun === "1"}
     />
   );
 }

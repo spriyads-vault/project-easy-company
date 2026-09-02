@@ -203,10 +203,10 @@ describe("InvestigationWorkspace — streaming", () => {
     // content is not present yet — proves this isn't a chat feed that
     // dumps everything at once.
     expect(screen.getByRole("button", { name: /analyzing/i })).toBeDisabled();
-    expect(screen.queryByText("40 MHz × 5 = 200 MHz")).not.toBeInTheDocument();
+    expect(screen.queryByText("40 × 5 = 200")).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByText("40 MHz × 5 = 200 MHz")).toBeInTheDocument();
+      expect(screen.getByText("40 × 5 = 200")).toBeInTheDocument();
     });
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /run again/i })).toBeInTheDocument();
@@ -220,7 +220,7 @@ describe("InvestigationWorkspace — streaming", () => {
     );
   });
 
-  it("reveals the deterministic correlation separately from the hypothesis, labeled a candidate relationship", async () => {
+  it("reveals the deterministic correlation separately from the hypothesis, labeled a candidate", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -231,11 +231,7 @@ describe("InvestigationWorkspace — streaming", () => {
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Candidate relationship")).toBeInTheDocument();
-      // Appears twice by design once the MVP-11 timeline live-update fix
-      // lands: the hypothesis card's own title, and the timeline entry
-      // appended live from the same SSE event — see
-      // investigation-workspace.tsx's hypothesis.created handling.
+      expect(screen.getByText("Candidate")).toBeInTheDocument();
       expect(screen.getAllByText("5th harmonic of 40 MHz system clock").length).toBeGreaterThanOrEqual(1);
     });
   });
@@ -296,7 +292,7 @@ describe("InvestigationWorkspace — streaming", () => {
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
     await waitFor(() => {
-      expect(screen.getAllByText("Candidate relationship")).toHaveLength(2);
+      expect(screen.getAllByText("Candidate")).toHaveLength(2);
     });
   });
 
@@ -392,7 +388,7 @@ describe("InvestigationWorkspace — refresh reconstruction", () => {
 
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
 
-    expect(screen.getByText("40 MHz × 5 = 200 MHz")).toBeInTheDocument();
+    expect(screen.getByText("40 × 5 = 200")).toBeInTheDocument();
     expect(screen.getByText("5th harmonic of 40 MHz system clock")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /run again/i })).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
@@ -506,7 +502,12 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /EMC-Test-04\.md/ }));
+    // UX-04: the hypothesis node itself only shows a compact summary —
+    // clicking it opens the full detail (including sourced citations) in
+    // the context rail, which is where the citation button now lives.
+    fireEvent.click(screen.getByText("5th harmonic of 40 MHz system clock"));
+    const rail = screen.getByLabelText("Case context");
+    fireEvent.click(within(rail).getByRole("button", { name: /EMC-Test-04\.md/ }));
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toBeInTheDocument();

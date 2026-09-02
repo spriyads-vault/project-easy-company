@@ -13,7 +13,7 @@
 // artifact selection are both local state only — never a
 // navigation/fetch — so the live run stays connected regardless of which
 // view is showing or what's selected in the rail.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MeasurementRow } from "@/lib/cases/queries";
 import type { ProductFactRecord } from "@/lib/correlation/harmonic-correlation";
 import type { EvidenceCategory } from "@/lib/domain/schema";
@@ -26,10 +26,9 @@ import {
   type WorkspaceState,
 } from "@/lib/investigation/reconstruct";
 import { SseEventParser } from "@/lib/investigation/parse-sse-events";
-import { MeasurementPanel } from "./measurement-panel";
-import { InvestigationPanel } from "./investigation-panel";
+import { InvestigationCanvas } from "./canvas/investigation-canvas";
+import { InvestigationControls } from "./investigation-controls";
 import { InvestigationTimeline } from "./investigation-timeline";
-import { RevisionComparisonCard } from "./revision-comparison-card";
 import { AgentActivityPanel } from "./agent-activity-panel";
 import { AgentMetricsPanel } from "./agent-metrics-panel";
 import { SourcesPanel } from "./sources-panel";
@@ -39,8 +38,7 @@ import { AgentStatusPill } from "./agent-status-pill";
 import { ViewSwitcher, type InvestigationTab } from "./view-switcher";
 import { ContextRail, type RailSelection } from "./context-rail";
 import { EvidenceView } from "./evidence-view";
-import { CaseComposer } from "./case-composer";
-import { Connector } from "./connector";
+import { CASE_COMPOSER_INPUT_ID, CaseComposer } from "./case-composer";
 import { deriveSourcesUsed } from "./derive-sources-used";
 import { canvasBackground, surface, text } from "./theme";
 
@@ -69,6 +67,13 @@ interface InvestigationWorkspaceProps {
   /** Optional — defaults to empty so every pre-MVP-11 test call site (no
    * timeline data to pass) keeps working unmodified. */
   timelineEntries?: TimelineEntry[];
+  /** UX-04: true when the page was reached via the new-investigation
+   * intake flow's `?autorun=1` redirect — triggers the run once on mount
+   * instead of waiting for an explicit click, so "Crado investigates"
+   * genuinely follows "Crado understood" without an extra button press.
+   * Optional/defaults to false so every pre-UX-04 test call site keeps
+   * working unmodified. */
+  autoRun?: boolean;
 }
 
 export function InvestigationWorkspace({
@@ -82,6 +87,7 @@ export function InvestigationWorkspace({
   measurement,
   initialState,
   timelineEntries = [],
+  autoRun = false,
 }: InvestigationWorkspaceProps) {
   const [state, setState] = useState<WorkspaceState>(initialState);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -101,7 +107,6 @@ export function InvestigationWorkspace({
   // one render behind a click, so a fast double-click could otherwise fire
   // two POSTs before React re-renders. This ref is checked synchronously.
   const runInFlightRef = useRef(false);
-  const comparisonEntry = timeline.find((entry) => entry.type === "result");
 
   function handleOpenCitation(
     citation: EvidenceCitation,
@@ -131,6 +136,30 @@ export function InvestigationWorkspace({
     : !hasPeak
       ? "This measurement has no recorded peak yet."
       : null;
+
+  // UX-04: fire the run exactly once when the intake flow lands here with
+  // ?autorun=1 — and only for a genuinely fresh investigation
+  // (state.status === "idle"). canRunAnalysis alone isn't a safe guard: it
+  // is also true for a COMPLETED or FAILED run that's simply eligible for
+  // RE-EVALUATE/RUN AGAIN, so relying on it here would silently re-trigger
+  // a real analysis run on every reload of an old tab/bookmark that still
+  // carries a stale ?autorun=1 (the query-param strip below only runs
+  // client-side after the effect fires, so a page saved/reloaded before it
+  // ever ran would otherwise re-fire indefinitely). The query param is
+  // stripped right after so a subsequent refresh replays from persisted
+  // state instead of re-triggering anything.
+  const autoRunFiredRef = useRef(false);
+  useEffect(() => {
+    if (!autoRun || autoRunFiredRef.current || state.status !== "idle" || !canRunAnalysis) return;
+    autoRunFiredRef.current = true;
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("autorun");
+      window.history.replaceState({}, "", url);
+    }
+    void handleRunInvestigation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleRunInvestigation is recreated every render (it closes over state); the autoRunFiredRef guard is what makes this safe to run once, not the dependency list.
+  }, [autoRun, canRunAnalysis, state.status]);
 
   async function handleRunInvestigation() {
     if (runInFlightRef.current || isRunActive(state.status) || !measurement) {
@@ -244,16 +273,8 @@ export function InvestigationWorkspace({
             }`}
           >
             {activeTab === "investigation" ? (
-              <div className="mx-auto flex w-full max-w-[760px] flex-col gap-3">
-                <MeasurementPanel caseId={caseId} measurement={measurement} onSelect={handleSelectMeasurement} />
-                <Connector />
-                <AgentActivityPanel
-                  activity={state.agentActivity}
-                  active={state.agentActive}
-                  durationMs={state.agentMetrics?.totalDurationMs}
-                  defaultCollapsed={!state.agentActive && state.hypotheses.length > 0}
-                />
-                <InvestigationPanel
+              <div className="mx-auto flex w-full max-w-[900px] flex-col gap-4">
+                <InvestigationControls
                   caseId={caseId}
                   productId={productId}
                   revisionId={revisionId}
@@ -264,15 +285,29 @@ export function InvestigationWorkspace({
                   isSubmitting={isSubmitting}
                   disabledReason={disabledReason}
                   onRunInvestigation={handleRunInvestigation}
-                  onOpenCitation={handleOpenCitation}
-                  onSelectHypothesis={handleSelectHypothesis}
                 />
-                {comparisonEntry?.type === "result" ? (
-                  <>
-                    <Connector />
-                    <RevisionComparisonCard comparison={comparisonEntry.comparison} />
-                  </>
-                ) : null}
+                <AgentActivityPanel
+                  activity={state.agentActivity}
+                  active={state.agentActive}
+                  durationMs={state.agentMetrics?.totalDurationMs}
+                  defaultCollapsed={!state.agentActive && state.hypotheses.length > 0}
+                />
+                {/* The graph IS the correlation/hypothesis/history view now —
+                    no separate stacked cards. buildCanvasGraph folds the
+                    measurement, live/reconstructed state, and full
+                    timeline into one auto-laid-out chain; it renders
+                    nothing until there's at least a measurement. */}
+                <InvestigationCanvas
+                  measurement={measurement}
+                  state={state}
+                  timeline={timeline}
+                  onSelectMeasurement={handleSelectMeasurement}
+                  onSelectHypothesis={handleSelectHypothesis}
+                  onRecordResult={() => {
+                    setActiveTab("investigation");
+                    document.getElementById(CASE_COMPOSER_INPUT_ID)?.focus();
+                  }}
+                />
                 {state.agentMetrics ? (
                   <div className="mt-2">
                     <AgentMetricsPanel

@@ -52,9 +52,9 @@ export default async function RevisionPage({ params }: RevisionPageProps) {
                   {revision.facts.map((fact) => (
                     <li
                       key={fact.id}
-                      className="flex flex-wrap items-center gap-2 rounded-xl border border-[#ececee] px-3 py-2 text-sm text-[#18181b]"
+                      className="flex flex-wrap items-center gap-2 rounded-xl border border-[#1c212a] px-3 py-2 text-sm text-[#f5f6f7]"
                     >
-                      <span className="rounded-full border border-[#e4e4e7] px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-[#71717a]">
+                      <span className="rounded-full border border-[#232933] px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-[#9aa3af]">
                         {fact.category}
                       </span>
                       {describeProductFact(fact)}
@@ -80,9 +80,9 @@ export default async function RevisionPage({ params }: RevisionPageProps) {
                   <li key={failureCase.id}>
                     <Link
                       href={`/cases/${failureCase.id}`}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-[#ececee] px-3 py-2 text-sm transition-colors hover:border-[#d4d4d8] hover:bg-[#f4f4f5]/60"
+                      className="flex items-center justify-between gap-3 rounded-xl border border-[#1c212a] px-3 py-2 text-sm transition-colors hover:border-[#2d3440] hover:bg-[#151a21]/60"
                     >
-                      <span className="font-medium text-[#18181b]">{failureCase.title}</span>
+                      <span className="font-medium text-[#f5f6f7]">{failureCase.title}</span>
                       <StatusBadge label={failureCase.status} tone={STATUS_TONE[failureCase.status]} />
                     </Link>
                   </li>

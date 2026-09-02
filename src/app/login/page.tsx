@@ -12,7 +12,7 @@ import { canvasBackground, focusRing, radius, surface, text } from "@/lib/design
 
 const initialState: AuthFormState = {};
 
-const inputClass = `w-full ${radius.control} border border-[#e4e4e7] bg-white px-3 py-2 text-sm outline-none placeholder:text-[#a1a1aa] ${focusRing}`;
+const inputClass = `w-full ${radius.control} border border-[#232933] bg-card px-3 py-2 text-sm outline-none placeholder:text-[#6b7684] ${focusRing}`;
 
 export default function LoginPage() {
   const [signInState, signInAction, signInPending] = useActionState(
@@ -30,20 +30,20 @@ export default function LoginPage() {
         <div className="flex flex-col items-center gap-3 text-center">
           <span
             aria-hidden="true"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-[#1f9d52]/40 bg-[#1f9d52]/10 text-sm font-semibold text-[#15803d]"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-[#22c55e]/40 bg-[#22c55e]/10 text-sm font-semibold text-[#22c55e]"
           >
             C
           </span>
           <div className="flex flex-col gap-1">
             <p className={text.kicker}>Crado</p>
-            <h1 className="text-xl font-semibold tracking-tight text-[#18181b]">
+            <h1 className="text-xl font-semibold tracking-tight text-[#f5f6f7]">
               Sign in to your workspace
             </h1>
           </div>
         </div>
 
         <form action={signInAction} className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-sm text-[#18181b]">
+          <label className="flex flex-col gap-1 text-sm text-[#f5f6f7]">
             Email
             <input
               name="email"
@@ -53,7 +53,7 @@ export default function LoginPage() {
               className={inputClass}
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm text-[#18181b]">
+          <label className="flex flex-col gap-1 text-sm text-[#f5f6f7]">
             Password
             <input
               name="password"
@@ -66,7 +66,7 @@ export default function LoginPage() {
           </label>
 
           {signInState.error ? (
-            <p role="alert" className={`rounded-lg border border-[#b45309]/40 bg-[#b45309]/10 p-2 text-sm text-[#b45309]`}>
+            <p role="alert" className={`rounded-lg border border-[#f59e0b]/40 bg-[#f59e0b]/10 p-2 text-sm text-[#f59e0b]`}>
               {signInState.error}
             </p>
           ) : null}
@@ -74,7 +74,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={signInPending}
-            className={`mt-1 ${radius.control} border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-sm font-medium text-[#15803d] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:opacity-60`}
+            className={`mt-1 ${radius.control} border border-[#22c55e]/50 bg-[#22c55e]/10 px-4 py-2 text-sm font-medium text-[#22c55e] transition-colors hover:bg-[#22c55e]/20 disabled:cursor-not-allowed disabled:opacity-60`}
           >
             {signInPending ? "Signing in…" : "Sign in"}
           </button>
@@ -83,13 +83,13 @@ export default function LoginPage() {
             type="submit"
             formAction={signUpAction}
             disabled={signUpPending}
-            className={`${radius.control} border border-[#e4e4e7] px-4 py-2 text-sm font-medium text-[#18181b] transition-colors hover:bg-[#f4f4f5] disabled:cursor-not-allowed disabled:opacity-60`}
+            className={`${radius.control} border border-[#232933] px-4 py-2 text-sm font-medium text-[#f5f6f7] transition-colors hover:bg-[#151a21] disabled:cursor-not-allowed disabled:opacity-60`}
           >
             {signUpPending ? "Creating account…" : "Create an account"}
           </button>
 
           {signUpState.error ? (
-            <p role="alert" className="text-sm text-[#b45309]">
+            <p role="alert" className="text-sm text-[#f59e0b]">
               {signUpState.error}
             </p>
           ) : null}

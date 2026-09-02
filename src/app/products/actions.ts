@@ -46,6 +46,7 @@ export async function createProduct(
     return { error: "Product created, but the first revision failed." };
   }
 
-  revalidatePath("/workspace");
+  revalidatePath("/products");
+  revalidatePath("/investigations");
   redirect(`/products/${product.id}/revisions/${revision.id}`);
 }

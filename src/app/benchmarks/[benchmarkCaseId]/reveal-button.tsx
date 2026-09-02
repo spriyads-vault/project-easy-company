@@ -21,7 +21,7 @@ export function RevealButton({ benchmarkCaseId, disabled, disabledReason }: Reve
       <button
         type="submit"
         disabled={disabled || pending}
-        className={`${radius.control} border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-sm font-medium text-[#15803d] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:border-[#e4e4e7] disabled:bg-transparent disabled:text-[#a1a1aa]`}
+        className={`${radius.control} border border-[#22c55e]/50 bg-[#22c55e]/10 px-4 py-2 text-sm font-medium text-[#22c55e] transition-colors hover:bg-[#22c55e]/20 disabled:cursor-not-allowed disabled:border-[#232933] disabled:bg-transparent disabled:text-[#6b7684]`}
       >
         {pending ? "Revealing…" : "Reveal ground truth"}
       </button>
@@ -29,7 +29,7 @@ export function RevealButton({ benchmarkCaseId, disabled, disabledReason }: Reve
         <p className={`text-xs ${text.muted}`}>{disabledReason}</p>
       ) : null}
       {state.error ? (
-        <p role="alert" className="text-xs text-[#b45309]">
+        <p role="alert" className="text-xs text-[#f59e0b]">
           {state.error}
         </p>
       ) : null}

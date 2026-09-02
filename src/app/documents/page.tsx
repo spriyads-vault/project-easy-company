@@ -43,8 +43,7 @@ export default async function DocumentsPage({ searchParams }: DocumentsPageProps
   return (
     <div className={`flex min-h-0 flex-1 flex-col ${surface.page}`}>
       <PageHeader
-        backHref="/workspace"
-        backLabel={workspace.name}
+        eyebrow="Crado"
         title="Sources"
         rightSlot={
           <span className={`text-2xl font-semibold ${text.mono}`}>

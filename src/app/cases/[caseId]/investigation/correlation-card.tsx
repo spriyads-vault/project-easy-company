@@ -24,7 +24,7 @@ export function CorrelationCard({ correlation }: CorrelationCardProps) {
     <div className={`flex flex-col gap-3 border-l-2 p-4 ${style.accent} ${motion.rise} ${surface.card}`}>
       <div className="flex items-center justify-between gap-2">
         <span className={text.kicker}>{style.label} relationship</span>
-        <span className="rounded-full border border-[#1f9d52]/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#15803d]">
+        <span className="rounded-full border border-[#22c55e]/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#22c55e]">
           Candidate relationship
         </span>
       </div>

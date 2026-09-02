@@ -29,12 +29,12 @@ export function SearchPanel() {
           name="query"
           type="search"
           placeholder="e.g. 40 MHz clock shielding"
-          className={`flex-1 ${radius.control} border border-[#e4e4e7] bg-white px-3 py-2 text-sm outline-none placeholder:text-[#a1a1aa] ${focusRing}`}
+          className={`flex-1 ${radius.control} border border-[#232933] bg-card px-3 py-2 text-sm outline-none placeholder:text-[#6b7684] ${focusRing}`}
         />
         <button
           type="submit"
           disabled={pending}
-          className={`${radius.control} border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-sm font-medium text-[#15803d] transition-colors hover:bg-[#1f9d52]/20 disabled:cursor-not-allowed disabled:opacity-60`}
+          className={`${radius.control} border border-[#22c55e]/50 bg-[#22c55e]/10 px-4 py-2 text-sm font-medium text-[#22c55e] transition-colors hover:bg-[#22c55e]/20 disabled:cursor-not-allowed disabled:opacity-60`}
         >
           {pending ? "Searching…" : "Search"}
         </button>
@@ -57,11 +57,11 @@ export function SearchPanel() {
                   aria-pressed={selected?.chunkId === result.chunkId}
                   className={`flex w-full flex-col gap-0.5 rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
                     selected?.chunkId === result.chunkId
-                      ? "border-[#1f9d52]/50 bg-[#1f9d52]/10"
-                      : "border-[#ececee] hover:border-[#d4d4d8] hover:bg-[#f4f4f5]/60"
+                      ? "border-[#22c55e]/50 bg-[#22c55e]/10"
+                      : "border-[#1c212a] hover:border-[#2d3440] hover:bg-[#151a21]/60"
                   }`}
                 >
-                  <span className="truncate font-medium text-[#18181b]">{result.filename}</span>
+                  <span className="truncate font-medium text-[#f5f6f7]">{result.filename}</span>
                   <span className={`truncate text-xs ${text.muted}`}>
                     {result.pageNumber !== null
                       ? `Page ${result.pageNumber}`

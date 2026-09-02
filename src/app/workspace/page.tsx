@@ -1,63 +1,49 @@
-import Link from "next/link";
+// UX-04 (Agent-Native): the real "Workspace" account page, reached from
+// the sidebar's account menu. Deliberately thin — real identity/sign-out
+// content only, never a placeholder "Settings" surface with nothing
+// behind it (see docs/UX_AGENT_NATIVE.md §8).
 import { redirect } from "next/navigation";
 import { getCurrentWorkspace } from "@/lib/workspace/get-current-workspace";
-import { listProducts } from "@/lib/products/queries";
+import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/lib/design/page-header";
-import { EmptyState } from "@/lib/design/empty-state";
-import { surface, text, typography } from "@/lib/design/tokens";
-import { NewProductForm } from "./new-product-form";
+import { surface, typography } from "@/lib/design/tokens";
+import { signOut } from "./actions";
 
 export default async function WorkspacePage() {
   const workspace = await getCurrentWorkspace();
-
-  // Defense in depth: middleware already redirects unauthenticated
-  // requests, but a page that can render private data should never trust
-  // that alone.
   if (!workspace) {
     redirect("/login");
   }
 
-  const products = await listProducts();
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   return (
     <div className={`flex min-h-0 flex-1 flex-col ${surface.page}`}>
-      <PageHeader eyebrow="Crado" title={workspace.name} />
+      <PageHeader eyebrow="Crado" title="Workspace" />
 
-      <div className="flex flex-1 flex-col gap-8 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
-        <div className="mx-auto grid w-full max-w-[1000px] gap-6 md:grid-cols-[1fr_360px]">
-          <section className={`flex flex-col gap-4 p-5 ${surface.card}`}>
-            <h2 className={typography.sectionHeading}>Products</h2>
-            {products.length === 0 ? (
-              <EmptyState message="No products yet — create one to open a failure case against it." />
-            ) : (
-              <ul className="flex flex-col divide-y divide-[#ececee]">
-                {products.map((product) => (
-                  <li key={product.id}>
-                    <Link
-                      href={`/products/${product.id}`}
-                      className="flex items-center justify-between gap-3 py-3 text-sm transition-colors hover:text-[#15803d]"
-                    >
-                      <span className="font-medium text-[#18181b]">{product.name}</span>
-                      <span className={`shrink-0 ${typography.metadata}`}>
-                        {product.revisionCount} {product.revisionCount === 1 ? "revision" : "revisions"}
-                        {product.latestRevisionLabel ? (
-                          <>
-                            {" "}
-                            <span className={text.mono}>· {product.latestRevisionLabel}</span>
-                          </>
-                        ) : null}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section className={`flex flex-col gap-4 p-5 ${surface.card}`}>
-            <h2 className={typography.sectionHeading}>New product</h2>
-            <NewProductForm />
-          </section>
+      <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+        <div className={`mx-auto flex w-full max-w-[560px] flex-col gap-5 p-5 ${surface.card}`}>
+          <div className="flex flex-col gap-1">
+            <span className={typography.metadata}>Workspace name</span>
+            <span className={typography.pageTitle}>{workspace.name}</span>
+          </div>
+          {user?.email ? (
+            <div className="flex flex-col gap-1">
+              <span className={typography.metadata}>Signed in as</span>
+              <span className={`${typography.body} ${typography.technical}`}>{user.email}</span>
+            </div>
+          ) : null}
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="self-start rounded-[10px] border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/20"
+            >
+              Sign out
+            </button>
+          </form>
         </div>
       </div>
     </div>

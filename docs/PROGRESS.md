@@ -2469,3 +2469,151 @@ was explicitly **not** started per this session's own instruction.)
 - Next recommended ticket: MVP-12, Regulatory State evidence linkage —
   not started this session (not requested).
 - Commit: (see git log)
+
+## 2026-09-02 — UX-04 (Agent-Native Crado Product Experience), in progress
+
+The user handed over a large, single-message ticket, verbatim: "Create
+UX-04: Agent-Native Crado Product Experience." It explicitly **supersedes
+and discards** the light-theme UX-04 pass above — "this is NOT another
+visual polish pass." features.json's old `UX-04` entry was renamed to
+`UX-04-LIGHT` (marked SUPERSEDED, `passes: true` kept as an accurate
+historical record) and a new `UX-04` entry added with `passes: false` —
+this ticket is large and genuinely not finished; see its acceptance array
+for the current DONE/REMAINING split. Full audit + old/new journey
+mapping: `docs/UX_AGENT_NATIVE.md`.
+
+**Done and verified this session (build/lint/typecheck/test green, and
+live-QA'd against real seeded Gateway X data via chrome-devtools MCP,
+including one full from-scratch run through the entire new journey):**
+
+- **shadcn/ui, hand-rolled**: `shadcn` CLI isn't reliable in this
+  sandboxed shell, so every primitive was written directly from the
+  canonical shadcn source pattern onto real `@radix-ui/*` + `cva` +
+  `clsx`/`tailwind-merge` + `cmdk` + `react-resizable-panels@2` (pinned —
+  unpinned resolved to an incompatible v4). `src/components/ui/**`:
+  button, badge, separator, input, textarea, dialog, sheet, tooltip,
+  popover, tabs, dropdown-menu, scroll-area, skeleton, avatar, table,
+  command, resizable.
+- **Dark theme, one pass, app-wide**: `globals.css` rewritten to the
+  standard shadcn CSS-variable contract (`--background`/`--card`/
+  `--primary`/etc., mapped via Tailwind v4's `@theme inline`);
+  `src/lib/design/tokens.ts` rewritten to the same shape, now
+  CSS-variable-backed; the ~30 files already on the old light palette
+  bulk hex-swept in one `perl` pass (same mechanism the light UX-04 pass
+  used, run again for the reverse direction) — zero import-path churn
+  since route-scoped `theme.ts` shims re-export from the one token file.
+- **Application shell**: `src/lib/design/app-shell.tsx` (async server
+  component — fetches workspace/user/investigations/products once) +
+  `app-shell-chrome.tsx` (client — collapsible ~224px/56px sidebar,
+  New investigation / Search / Investigations / Products / Sources /
+  Benchmarks nav, account dropdown consolidating
+  workspace/settings/sign-out rather than fabricating dead nav items).
+  `src/lib/design/command-palette.tsx`: Cmd/Ctrl+K, shadcn `Command`.
+- **Investigations home** (`src/app/investigations/`): a real work
+  queue, not a metrics dashboard — Active/Recent groups, one row per
+  case (product/revision/test/state/latest action/updated). New file:
+  `src/lib/investigations/queries.ts` (`listInvestigations()`, batched,
+  no N+1) + `describe-investigation-status.ts` (12 tests).
+- **New Investigation intake** (`src/app/investigations/new/`):
+  free-text/attachment composer → deterministic extraction
+  (`parse-investigation-intake.ts`, 9 tests incl. the ticket's exact
+  worked example) → "CRADO UNDERSTOOD" confirmation (editable, product/
+  revision/frequency/margin/mode, missing-info note) → `[Start
+  investigation]` → `createInvestigationIntake` server action (resolves
+  or creates product/revision, inserts the failure case + measurement +
+  peak, best-effort attachment upload) → redirects to
+  `/cases/[id]/investigation?autorun=1`.
+- **Investigation canvas** — the ticket's central visual ask, now real:
+  `canvas/build-canvas-graph.ts` (pure function, zero React Flow import,
+  deterministic auto-layout: measurement → deterministic → hypotheses
+  branching horizontally into their own missing-evidence/next-test
+  columns → history trunk continues with observation/change/revision/
+  outcome nodes; 9 tests). `canvas/canvas-nodes.tsx`: 9 distinct typed
+  node components (Measurement/Deterministic/Hypothesis/Missing/
+  NextAction/Observation/Change/Revision/Outcome), each matching its own
+  per-node design spec, not one generic card. `canvas/
+  investigation-canvas.tsx`: the `@xyflow/react` wrapper — fitView, pan/
+  zoom, `nodesDraggable=false`/`nodesConnectable=false`/`deletable:
+  false`, no minimap.
+- **Wired into `investigation-workspace.tsx`**: extracted a leaner
+  `investigation-controls.tsx` (status/RUN button/failed-alert/
+  clarification/RecordEngineeringChangeForm — the old
+  `investigation-panel.tsx`'s non-canvas half) and dropped the old
+  stacked MeasurementPanel/CorrelationCard/HypothesisCard/
+  RevisionComparisonCard rendering entirely in favor of one
+  `<InvestigationCanvas>` fed by `measurement`+`state`+`timeline`. New
+  `autoRun` prop fires the run exactly once on mount, guarded on
+  `state.status === "idle"` specifically (not just `canRunAnalysis`,
+  which is also true for an already-completed/failed run eligible for
+  RE-EVALUATE — see bug below) and strips `?autorun=1` from the URL via
+  `window.history.replaceState` right after (no `next/navigation`
+  `useRouter`, which throws outside an App Router context in RTL tests).
+  NextActionNode's "Record result" focuses the real composer input
+  (`case-composer.tsx`'s id was de-`useId()`-ified to a stable
+  `CASE_COMPOSER_INPUT_ID` — there's only ever one composer per page).
+- **Two real bugs found via live QA, not just typecheck**: (1)
+  `OutcomeNode` was built with `showSource={false}`, assuming a measured
+  outcome is always the end of the graph — a real seeded case has two
+  engineer observations logged *after* its outcome, which produced 91
+  "Couldn't create edge for source handle" React Flow console warnings;
+  fixed by giving `OutcomeNode` a normal source handle like every other
+  trunk node (regression test added). (2) the auto-run effect's first
+  version guarded only on `canRunAnalysis`, which is also satisfied by a
+  completed/failed run — reloading an old tab that still carried a
+  stale `?autorun=1` silently re-triggered a real second analysis run;
+  fixed by also requiring `state.status === "idle"`, confirmed live
+  (reload of a completed case with `?autorun=1` no longer re-runs).
+- **Test-file changes**: `vitest.setup.ts` gained a no-op
+  `ResizeObserver` polyfill (jsdom doesn't implement it; `@xyflow/react`
+  throws without one) — chosen over mocking `InvestigationCanvas` out of
+  `investigation-workspace.test.tsx`, so the orchestrator test still
+  exercises the real canvas integration, not just SSE/state-reducer
+  logic (canvas layout math already has its own dedicated coverage in
+  `build-canvas-graph.test.ts`). A handful of assertions updated to match
+  the new node copy ("40 × 5 = 200" not "40 MHz × 5 = 200 MHz",
+  "Candidate" not "Candidate relationship"); the citation-click test now
+  clicks the HypothesisNode first (compact on the canvas by design —
+  "click for evidence" opens the Context Rail) then finds the citation
+  button inside the rail, matching where citations actually live now.
+  298/298 unit + 58/58 integration passing; `pnpm build` clean.
+- Old presentational components (`measurement-panel.tsx`,
+  `correlation-card.tsx`, `hypothesis-card.tsx`,
+  `revision-comparison-card.tsx`, `connector.tsx`) are now unused by
+  `investigation-workspace.tsx` (their visual design was ported into the
+  canvas nodes, not literally reused) but were **not deleted** this
+  session — they still compile, still have passing dedicated tests, and
+  deleting+re-verifying was judged lower-value than finishing the
+  higher-priority remaining items below given the ticket's size. Flagged
+  here as disclosed dead-code debt for a follow-up cleanup pass.
+
+**Explicitly NOT done yet — next session should start here, in this
+order:**
+
+1. `case-composer.tsx` intent classification for **Measurement** and
+   **Engineering Change** free-text flows (Observation already worked
+   before this ticket) — each needs its own deterministic parser (follow
+   `parse-investigation-intake.ts`'s pattern) producing an editable
+   confirmation artifact before calling the existing `createMeasurement`/
+   `recordEngineeringChange` actions. The composer's "+Attach ▸
+   Measurement" item is currently still a dead link to the old case page
+   form.
+2. Move the remaining manual/structured forms (case page's
+   `AddMeasurementForm`, standalone `RecordEngineeringChangeForm` if
+   still separately surfaced, `AddFactForm`) behind an "Advanced"/•••
+   disclosure — the ticket fails outright if any old form path is still
+   the *default* way to do something the new agent-first path also
+   covers.
+3. Evidence mode → dense `Table` (TYPE/EVIDENCE/SOURCE/REVISION/USED BY),
+   replacing `evidence-view.tsx`'s category cards.
+4. Sources mode → dense `Table` document browser (NAME/TYPE/PRODUCT/
+   REVISION/STATUS/USED/UPDATED), replacing `sources-panel.tsx`.
+5. Context Rail wrapped in a real `ResizablePanelGroup`/`ResizablePanel`/
+   `ResizableHandle` instead of its current fixed `w-[300px]`/`w-[340px]`.
+6. Mobile/tablet fallback: below the canvas's usable breakpoint, render
+   the investigation as a chronological artifact stack instead of
+   mounting React Flow; Context Rail opens as a `Sheet`.
+7. Full live screenshot QA at 1440/1280/1024/768/390 (this environment's
+   `resize_page` has previously floored around ~1000px regardless of
+   requested width — re-verify against the current release before
+   trusting it), plus the ticket's 12-point final report.
+- Commit: (see git log)

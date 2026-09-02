@@ -29,8 +29,8 @@ export function TypeFilterTabs({ active }: TypeFilterTabsProps) {
             aria-current={isActive ? "true" : undefined}
             className={
               isActive
-                ? "rounded-full border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-3 py-1.5 text-xs font-medium text-[#15803d]"
-                : `rounded-full border border-[#e4e4e7] px-3 py-1.5 text-xs font-medium ${text.muted} transition-colors hover:border-[#d4d4d8] hover:text-[#18181b]`
+                ? "rounded-full border border-[#22c55e]/50 bg-[#22c55e]/10 px-3 py-1.5 text-xs font-medium text-[#22c55e]"
+                : `rounded-full border border-[#232933] px-3 py-1.5 text-xs font-medium ${text.muted} transition-colors hover:border-[#2d3440] hover:text-[#f5f6f7]`
             }
           >
             {tab.label}

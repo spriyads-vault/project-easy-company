@@ -46,7 +46,7 @@ export async function signIn(
   }
 
   revalidatePath("/", "layout");
-  redirect("/workspace");
+  redirect("/investigations");
 }
 
 export async function signUp(
@@ -75,5 +75,5 @@ export async function signUp(
   }
 
   revalidatePath("/", "layout");
-  redirect("/workspace");
+  redirect("/investigations");
 }

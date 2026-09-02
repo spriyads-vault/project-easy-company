@@ -40,7 +40,7 @@ export default async function BenchmarksPage() {
         rightSlot={
           <Link
             href="/benchmarks/new"
-            className="shrink-0 rounded-lg border border-[#1f9d52]/50 bg-[#1f9d52]/10 px-4 py-2 text-sm font-medium text-[#15803d] transition-colors hover:bg-[#1f9d52]/20"
+            className="shrink-0 rounded-lg border border-[#22c55e]/50 bg-[#22c55e]/10 px-4 py-2 text-sm font-medium text-[#22c55e] transition-colors hover:bg-[#22c55e]/20"
           >
             New benchmark case
           </Link>
@@ -66,10 +66,10 @@ export default async function BenchmarksPage() {
                 <li key={benchmarkCase.id}>
                   <Link
                     href={`/benchmarks/${benchmarkCase.id}`}
-                    className={`flex flex-wrap items-center justify-between gap-2 p-4 ${surface.card} transition-colors hover:border-[#d4d4d8]`}
+                    className={`flex flex-wrap items-center justify-between gap-2 p-4 ${surface.card} transition-colors hover:border-[#2d3440]`}
                   >
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-medium text-[#18181b]">{benchmarkCase.name}</span>
+                      <span className="text-sm font-medium text-[#f5f6f7]">{benchmarkCase.name}</span>
                       <span className={typography.metadata}>
                         {benchmarkCase.productName} · {benchmarkCase.revisionLabel} ·{" "}
                         {benchmarkCase.failureCaseTitle}
