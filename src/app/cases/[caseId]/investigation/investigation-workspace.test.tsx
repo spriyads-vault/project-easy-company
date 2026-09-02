@@ -550,3 +550,67 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
     expect(screen.queryByText("Sources used")).not.toBeInTheDocument();
   });
 });
+
+/** Simulates a viewport below Tailwind's `lg` breakpoint by making
+ * `window.matchMedia` report a match for the workspace's own
+ * `(max-width: 1023px)` query — the same mechanism a real narrow browser
+ * window drives, without needing an actual layout engine (jsdom has
+ * none). */
+function mockBelowLgViewport() {
+  const matchMedia = vi.fn().mockImplementation((query: string) => ({
+    matches: query === "(max-width: 1023px)",
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+  Object.defineProperty(window, "matchMedia", { writable: true, configurable: true, value: matchMedia });
+}
+
+describe("InvestigationWorkspace — mobile fallback (UX-04)", () => {
+  afterEach(() => {
+    // @ts-expect-error -- test-only cleanup of the property this suite defines.
+    delete window.matchMedia;
+  });
+
+  it("renders the investigation stack (not the React Flow canvas) below the desktop breakpoint, with the same artifacts", () => {
+    mockBelowLgViewport();
+    const persistedState = reconstructFromPersistedEvents([
+      runStarted(),
+      measurementLoaded(),
+      correlationFound(),
+      hypothesisCreated(),
+      runCompleted(),
+    ]);
+    render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+
+    expect(screen.getByRole("list", { name: "Investigation, in order" })).toBeInTheDocument();
+    expect(screen.getByText("5th harmonic of 40 MHz system clock")).toBeInTheDocument();
+    // The desktop-only resizable rail never mounts on this branch.
+    expect(screen.queryByLabelText("Case context")).not.toBeInTheDocument();
+  });
+
+  it("opens the hypothesis detail in a bottom sheet — the mobile substitute for the persistent rail — when a stack artifact is tapped", () => {
+    mockBelowLgViewport();
+    const persistedState = reconstructFromPersistedEvents([
+      runStarted(),
+      measurementLoaded(),
+      correlationFound(),
+      hypothesisCreated(),
+      runCompleted(),
+    ]);
+    render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("5th harmonic of 40 MHz system clock"));
+
+    const sheet = screen.getByRole("dialog");
+    expect(within(sheet).getByLabelText("Case context")).toBeInTheDocument();
+    expect(within(sheet).getByText("Disconnect the display path and re-measure.")).toBeInTheDocument();
+  });
+
+  it("still lets an engineer reach the composer and record an observation on mobile (no primary capability becomes desktop-only)", () => {
+    mockBelowLgViewport();
+    render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
+    expect(screen.getByPlaceholderText(/tell crado/i)).toBeInTheDocument();
+  });
+});

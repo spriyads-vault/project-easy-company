@@ -9,8 +9,15 @@
 // Selection is lifted into InvestigationWorkspace (investigation-workspace.tsx
 // owns `selection` state) — clicking an artifact on the canvas sets it,
 // this just renders whatever it's given. Collapsible per the ticket
-// ("allow it to collapse").
-import { useState } from "react";
+// ("allow it to collapse") — UX-04 moved the collapse itself to be
+// controlled by the caller (`collapsed`/`onCollapse`/`onExpand`) rather
+// than an internal useState, so InvestigationWorkspace's resizable panel
+// (react-resizable-panels' own collapsedSize/onCollapse/onExpand) and this
+// component's expand/collapse button stay in sync — collapsing via the
+// drag handle updates the same state this button reads, and vice versa.
+// The same component is also reused, uncollapsible, inside the mobile
+// Sheet (investigation-workspace.tsx) — this file has no width/breakpoint
+// opinions of its own any more, sizing is entirely up to the caller.
 import type { AgentCompletedPayload, HypothesisCreatedPayload } from "@/lib/analysis/events";
 import type { MeasurementRow } from "@/lib/cases/queries";
 import type { ProductFactRecord } from "@/lib/correlation/harmonic-correlation";
@@ -46,6 +53,18 @@ interface ContextRailProps {
   productFacts: ProductFactRecord[];
   measurement: MeasurementRow | null;
   agentMetrics: AgentCompletedPayload | null;
+  /** Controlled collapse state — true renders only the reveal button.
+   * Always pass `false` when embedding this outside the desktop resizable
+   * rail (e.g. the mobile Sheet), since there's nothing to collapse into. */
+  collapsed: boolean;
+  onCollapse: () => void;
+  onExpand: () => void;
+  /** Hides the ▸ collapse affordance — for the mobile Sheet embedding,
+   * which already has its own visible Close (✕), so a second, differently
+   * labeled "collapse" control would be redundant and, since there is no
+   * panel to collapse INTO outside the resizable rail, mislabeled.
+   * Defaults to true (the desktop rail always shows it). */
+  showCollapseButton?: boolean;
 }
 
 const CONFIDENCE_LABEL: Record<HypothesisCreatedPayload["confidenceBand"], string> = {
@@ -222,17 +241,19 @@ export function ContextRail({
   productFacts,
   measurement,
   agentMetrics,
+  collapsed,
+  onCollapse,
+  onExpand,
+  showCollapseButton = true,
 }: ContextRailProps) {
-  const [collapsed, setCollapsed] = useState(false);
-
   if (collapsed) {
     return (
       <button
         type="button"
-        onClick={() => setCollapsed(false)}
+        onClick={onExpand}
         title="Show case panel"
         aria-label="Show case panel"
-        className={`hidden h-fit shrink-0 self-start rounded-[10px] border border-[#232933] bg-card px-2 py-3 text-xs text-[#9aa3af] hover:text-[#f5f6f7] lg:block ${focusRing}`}
+        className={`flex h-full w-full items-start justify-center rounded-[10px] border border-[#232933] bg-card px-2 py-3 text-xs text-[#9aa3af] hover:text-[#f5f6f7] ${focusRing}`}
       >
         ◂
       </button>
@@ -249,10 +270,7 @@ export function ContextRail({
           : "Case";
 
   return (
-    <aside
-      aria-label="Case context"
-      className={`hidden w-[300px] shrink-0 flex-col gap-4 self-start p-4 lg:flex xl:w-[340px] ${surface.card}`}
-    >
+    <aside aria-label="Case context" className={`flex h-full w-full flex-col gap-4 overflow-y-auto p-4 ${surface.card}`}>
       <div className="flex items-center justify-between gap-2">
         <span className={text.kicker}>{heading}</span>
         <div className="flex items-center gap-2">
@@ -265,15 +283,17 @@ export function ContextRail({
               Clear
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setCollapsed(true)}
-            title="Collapse panel"
-            aria-label="Collapse panel"
-            className={`text-xs ${text.muted} hover:text-[#f5f6f7] ${focusRing}`}
-          >
-            ▸
-          </button>
+          {showCollapseButton ? (
+            <button
+              type="button"
+              onClick={onCollapse}
+              title="Collapse panel"
+              aria-label="Collapse panel"
+              className={`text-xs ${text.muted} hover:text-[#f5f6f7] ${focusRing}`}
+            >
+              ▸
+            </button>
+          ) : null}
         </div>
       </div>
 

@@ -2616,4 +2616,111 @@ order:**
    `resize_page` has previously floored around ~1000px regardless of
    requested width — re-verify against the current release before
    trusting it), plus the ticket's 12-point final report.
-- Commit: (see git log)
+- Commit: `3d06f97`
+
+## UX-04 — session 3: resizable rail, mobile fallback, and completion
+
+Continued from `3d06f97` (items 1–3 above already done: composer intent
+classification, Advanced forms, Evidence/Sources tables). This session
+closed the remaining items in order and completed the ticket.
+
+**Item 4 — Resizable context rail.** `context-rail.tsx`'s internal
+`useState(collapsed)` was replaced with controlled props
+(`collapsed`/`onCollapse`/`onExpand`, plus a new `showCollapseButton` —
+see mobile note below) so both the desktop resizable panel and the
+mobile Sheet can drive the same component from outside. Desktop's
+canvas+rail row in `investigation-workspace.tsx` is now a real
+`ResizablePanelGroup`/`ResizablePanel`/`ResizableHandle`
+(`defaultSize` 76/24, `minSize` 50/18, `maxSize` 38, `collapsedSize` 4,
+`collapsible`), with an `ImperativePanelHandle` ref driving the same ▸/◂
+button the rail already had. Drag-resize, collapse/expand, and
+canvas-click selection all verified live at 1440/1280.
+
+**Item 5 — Mobile fallback.** `canvas-nodes.tsx`'s 9 node components were
+split into a presentational `*NodeContent` (typed data prop, no React
+Flow coupling) and a thin `XNode({data}: NodeProps)` wrapper around
+`NodeShell`. Two new exports — `renderCanvasNodeContent(data, options)`
+and `canvasNodeShellStyle(kind)` — are the single place a `CanvasNodeData`
+kind maps to its content/styling, read by both the desktop nodes and the
+new `canvas/investigation-stack.tsx` (`MobileInvestigationStack`), which
+walks `buildCanvasGraph`'s node array (its insertion order is already the
+correct chronological/grouped reading order — no separate sort needed)
+and renders each artifact as a plain list item, interactive for
+measurement/hypothesis (opens the same `selection` state a canvas click
+would) and inert for everything else.
+
+`investigation-workspace.tsx` picks exactly one of the desktop
+(`InvestigationCanvas`+resizable rail) or mobile (`MobileInvestigationStack`,
+no rail) branches per render, via a new `useBelowLgBreakpoint()` hook —
+**not** two CSS-hidden branches always mounted. That distinction mattered:
+the first version used `hidden lg:flex`/`lg:hidden` on both branches
+simultaneously, which is how the codebase handles responsive layout
+everywhere else, but jsdom (the unit-test environment) doesn't evaluate
+CSS media queries at all, so both branches' content was simultaneously
+queryable and 17 pre-existing tests failed on duplicate-element errors.
+Fixed by switching to real conditional rendering keyed off `belowLg`,
+which also avoids ever mounting React Flow inside a zero-size
+`display:none` container. `useBelowLgBreakpoint` itself is backed by
+`useSyncExternalStore` (matchMedia's `change` event as the external
+store), not a `useState` + `setState`-in-`useEffect` — the latter is a
+hard ESLint error in this repo (`react-hooks/set-state-in-effect`) and
+was caught by the lint gate, not by inspection.
+
+Mobile's substitute for the persistent rail is a bottom `Sheet` that
+reuses `ContextRail` verbatim (same component, `showCollapseButton={false}`
+since the Sheet's own ✕ makes the rail's ▸ redundant and, outside the
+resizable rail, mislabeled) — never a second, divergent implementation of
+hypothesis/measurement detail. It's gated on `belowLg && selection !== null`
+(not just an `lg:hidden` className on the Sheet) so Radix's overlay/
+focus-trap never activates on desktop, where the persistent rail already
+shows the same selection.
+
+**Item 6 — Verification.** New/updated tests: `investigation-stack.test.tsx`
+(6, MobileInvestigationStack ordering/interactivity/empty-state),
+`context-rail.test.tsx` (5, controlled collapse contract — this component
+had no prior coverage), 3 new cases in `investigation-workspace.test.tsx`
+(mobile branch renders the stack not the canvas, tapping an artifact opens
+the Sheet with the same detail, composer stays reachable on mobile — all
+via a `matchMedia` mock). Full gate: `pnpm lint` / `pnpm typecheck` clean;
+`pnpm test` 358/358 (was 298 at `309858b`, +46 from items 1–3, +14 this
+session); `pnpm test:integration` 61/61 (unchanged from items 1–3);
+`pnpm build` clean.
+
+Live QA (chrome-devtools MCP, signed in as `gateway-x-demo@crado.local`,
+real seeded Gateway X cases — `resize_page` correctly hit every requested
+width this session, unlike the ~1000px floor noted after `309858b`):
+- **1440**: resizable rail — collapsed via the ▸ button (canvas expanded
+  to fill the freed space, separator `value` went to its max), expanded
+  again via ◂, clicked a hypothesis node and confirmed the rail's detail
+  view updated; console clean apart from one pre-existing React Flow
+  attribution warning (present before this session, not a regression).
+- **1280**: full Investigation tab with rail, no layout issues.
+- **1024** (the `lg` boundary itself): confirmed desktop layout, matching
+  the `(max-width: 1023px)` query's intended boundary.
+- **768**: mobile investigation stack renders (no React Flow, no rail);
+  tapped the hypothesis card, confirmed the bottom Sheet opened with the
+  exact same hypothesis detail as the desktop rail, no `▸` button present;
+  console clean (no React Flow warning either — it's genuinely not
+  mounted on this branch).
+- **390**: same stack layout holds; Evidence table's `USED BY` column
+  confirmed to scroll inside its own `overflow-x-auto` container via a
+  `document.body.scrollWidth === window.innerWidth` check (the page body
+  itself never scrolls horizontally); ran a real composer round-trip —
+  typed "Retested Rev18 today and it now measures 4.2 dB above the limit",
+  classified as MEASUREMENT, margin extracted as 4.2, frequency correctly
+  left blank (not fabricated), "Recorded against Rev18" shown, cancelled
+  without persisting (kept the seed case's demo data untouched for future
+  QA); console clean.
+- Case page (`/cases/[caseId]`, 1440): confirmed the Advanced disclosure
+  ("MANUAL ENTRY (ADVANCED)") from items 1–3 still renders correctly,
+  collapsed by default, composer-first copy intact.
+
+No duplicate analysis runs or unintended state mutations were observed
+during any of the above (the composer confirmation was cancelled, not
+submitted, specifically to avoid mutating the shared demo dataset).
+
+**Outcome**: all six ordered items complete and verified. `UX-04.passes`
+set to `true` in `features.json`; `UX-04-LIGHT`'s superseded entry left
+untouched.
+
+- Commit: `d77d737`

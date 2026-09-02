@@ -13,7 +13,8 @@
 // artifact selection are both local state only — never a
 // navigation/fetch — so the live run stays connected regardless of which
 // view is showing or what's selected in the rail.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { MeasurementRow } from "@/lib/cases/queries";
 import type { ProductFactRecord } from "@/lib/correlation/harmonic-correlation";
 import type { EvidenceCategory } from "@/lib/domain/schema";
@@ -28,6 +29,7 @@ import {
 import { SseEventParser } from "@/lib/investigation/parse-sse-events";
 import type { MeasurementComparison } from "@/lib/measurements/compare-measurements";
 import { InvestigationCanvas } from "./canvas/investigation-canvas";
+import { MobileInvestigationStack } from "./canvas/investigation-stack";
 import { InvestigationControls } from "./investigation-controls";
 import { InvestigationTimeline } from "./investigation-timeline";
 import { AgentActivityPanel } from "./agent-activity-panel";
@@ -42,6 +44,45 @@ import { EvidenceView } from "./evidence-view";
 import { CASE_COMPOSER_INPUT_ID, CaseComposer } from "./case-composer";
 import { deriveSourcesUsed } from "./derive-sources-used";
 import { canvasBackground, surface, text } from "./theme";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+
+const BELOW_LG_QUERY = "(max-width: 1023px)";
+
+function subscribeToBelowLg(onChange: () => void): () => void {
+  // jsdom (the unit-test environment) does not implement matchMedia — fall
+  // back to "never changes" rather than throwing, same as a very old
+  // browser without matchMedia support would.
+  if (typeof window.matchMedia !== "function") return () => {};
+  const query = window.matchMedia(BELOW_LG_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function getBelowLgSnapshot(): boolean {
+  if (typeof window.matchMedia !== "function") return false;
+  return window.matchMedia(BELOW_LG_QUERY).matches;
+}
+
+function getBelowLgServerSnapshot(): boolean {
+  // No viewport on the server — default to desktop so the mobile Sheet
+  // below starts closed; useSyncExternalStore reconciles this against the
+  // real client value after hydration, which is what it's for (this is
+  // the React-endorsed way to read an external, subscription-based value
+  // like matchMedia without a synchronous setState-in-effect, which this
+  // repo's lint config hard-errors on).
+  return false;
+}
+
+/** True below Tailwind's `lg` breakpoint (1024px) — used only to keep the
+ * mobile selection Sheet's Radix Dialog genuinely closed on desktop
+ * (where the persistent resizable rail already shows the same selection),
+ * rather than mounted-but-CSS-hidden: a `display:none` sheet would still
+ * open Radix's overlay/focus-trap/scroll-lock, which no `lg:hidden`
+ * className on the content itself can suppress. */
+function useBelowLgBreakpoint(): boolean {
+  return useSyncExternalStore(subscribeToBelowLg, getBelowLgSnapshot, getBelowLgServerSnapshot);
+}
 
 interface OpenCitationState {
   citation: EvidenceCitation;
@@ -108,6 +149,14 @@ export function InvestigationWorkspace({
   // one render behind a click, so a fast double-click could otherwise fire
   // two POSTs before React re-renders. This ref is checked synchronously.
   const runInFlightRef = useRef(false);
+  // UX-04 resizable rail: react-resizable-panels drives the rail's actual
+  // collapsed/expanded size; `railCollapsed` just mirrors that (via the
+  // panel's own onCollapse/onExpand callbacks) so ContextRail's button
+  // renders the right state whichever side triggered the change — the
+  // drag handle collapsing past its threshold, or the button itself.
+  const railPanelRef = useRef<ImperativePanelHandle>(null);
+  const [railCollapsed, setRailCollapsed] = useState(false);
+  const belowLg = useBelowLgBreakpoint();
 
   function handleOpenCitation(
     citation: EvidenceCitation,
@@ -277,6 +326,82 @@ export function InvestigationWorkspace({
   const sourcesUsedCount = deriveSourcesUsed(state.hypotheses).length;
   const busy = isSubmitting || state.status === "running";
 
+  function handleRecordResult() {
+    setActiveTab("investigation");
+    document.getElementById(CASE_COMPOSER_INPUT_ID)?.focus();
+  }
+
+  // Shared by the desktop and mobile branches below so the Evidence,
+  // Timeline, Sources and Investigation-controls/agent-activity bodies
+  // are written once — only the Investigation tab's canvas artifact
+  // (`canvas` param: the real React Flow canvas on desktop, the plain
+  // vertical stack on mobile) differs between the two callers.
+  function renderTabContent(canvas: ReactNode): ReactNode {
+    return (
+      <div
+        className={`flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-32 pt-5 sm:px-6 ${
+          activeTab === "investigation" ? canvasBackground : ""
+        }`}
+      >
+        {activeTab === "investigation" ? (
+          <div className="mx-auto flex w-full max-w-[900px] flex-col gap-4">
+            <InvestigationControls
+              caseId={caseId}
+              productId={productId}
+              revisionId={revisionId}
+              currentRevisionLabel={currentRevisionLabel}
+              hasMultipleRevisions={hasMultipleRevisions}
+              state={state}
+              canRunAnalysis={canRunAnalysis}
+              isSubmitting={isSubmitting}
+              disabledReason={disabledReason}
+              onRunInvestigation={handleRunInvestigation}
+            />
+            <AgentActivityPanel
+              activity={state.agentActivity}
+              active={state.agentActive}
+              durationMs={state.agentMetrics?.totalDurationMs}
+              defaultCollapsed={!state.agentActive && state.hypotheses.length > 0}
+            />
+            {canvas}
+            {state.agentMetrics ? (
+              <div className="mt-2">
+                <AgentMetricsPanel
+                  metrics={state.agentMetrics}
+                  toolCallCount={state.agentActivity.length}
+                  sourcesUsedCount={sourcesUsedCount}
+                />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {activeTab === "evidence" ? (
+          <div className="mx-auto w-full max-w-[900px]">
+            <EvidenceView
+              hypotheses={state.hypotheses}
+              revisionLabel={currentRevisionLabel}
+              onOpenCitation={handleOpenCitation}
+              onSelectHypothesis={handleSelectHypothesis}
+            />
+          </div>
+        ) : null}
+
+        {activeTab === "timeline" ? (
+          <div className="mx-auto w-full max-w-[760px]">
+            <InvestigationTimeline entries={timeline} />
+          </div>
+        ) : null}
+
+        {activeTab === "sources" ? (
+          <div className="mx-auto w-full max-w-[900px]">
+            <SourcesPanel hypotheses={state.hypotheses} metrics={state.agentMetrics} />
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <>
       <div className={`flex min-h-0 flex-1 flex-col ${surface.page}`}>
@@ -291,91 +416,107 @@ export function InvestigationWorkspace({
           rightSlot={<ViewSwitcher activeTab={activeTab} onSelectTab={setActiveTab} />}
         />
 
-        <div className="flex min-h-0 flex-1">
-          {/* One canvas, four views — switching tabs never unmounts the SSE
-              connection above; only what's rendered here changes. The dot
-              grid is the canvas's one deliberate texture (Investigation
-              view only — the other three are dense information views, not
-              a graph surface). Bottom padding clears the floating
-              composer. */}
-          <div
-            className={`flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-32 pt-5 sm:px-6 ${
-              activeTab === "investigation" ? canvasBackground : ""
-            }`}
-          >
-            {activeTab === "investigation" ? (
-              <div className="mx-auto flex w-full max-w-[900px] flex-col gap-4">
-                <InvestigationControls
-                  caseId={caseId}
-                  productId={productId}
-                  revisionId={revisionId}
-                  currentRevisionLabel={currentRevisionLabel}
-                  hasMultipleRevisions={hasMultipleRevisions}
-                  state={state}
-                  canRunAnalysis={canRunAnalysis}
-                  isSubmitting={isSubmitting}
-                  disabledReason={disabledReason}
-                  onRunInvestigation={handleRunInvestigation}
-                />
-                <AgentActivityPanel
-                  activity={state.agentActivity}
-                  active={state.agentActive}
-                  durationMs={state.agentMetrics?.totalDurationMs}
-                  defaultCollapsed={!state.agentActive && state.hypotheses.length > 0}
-                />
-                {/* The graph IS the correlation/hypothesis/history view now —
-                    no separate stacked cards. buildCanvasGraph folds the
-                    measurement, live/reconstructed state, and full
-                    timeline into one auto-laid-out chain; it renders
-                    nothing until there's at least a measurement. */}
-                <InvestigationCanvas
-                  measurement={measurement}
-                  state={state}
-                  timeline={timeline}
-                  onSelectMeasurement={handleSelectMeasurement}
-                  onSelectHypothesis={handleSelectHypothesis}
-                  onRecordResult={() => {
-                    setActiveTab("investigation");
-                    document.getElementById(CASE_COMPOSER_INPUT_ID)?.focus();
-                  }}
-                />
-                {state.agentMetrics ? (
-                  <div className="mt-2">
-                    <AgentMetricsPanel
-                      metrics={state.agentMetrics}
-                      toolCallCount={state.agentActivity.length}
-                      sourcesUsedCount={sourcesUsedCount}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {activeTab === "evidence" ? (
-              <div className="mx-auto w-full max-w-[900px]">
-                <EvidenceView
-                  hypotheses={state.hypotheses}
-                  revisionLabel={currentRevisionLabel}
-                  onOpenCitation={handleOpenCitation}
-                  onSelectHypothesis={handleSelectHypothesis}
-                />
-              </div>
-            ) : null}
-
-            {activeTab === "timeline" ? (
-              <div className="mx-auto w-full max-w-[760px]">
-                <InvestigationTimeline entries={timeline} />
-              </div>
-            ) : null}
-
-            {activeTab === "sources" ? (
-              <div className="mx-auto w-full max-w-[900px]">
-                <SourcesPanel hypotheses={state.hypotheses} metrics={state.agentMetrics} />
-              </div>
-            ) : null}
+        {/* Two responsive branches, not one layout reflowed by CSS alone:
+            below `lg` there is no rail to resize and React Flow's
+            drag/zoom/pan surface doesn't degrade to something usable at
+            that width, so mobile gets a plain full-width stack (no split,
+            no React Flow) while desktop gets the real canvas beside a
+            resizable rail. `belowLg` picks exactly one branch to mount —
+            never both at once behind `hidden`/`lg:hidden` — so
+            InvestigationCanvas is never initialized inside a
+            `display:none` container (react-flow sizes itself from its
+            container's real bounds at mount) and the test environment,
+            which doesn't evaluate CSS media queries, never sees both
+            branches' content simultaneously. */}
+        {belowLg ? (
+          <div className="flex min-h-0 flex-1">
+            {renderTabContent(
+              <MobileInvestigationStack
+                measurement={measurement}
+                state={state}
+                timeline={timeline}
+                onSelectMeasurement={handleSelectMeasurement}
+                onSelectHypothesis={handleSelectHypothesis}
+                onRecordResult={handleRecordResult}
+              />,
+            )}
           </div>
+        ) : (
+          <div className="flex min-h-0 flex-1">
+            <ResizablePanelGroup direction="horizontal">
+              <ResizablePanel defaultSize={76} minSize={50}>
+                {/* One canvas, four views — switching tabs never unmounts
+                    the SSE connection above; only what's rendered here
+                    changes. The dot grid is the canvas's one deliberate
+                    texture (Investigation view only). Bottom padding
+                    clears the floating composer. */}
+                {renderTabContent(
+                  <InvestigationCanvas
+                    measurement={measurement}
+                    state={state}
+                    timeline={timeline}
+                    onSelectMeasurement={handleSelectMeasurement}
+                    onSelectHypothesis={handleSelectHypothesis}
+                    onRecordResult={handleRecordResult}
+                  />,
+                )}
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel
+                ref={railPanelRef}
+                defaultSize={24}
+                minSize={18}
+                maxSize={38}
+                collapsible
+                collapsedSize={4}
+                onCollapse={() => setRailCollapsed(true)}
+                onExpand={() => setRailCollapsed(false)}
+                className="py-5 pr-4 xl:pr-6"
+              >
+                <ContextRail
+                  selection={selection}
+                  onClear={() => setSelection(null)}
+                  onOpenFullSource={handleOpenCitation}
+                  productName={productName}
+                  revisionLabel={currentRevisionLabel}
+                  productFacts={productFacts}
+                  measurement={measurement}
+                  agentMetrics={state.agentMetrics}
+                  collapsed={railCollapsed}
+                  onCollapse={() => railPanelRef.current?.collapse()}
+                  onExpand={() => railPanelRef.current?.expand()}
+                />
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </div>
+        )}
 
-          <div className="hidden shrink-0 py-5 pr-4 lg:block xl:pr-6">
+        {/* Mobile's substitute for the persistent rail: tapping a
+            measurement or hypothesis in the stack sets the same
+            `selection` state a desktop canvas click does, opened here as a
+            bottom sheet reusing ContextRail's own detail views verbatim —
+            never a second, divergent implementation of the same content.
+            Gated on `belowLg` (not just `lg:hidden` on the sheet itself)
+            so Radix's overlay/focus-trap never activates on desktop,
+            where the persistent rail already shows the same selection. */}
+        <Sheet
+          open={belowLg && selection !== null}
+          onOpenChange={(open) => {
+            if (!open) setSelection(null);
+          }}
+        >
+          <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto p-0">
+            <SheetHeader className="sr-only">
+              <SheetTitle>
+                {selection?.kind === "measurement"
+                  ? "Measurement"
+                  : selection?.kind === "hypothesis"
+                    ? "Hypothesis details"
+                    : selection?.kind === "source"
+                      ? "Source"
+                      : "Case"}
+              </SheetTitle>
+            </SheetHeader>
             <ContextRail
               selection={selection}
               onClear={() => setSelection(null)}
@@ -385,9 +526,13 @@ export function InvestigationWorkspace({
               productFacts={productFacts}
               measurement={measurement}
               agentMetrics={state.agentMetrics}
+              collapsed={false}
+              onCollapse={() => setSelection(null)}
+              onExpand={() => {}}
+              showCollapseButton={false}
             />
-          </div>
-        </div>
+          </SheetContent>
+        </Sheet>
 
         <div className="pointer-events-none sticky bottom-0 flex flex-col items-center gap-1.5 px-4 pb-4 pt-2 sm:px-6">
           <div className="pointer-events-auto w-full">
