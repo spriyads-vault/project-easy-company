@@ -17,8 +17,8 @@ import {
 } from "@/lib/hypotheses/generate-hypotheses";
 import type { HypothesisModelAdapter } from "@/lib/ai/provider";
 import type { FinalHypothesis } from "@/lib/hypotheses/schema";
-import type { RunInvestigationAgentResult } from "@/lib/agents/investigation-agent";
-import type { AgentToolCompletedPayload, AnalysisEvent, AnalysisEventType } from "./events";
+import type { AgentActivityStreamItem, RunInvestigationAgentResult } from "@/lib/agents/investigation-agent";
+import type { AnalysisEvent, AnalysisEventType } from "./events";
 
 /**
  * The DB-touching half of MVP-10B's agent integration. run-analysis.ts stays
@@ -33,17 +33,19 @@ import type { AgentToolCompletedPayload, AnalysisEvent, AnalysisEventType } from
 export interface InvestigationAgentRunner {
   /**
    * An async generator, not a Promise — UX-04's reopened real-time-flow
-   * fix. Yields one AgentToolCompletedPayload the instant each tool call
-   * actually finishes (see investigateStreaming in investigation-agent.ts),
-   * then returns the final validated result once the whole agent phase
-   * resolves. runAnalysis below forwards each yielded value straight to
-   * the SSE stream as an agent.tool.completed event — that's what makes
-   * the activity list progress one real step at a time instead of a
-   * frozen wait followed by every remaining step appearing at once.
+   * fix. Yields one AgentActivityStreamItem (a real "started" the instant
+   * the SDK is about to call a tool, or "completed" the instant it
+   * actually finishes — see investigateStreaming in
+   * investigation-agent.ts), then returns the final validated result once
+   * the whole agent phase resolves. runAnalysis below forwards each
+   * yielded value straight to the SSE stream as an agent.tool.started /
+   * agent.tool.completed event — that's what makes the Investigation Trace
+   * progress one real step at a time instead of a frozen wait followed by
+   * every remaining step appearing at once.
    */
   investigate(
     correlationCandidates: HarmonicCorrelationCandidate[],
-  ): AsyncGenerator<AgentToolCompletedPayload, RunInvestigationAgentResult, void>;
+  ): AsyncGenerator<AgentActivityStreamItem, RunInvestigationAgentResult, void>;
 }
 
 export interface AnalysisMeasurementInput {
@@ -162,7 +164,12 @@ export async function* runAnalysis(
       const agentGenerator = agentRunner.investigate(correlationCandidates);
       let agentStep = await agentGenerator.next();
       while (!agentStep.done) {
-        yield emit("agent.tool.completed", agentStep.value);
+        const item = agentStep.value;
+        if (item.kind === "started") {
+          yield emit("agent.tool.started", item.payload);
+        } else {
+          yield emit("agent.tool.completed", item.payload);
+        }
         agentStep = await agentGenerator.next();
       }
       const agentResult = agentStep.value;

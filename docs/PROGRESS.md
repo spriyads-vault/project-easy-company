@@ -3187,3 +3187,207 @@ view is real, live, and truthful, reusing 100% existing data with zero
 new event types or backend changes. `UX-05.passes` is `false` — several
 sections of the full ticket (above) remain unbuilt. `UX-04`/`UX-04-LIGHT`
 are untouched.
+
+## UX-05 continuation — enterprise investigation shell, recent work, and live reasoning trace
+
+Continuation of the same `UX-05` ticket (`features.json` entry unchanged,
+`passes` stays `false`). Baseline confirmed before any edit: HEAD was
+exactly `bbe83c2` (the partial UX-05 commit above), `UX-04`/`UX-04-LIGHT`
+untouched throughout. This session shipped Workstreams A, B, and C in
+full plus part of D (queue filters), and — importantly — found and fixed
+two genuine, previously-undetected bugs via live QA against a real
+Anthropic call, which is the most consequential outcome of this session.
+
+### What shipped
+
+- **Workstream A — Sidebar shell**: `src/components/ui/sidebar.tsx`, a
+  full shadcn Sidebar port (`SidebarProvider`/`Sidebar`/`SidebarTrigger`/
+  `SidebarRail`/`SidebarInset`/`SidebarHeader`/`SidebarContent`/
+  `SidebarGroup(Label)`/`SidebarMenu(Item/Button/Badge)`/`SidebarFooter`,
+  `useSidebar`). `app-shell-chrome.tsx` rewritten around it: Cmd/Ctrl+B
+  toggle, collapsed icon mode with tooltips promoted to real
+  `aria-label`s (collapsed nav items were losing their accessible name
+  until this was added), off-canvas mobile Sheet, real destinations only
+  (Investigations, Resolved cases, Products & revisions, Sources,
+  Benchmarks — no fabricated nav items), workspace switcher in the
+  footer. Real Crado logo (white mark on the dark sidebar) via
+  `public/brand/crado-mark-{black,white}.png`. `SidebarMenuBadge` shows
+  a real, computed open-investigations count, never a placeholder
+  number. Several live-QA'd fixes along the way: badge rendering on its
+  own line (fixed via absolute positioning), collapsed-mode label text
+  bleeding as illegible fragments (fixed via
+  `group-data-[collapsible=icon]:[&>span]:hidden`), the collapse trigger
+  disappearing entirely when collapsed (kept visible, stacked under the
+  logo).
+- **Workstream B — Recent investigations**: `New investigation`'s large
+  empty lower region now shows a real `RecentInvestigations` section
+  (`src/app/investigations/new/recent-investigations.tsx` +
+  `actions.ts`'s `loadRecentInvestigations()`), ordered by latest
+  meaningful activity, each card showing product/revision, a restrained
+  generic `DeviceGlyph` (`src/lib/design/device-glyph.tsx` — deliberately
+  generic, never a fabricated antenna/PCB/sensor icon, since the schema
+  carries no device-category data), the case's truthful workflow state,
+  recency, and a real required-next-action string, one click to resume.
+  Proper loading/empty/error states.
+- **Workstream C — Investigation Trace**: `agent-activity-panel.tsx`
+  replaced by `investigation-trace-panel.tsx` — a collapsible,
+  enterprise-styled live trace (visually adapted from the shadcn
+  Chain-of-Thought pattern, never labeled that in-product, never model
+  reasoning text) populated only by genuine server events. New
+  `agent.tool.started` event added via an additive migration
+  (`supabase/migrations/20260903000000_analysis_events_agent_tool_started.sql`),
+  bridged from the AI SDK's real `onToolExecutionStart` callback
+  (confirmed present and symmetric with the already-used
+  `onToolExecutionEnd` by inspecting the installed package's own
+  `.d.ts`) in `investigateStreaming` (`investigation-agent.ts`), threaded
+  through `run-analysis.ts` → `reconstruct.ts`
+  (`WorkspaceState.activeTools`, cleared the instant the matching
+  `agent.tool.completed` arrives) → the same canonical persisted-then-
+  streamed SSE pipeline Decision/Map/status already share — a live run
+  and a page-refresh replay produce the identical trace.
+- **Workstream D (partial)**: real queue filter buckets — Active / Needs
+  evidence / Ready for review / Resolved
+  (`src/lib/investigations/derive-queue-workflow-state.ts`,
+  `queue-filter-tabs.tsx`) — with real counts and a truthful required-
+  next-action string per row, wired into `/investigations`. Deliberately
+  a separate, lighter batched-input function rather than calling the
+  expensive per-case `deriveWorkflowState`/`getInvestigationTimeline`
+  once per queue row, with its own 23-case test suite proving
+  equivalence. Not built this session: dedicated Before/After screen,
+  dedicated resolved-trajectory view, Map minimap/jump-to-active, a full
+  WCAG audit (see Deferred below).
+
+### Two real bugs found and fixed via live QA (the important part)
+
+Live-verifying Workstream C against a genuinely new investigation and a
+real Anthropic call (chrome-devtools MCP, no mocks) surfaced two defects
+neither unit tests nor the earlier partial-ticket session had caught:
+
+1. **Duplicate React key / `event.callId` misuse.** The system prompt
+   correctly asks the model to call several tools "together in the same
+   turn" (`getMeasurementContext` + `getDeterministicCorrelations` +
+   `getProductContext` + history tools). A live run of exactly that
+   shape threw `Encountered two children with the same key,
+   'call-dzk5KePjTqYjFOGUV7aA8Jvp'` in the browser. Root cause, confirmed
+   against the DB and the AI SDK's own type declarations: `investigation-
+   agent.ts` was reading `event.callId` in both `onToolExecutionStart`
+   and `onToolExecutionEnd` — but the SDK documents `callId` as "Unique
+   identifier for this **generation call**", i.e. shared by *every* tool
+   executed within one model step, not a per-tool-call id. All 5
+   concurrently-called tools in that step got the identical id. Fixed by
+   reading the real per-call id, `event.toolCall.toolCallId`, instead
+   (verified against real Anthropic `toolu_...` ids in
+   `analysis_events` after the fix — six distinct ids, correctly
+   started→completed paired). Added a regression test
+   (`investigation-agent.test.ts`: "gives each tool call its own
+   distinct toolCallId ... never the shared per-generation callId") that
+   scripts a single model step requesting two tools together — the exact
+   shape that exposed this — and a defensive dedup-by-key backstop in
+   `buildSteps` (`investigation-trace-panel.tsx`) so a duplicate/stale id
+   from any future source can never render or key a step twice (own
+   regression test added).
+2. **`useSyncExternalStore` contract violation → "Maximum update depth
+   exceeded."** Immediately after fixing (1), the *next* live run
+   crashed with a real infinite-render-loop error inside
+   `InvestigationTracePanel`. Root cause: `useElapsedTime`'s
+   `getSnapshot` computed `Date.now() - startedAt` directly — a value
+   that changes on literally every call, which violates
+   `useSyncExternalStore`'s requirement that `getSnapshot` return a
+   *stable* value between actual store-change notifications; React kept
+   re-rendering trying to reach a snapshot that never stabilized. Fixed
+   by caching the elapsed value in a ref, written once per second inside
+   `subscribe`'s own interval tick, with `getSnapshot` only ever reading
+   that cached value. Re-verified live end-to-end afterward: elapsed
+   timer ticked correctly (1.0s → 2.0s → 8.0s → 17.0s), all 6 real tool
+   steps streamed in with correct per-call durations (1ms/1ms/1ms/39ms/
+   56ms/57ms), run completed to a truthful "Ready for next test" status,
+   zero console errors throughout, and a page refresh reconstructed the
+   identical persisted trace ("6 actions completed · 18.9s") with no
+   re-run.
+
+Both fixes are in code this session already believed was live-verified
+(the original UX-05-continuation trace implementation) — a reminder that
+the earlier "no console errors" checks in this same session had not yet
+exercised a real multi-tool-in-one-step model turn, which is what
+actually triggered both defects.
+
+### Tests
+
+New: `app-shell-chrome.test.tsx` (10), `device-glyph.test.tsx` (4),
+`derive-queue-workflow-state.test.ts` (23), `recent-investigations.test.tsx`
+(6), `investigation-trace-panel.test.tsx` (14, incl. the duplicate-key
+regression above). Updated: `investigation-agent.test.ts` (started/
+completed pairing rewritten for the real kind-tagged stream, plus the new
+multi-tool-in-one-step regression test), `run-analysis.test.ts`,
+`reconstruct.test.ts` (`activeTools` cases), `investigation-workspace.
+test.tsx` ("Agent activity" → "Investigation trace" rename),
+`describe-investigation-status.test.ts`,
+`create-analysis-run.integration.test.ts` (new started-before-completed
+real-Postgres case). One cross-test-pollution flake was found and fixed
+in `recent-investigations.test.tsx` during development (a never-resolving
+mocked promise leaking a pending async task across the test file) — the
+same class of bug as the ticket's own documented
+`case-composer.test.tsx` full-suite-only flake. That specific file was
+re-run 3 times back-to-back as part of 3 full-suite runs this session
+(464/464 passing all 3 times) and did not reproduce; it was not modified,
+since there was nothing reproducible to fix and CLAUDE.md's testing
+doctrine rules out speculative changes to a passing test.
+
+### Automated results
+
+`pnpm exec tsc --noEmit` clean · `pnpm run lint` clean ·
+`pnpm exec vitest run` 464/464 (57 files), run 3 times, all green ·
+`pnpm test:integration` 62/62 (12 files) · `pnpm run build` succeeds.
+
+### Live end-to-end verification
+
+Real Gateway X cases (seeded + one newly created through the intake
+flow), signed in as the seeded demo user, chrome-devtools MCP, real
+Anthropic calls throughout — no mocks:
+
+- A brand-new investigation with no product facts correctly produced "No
+  harmonic correlations were found ... so no investigation hypotheses
+  were generated" and never ran the agent phase at all (confirmed
+  against `analysis_events`: only `run.started`/`measurement.loaded`/
+  `run.completed`) — the deterministic-correlation gate on the agent
+  phase working exactly as documented, not a bug.
+- A `RUN AGAIN` on an existing Rev17/Rev18 case (real 40 MHz clock
+  product fact, 200 MHz measurement, 5th-harmonic match) was used to
+  reproduce and then re-verify both bugs above end-to-end, including a
+  full post-fix run: live streaming trace, real elapsed timer, page
+  refresh reconstructing an identical trace, zero console errors.
+- Sidebar + New investigation + Investigations queue filters
+  (real counts: All 11 / Active 1 / Needs evidence 9 / Ready for review 1
+  / Resolved 0) all re-screenshotted this session with zero console
+  errors.
+- Breakpoints 1440/1024/768/390 swept on the Trace/Decision surfaces:
+  clean reflow, no horizontal overflow, zero console errors at any size.
+  One pre-existing, unrelated cosmetic issue noted but not fixed this
+  session: at 390px the fixed composer bar's "+ Attach" label clips to
+  "tach" — not introduced by this session's changes, not part of
+  Workstream A/B/C.
+
+### Deferred (not built this session, not silently dropped)
+
+- Dedicated Before/After comparison screen beyond the Decision view's
+  Outcome section.
+- Dedicated resolved-trajectory narrative view beyond Decision + the
+  existing Timeline tab.
+- Investigation Map minimap / jump-to-active-step control.
+- A full WCAG/keyboard-navigation audit across the new surfaces (the
+  accessible-name fixes made to the collapsed sidebar were live-verified,
+  but a systematic audit of every new surface was not performed).
+- Cross-tab/cross-client run-start idempotency remains unenforced
+  server-side — unchanged from UX-04, out of scope here.
+
+### Outcome
+
+Workstreams A, B, and C shipped in full and are live-verified against a
+real Anthropic call, including two genuine bugs found and fixed that
+would otherwise have shipped silently. Workstream D is partially done
+(queue filters). `UX-05.passes` stays `false` — the Before/After screen,
+resolved-trajectory view, Map minimap, and full WCAG audit remain for a
+future session, in that dependency order (Before/After and resolved-
+trajectory are independent of each other and of the Map minimap; the WCAG
+audit is best done last, once every surface it needs to cover exists).
+`UX-04`/`UX-04-LIGHT` remain untouched.

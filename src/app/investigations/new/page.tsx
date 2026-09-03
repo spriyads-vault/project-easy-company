@@ -9,6 +9,7 @@ import { listProducts } from "@/lib/products/queries";
 import { PageHeader } from "@/lib/design/page-header";
 import { surface } from "@/lib/design/tokens";
 import { IntakeComposer } from "./intake-composer";
+import { RecentInvestigations } from "./recent-investigations";
 
 export default async function NewInvestigationPage() {
   const workspace = await getCurrentWorkspace();
@@ -21,8 +22,11 @@ export default async function NewInvestigationPage() {
   return (
     <div className={`flex min-h-0 flex-1 flex-col ${surface.page}`}>
       <PageHeader backHref="/investigations" backLabel="Investigations" title="New investigation" />
-      <div className="flex flex-1 flex-col overflow-y-auto px-4 py-8 sm:px-6 sm:py-12">
+      <div className="flex flex-1 flex-col gap-10 overflow-y-auto px-4 py-8 sm:px-6 sm:py-12">
         <IntakeComposer products={products.map((product) => ({ id: product.id, name: product.name }))} />
+        <div className="mx-auto w-full max-w-[1000px]">
+          <RecentInvestigations />
+        </div>
       </div>
     </div>
   );

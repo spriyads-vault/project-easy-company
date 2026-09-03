@@ -15,6 +15,8 @@ function investigation(overrides: Partial<InvestigationSummary> = {}): Investiga
     latestMeasurement: null,
     latestRunStatus: null,
     marginDeltaDb: null,
+    workflowState: "idle",
+    requiredNextAction: "Run the investigation",
     ...overrides,
   };
 }

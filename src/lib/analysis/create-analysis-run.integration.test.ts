@@ -395,4 +395,76 @@ describe("createAnalysisRunForFailureCase", () => {
       expect(completed.payload.totalDurationMs).toBeGreaterThanOrEqual(0);
     }
   });
+
+  it("UX-05: persists a real agent.tool.started row, in Postgres, strictly before its matching agent.tool.completed row for a real tool invocation", async () => {
+    const seed = await seedGatewayXCase(userA.client);
+
+    let call = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        call += 1;
+        const usage = {
+          inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+          outputTokens: { total: 10, text: 10, reasoning: undefined, toolCalls: undefined },
+        };
+        if (call === 1) {
+          return {
+            content: [
+              { type: "tool-call" as const, toolCallId: "c1", toolName: "getMeasurementContext", input: "{}" },
+            ],
+            finishReason: { unified: "tool-calls" as const, raw: undefined },
+            usage,
+            warnings: [],
+          };
+        }
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({
+                hypotheses: [],
+                clarificationQuestion: null,
+                investigationStatus: "insufficient_evidence" as const,
+              }),
+            },
+          ],
+          finishReason: { unified: "stop" as const, raw: undefined },
+          usage,
+          warnings: [],
+        };
+      },
+    });
+
+    const result = await createAnalysisRunForFailureCase(
+      { failureCaseId: seed.failureCaseId, measurementId: seed.measurementId },
+      fakeAdapter({ hypotheses: [], clarificationQuestion: null }),
+      userA.client,
+      { agentModel: model },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const events = await collect(result.events);
+
+    const started = events.find((e) => e.type === "agent.tool.started");
+    const completed = events.find((e) => e.type === "agent.tool.completed");
+    if (!started || started.type !== "agent.tool.started") throw new Error("expected a real agent.tool.started event");
+    if (!completed || completed.type !== "agent.tool.completed") throw new Error("expected a real agent.tool.completed event");
+    expect(started.payload.toolName).toBe("getMeasurementContext");
+    expect(completed.payload.toolCallId).toBe(started.payload.toolCallId);
+
+    // Direct Postgres check, not just trust in the in-process stream order:
+    // both rows are genuinely persisted, and the started row's own sequence
+    // number is strictly lower than the completed row's.
+    const { data: rows } = await userA.client
+      .from("analysis_events")
+      .select("event_type, sequence")
+      .eq("analysis_run_id", result.runId)
+      .in("event_type", ["agent.tool.started", "agent.tool.completed"])
+      .order("sequence", { ascending: true });
+
+    expect(rows).toHaveLength(2);
+    expect(rows?.[0]).toMatchObject({ event_type: "agent.tool.started" });
+    expect(rows?.[1]).toMatchObject({ event_type: "agent.tool.completed" });
+    expect(rows![0].sequence).toBeLessThan(rows![1].sequence);
+  });
 });

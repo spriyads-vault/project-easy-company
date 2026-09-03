@@ -33,7 +33,7 @@ import { MobileInvestigationStack } from "./canvas/investigation-stack";
 import { DecisionView } from "./decision-view";
 import { InvestigationControls } from "./investigation-controls";
 import { InvestigationTimeline } from "./investigation-timeline";
-import { AgentActivityPanel } from "./agent-activity-panel";
+import { InvestigationTracePanel } from "./investigation-trace-panel";
 import { AgentMetricsPanel } from "./agent-metrics-panel";
 import { SourcesPanel } from "./sources-panel";
 import { SourceDrawer } from "./source-drawer";
@@ -383,8 +383,9 @@ export function InvestigationWorkspace({
               disabledReason={disabledReason}
               onRunInvestigation={handleRunInvestigation}
             />
-            <AgentActivityPanel
-              activity={state.agentActivity}
+            <InvestigationTracePanel
+              activeTools={state.activeTools}
+              completedActivity={state.agentActivity}
               active={state.agentActive}
               durationMs={state.agentMetrics?.totalDurationMs}
               defaultCollapsed={!state.agentActive && state.hypotheses.length > 0}
@@ -423,8 +424,9 @@ export function InvestigationWorkspace({
               disabledReason={disabledReason}
               onRunInvestigation={handleRunInvestigation}
             />
-            <AgentActivityPanel
-              activity={state.agentActivity}
+            <InvestigationTracePanel
+              activeTools={state.activeTools}
+              completedActivity={state.agentActivity}
               active={state.agentActive}
               durationMs={state.agentMetrics?.totalDurationMs}
               defaultCollapsed={!state.agentActive && state.hypotheses.length > 0}

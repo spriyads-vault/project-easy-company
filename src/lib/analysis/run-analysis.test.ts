@@ -214,11 +214,14 @@ function fakeAgentRunner(
 ): InvestigationAgentRunner {
   return {
     // Mirrors investigateStreaming's real shape: yields each of the
-    // fixture's activity entries (proving runAnalysis forwards them one at
-    // a time, in order) before returning the final result.
+    // fixture's activity entries as a "completed" item (proving runAnalysis
+    // forwards them one at a time, in order) before returning the final
+    // result. Started-event pairing has its own dedicated coverage below
+    // and in investigation-agent.test.ts — this fixture stays focused on
+    // hypothesis/evidence assembly.
     investigate: async function* () {
       for (const item of result.activity) {
-        yield item;
+        yield { kind: "completed" as const, payload: item };
       }
       return result;
     },
@@ -388,6 +391,52 @@ describe("runAnalysis — Investigation Agent phase (MVP-10B)", () => {
       "clarification.required",
       "run.completed",
     ]);
+  });
+
+  it("emits a real agent.tool.started event before its matching agent.tool.completed, sharing one toolCallId (UX-05)", async () => {
+    const agentRunner: InvestigationAgentRunner = {
+      investigate: async function* () {
+        yield {
+          kind: "started" as const,
+          payload: {
+            toolName: "searchEngineeringDocuments",
+            label: "Searching engineering documents…",
+            query: "40 MHz clock",
+            toolCallId: "call-1",
+          },
+        };
+        yield {
+          kind: "completed" as const,
+          payload: {
+            toolName: "searchEngineeringDocuments",
+            label: "Searched engineering documents / 2 passages retrieved",
+            resultCount: 2,
+            durationMs: 12,
+            query: "40 MHz clock",
+            toolCallId: "call-1",
+          },
+        };
+        return {
+          activity: [],
+          hypotheses: [],
+          clarificationQuestion: null,
+          metrics: emptyAgentMetrics,
+        };
+      },
+    };
+
+    const events = await collect(runAnalysis(baseInput(), fakeAdapterUnused(), agentRunner));
+
+    const started = events.find((e) => e.type === "agent.tool.started");
+    const completed = events.find((e) => e.type === "agent.tool.completed");
+    if (!started || started.type !== "agent.tool.started") throw new Error("expected agent.tool.started");
+    if (!completed || completed.type !== "agent.tool.completed") throw new Error("expected agent.tool.completed");
+
+    expect(started.sequence).toBeLessThan(completed.sequence);
+    expect(started.payload.toolCallId).toBe("call-1");
+    expect(completed.payload.toolCallId).toBe("call-1");
+    expect(started.payload.label).toBe("Searching engineering documents…");
+    expect(completed.payload.label).toContain("2 passages retrieved");
   });
 });
 

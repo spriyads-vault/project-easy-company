@@ -87,7 +87,21 @@ const agentStarted = () =>
     payload: { correlationCount: 1 },
   });
 
-const agentToolCompleted = (overrides: Partial<{ toolName: string; label: string }> = {}) =>
+const agentToolStarted = (overrides: Partial<{ toolName: string; label: string; toolCallId: string }> = {}) =>
+  event({
+    type: "agent.tool.started",
+    sequence: 4,
+    payload: {
+      toolName: overrides.toolName ?? "searchEngineeringDocuments",
+      label: overrides.label ?? "Searching engineering documents…",
+      query: "40 MHz clock",
+      toolCallId: overrides.toolCallId ?? "call-1",
+    },
+  });
+
+const agentToolCompleted = (
+  overrides: Partial<{ toolName: string; label: string; toolCallId: string }> = {},
+) =>
   event({
     type: "agent.tool.completed",
     sequence: 4,
@@ -97,6 +111,7 @@ const agentToolCompleted = (overrides: Partial<{ toolName: string; label: string
       resultCount: 2,
       durationMs: 120,
       query: "40 MHz clock",
+      toolCallId: overrides.toolCallId ?? "call-1",
     },
   });
 
@@ -216,6 +231,41 @@ describe("applyAnalysisEvent", () => {
       "searchEngineeringDocuments",
     ]);
     expect(state.lastEventSummary).toBe("Searched engineering documents / 2 passages retrieved");
+  });
+
+  it("agent.tool.started adds a real active/in-progress step, distinct from the completed activity log", () => {
+    const state = [agentStarted(), agentToolStarted({ toolCallId: "call-1" })].reduce(
+      applyAnalysisEvent,
+      initialWorkspaceState,
+    );
+    expect(state.activeTools).toHaveLength(1);
+    expect(state.activeTools[0].toolCallId).toBe("call-1");
+    expect(state.agentActivity).toHaveLength(0);
+    expect(state.lastEventSummary).toBe("Searching engineering documents…");
+  });
+
+  it("agent.tool.completed removes only its own matching started entry from activeTools, leaving concurrent ones", () => {
+    const state = [
+      agentStarted(),
+      agentToolStarted({ toolCallId: "call-1", toolName: "searchEngineeringDocuments" }),
+      agentToolStarted({ toolCallId: "call-2", toolName: "getPreviousRevisions" }),
+      agentToolCompleted({ toolCallId: "call-1", toolName: "searchEngineeringDocuments" }),
+    ].reduce(applyAnalysisEvent, initialWorkspaceState);
+
+    expect(state.activeTools).toHaveLength(1);
+    expect(state.activeTools[0].toolCallId).toBe("call-2");
+    expect(state.agentActivity).toHaveLength(1);
+    expect(state.agentActivity[0].toolCallId).toBe("call-1");
+  });
+
+  it("a fresh run.started clears any leftover activeTools from a previous run", () => {
+    const state = [
+      agentStarted(),
+      agentToolStarted({ toolCallId: "call-1" }),
+      event({ type: "run.started", sequence: 5, payload: { failureCaseId: "case-1", measurementId: "m-2" } }),
+    ].reduce(applyAnalysisEvent, initialWorkspaceState);
+
+    expect(state.activeTools).toHaveLength(0);
   });
 
   it("agent.completed stores the truthful metrics and clears agentActive", () => {

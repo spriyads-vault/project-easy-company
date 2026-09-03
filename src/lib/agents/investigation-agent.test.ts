@@ -44,6 +44,26 @@ function textStep(text: string) {
   };
 }
 
+/** One model step requesting several tools together in the same turn — the
+ * exact shape the system prompt asks for ("call all three together in the
+ * same turn") and the shape that exposed the real callId/toolCallId bug: a
+ * real Anthropic run showed every concurrently-called tool sharing one
+ * `event.callId` (the SDK's *generation-call* id), which produced duplicate
+ * React keys once used as this UI's per-step identity. */
+function multiToolCallStep(calls: { toolCallId: string; toolName: string; input: unknown }[]) {
+  return {
+    content: calls.map((call) => ({
+      type: "tool-call" as const,
+      toolCallId: call.toolCallId,
+      toolName: call.toolName,
+      input: JSON.stringify(call.input),
+    })),
+    finishReason: { unified: "tool-calls" as const, raw: undefined },
+    usage: USAGE,
+    warnings: [],
+  };
+}
+
 const DOCUMENT_CHUNK_ID = "chunk-real-1";
 const DOCUMENT_ID = "doc-real-1";
 
@@ -452,19 +472,126 @@ describe("investigateStreaming (UX-04 reopened: real-time activity, not batched)
     const first = await gen.next();
     const firstElapsedMs = performance.now() - start;
 
-    if (first.done) throw new Error("expected a yielded tool-completion, not the final result");
-    expect(first.value.toolName).toBe("getMeasurementContext");
+    // UX-05 Workstream C: a real "started" moment now precedes each
+    // tool's "completed" one — genuine start/complete pairing at the
+    // execution boundary, not inferred from the completed event alone.
+    if (first.done) throw new Error("expected the first tool's started event, not the final result");
+    expect(first.value.kind).toBe("started");
+    expect(first.value.payload.toolName).toBe("getMeasurementContext");
     expect(firstElapsedMs).toBeLessThan(60);
 
+    const firstCompleted = await gen.next();
+    if (firstCompleted.done) throw new Error("expected a yielded tool-completion, not the final result");
+    expect(firstCompleted.value.kind).toBe("completed");
+    expect(firstCompleted.value.payload.toolName).toBe("getMeasurementContext");
+    // Same AI SDK callId pairs the started/completed pair for the client —
+    // never inferred purely from arrival order.
+    if (first.value.kind === "started" && firstCompleted.value.kind === "completed") {
+      expect(firstCompleted.value.payload.toolCallId).toBe(first.value.payload.toolCallId);
+    }
+
     const second = await gen.next();
-    if (second.done) throw new Error("expected a yielded tool-completion, not the final result");
-    expect(second.value.toolName).toBe("getDeterministicCorrelations");
+    if (second.done) throw new Error("expected the second tool's started event, not the final result");
+    expect(second.value.kind).toBe("started");
+    expect(second.value.payload.toolName).toBe("getDeterministicCorrelations");
+
+    const secondCompleted = await gen.next();
+    if (secondCompleted.done) throw new Error("expected a yielded tool-completion, not the final result");
+    expect(secondCompleted.value.kind).toBe("completed");
+    expect(secondCompleted.value.payload.toolName).toBe("getDeterministicCorrelations");
 
     const third = await gen.next();
     if (!third.done) throw new Error("expected the final result, not another yielded tool-completion");
     // The generator's return value (done: true) is the same validated
     // result runInvestigationAgent's non-streaming wrapper returns.
     expect(third.value.hypotheses).toEqual([]);
+  });
+
+  it("never lets a completed event arrive without its matching started event already yielded first", async () => {
+    const supabase = fakeSupabase();
+    const caseContext = buildCaseContext(supabase);
+    const output = agentOutputSchema.parse({
+      hypotheses: [],
+      clarificationQuestion: null,
+      investigationStatus: "insufficient_evidence",
+    });
+
+    let call = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        call += 1;
+        if (call === 1) return toolCallStep("call-1", "getMeasurementContext", {});
+        if (call === 2) return toolCallStep("call-2", "getDeterministicCorrelations", {});
+        return textStep(JSON.stringify(output));
+      },
+    });
+
+    const gen = investigateStreaming(
+      { supabase, model, caseContext },
+      0,
+      { frequencyMhz: 200, marginDb: 7.4, operatingMode: "WiFi TX + display active" },
+    );
+
+    const seenStartedCallIds = new Set<string>();
+    let step = await gen.next();
+    while (!step.done) {
+      const item = step.value;
+      if (item.kind === "started") {
+        seenStartedCallIds.add(item.payload.toolCallId);
+      } else {
+        expect(seenStartedCallIds.has(item.payload.toolCallId ?? "")).toBe(true);
+      }
+      step = await gen.next();
+    }
+  });
+
+  it("gives each tool call its own distinct toolCallId even when several tools are requested in the same model step (never the shared per-generation callId)", async () => {
+    const supabase = fakeSupabase();
+    const caseContext = buildCaseContext(supabase);
+    const output = agentOutputSchema.parse({
+      hypotheses: [],
+      clarificationQuestion: null,
+      investigationStatus: "insufficient_evidence",
+    });
+
+    let call = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        call += 1;
+        if (call === 1) {
+          return multiToolCallStep([
+            { toolCallId: "call-A", toolName: "getMeasurementContext", input: {} },
+            { toolCallId: "call-B", toolName: "getDeterministicCorrelations", input: {} },
+          ]);
+        }
+        return textStep(JSON.stringify(output));
+      },
+    });
+
+    const gen = investigateStreaming(
+      { supabase, model, caseContext },
+      0,
+      { frequencyMhz: 200, marginDb: 7.4, operatingMode: "WiFi TX + display active" },
+    );
+
+    const startedIds: (string | undefined)[] = [];
+    const completedIds: (string | undefined)[] = [];
+    let step = await gen.next();
+    while (!step.done) {
+      const item = step.value;
+      (item.kind === "started" ? startedIds : completedIds).push(item.payload.toolCallId);
+      step = await gen.next();
+    }
+
+    // Two started + two completed events, but never one id shared by every
+    // call in the step (the actual defect: the SDK's
+    // onToolExecutionStart/End `event.callId` is the *generation call's*
+    // id, identical for every tool executed within one step, not a
+    // per-tool-call id — see investigateStreaming's toolCall.toolCallId
+    // use). Ordering between the two concurrent calls isn't asserted; the
+    // set of ids is what matters.
+    expect(new Set(startedIds)).toEqual(new Set(["call-A", "call-B"]));
+    expect(new Set(completedIds)).toEqual(new Set(["call-A", "call-B"]));
   });
 });
 

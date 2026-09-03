@@ -63,17 +63,39 @@ const agentStartedPayloadSchema = z.object({
   correlationCount: z.number().int().nonnegative(),
 });
 
+// UX-05 Workstream C: fired at the real server execution boundary,
+// immediately before a tool's execute() begins (bridged from the AI SDK's
+// own `onToolExecutionStart` callback — see investigateStreaming in
+// investigation-agent.ts) — never a client-side timer or an inferred
+// "must have started because nothing else is happening" guess. label is a
+// safe, pre-written, present-tense display string, never model-generated
+// text; toolCallId is the AI SDK's own per-call id, carried through to the
+// matching agent.tool.completed/failed event so the client can pair
+// start/end without inferring anything from ordering alone.
+const agentToolStartedPayloadSchema = z.object({
+  toolName: z.string(),
+  label: z.string(),
+  query: z.string().nullable(),
+  toolCallId: z.string(),
+});
+
 // One per tool call the agent actually made. resultCount/query are omitted
 // (null) where not meaningful for a given tool (e.g. getMeasurementContext
 // has no query and returns a single object, not a list) — never fabricated
 // to fill the field. label is a safe, pre-written display string, never
-// model-generated text.
+// model-generated text. toolCallId is optional only so an already-persisted
+// pre-UX-05 row (with no started/paired id) still parses on refresh.
 const agentToolCompletedPayloadSchema = z.object({
   toolName: z.string(),
   label: z.string(),
   resultCount: z.number().int().nonnegative().nullable(),
   durationMs: z.number().int().nonnegative(),
   query: z.string().nullable(),
+  toolCallId: z.string().optional(),
+  /** True only when this tool call genuinely errored — a truthful failed
+   * step in the Investigation Trace, never silently folded into a normal
+   * completion. */
+  failed: z.boolean().optional(),
 });
 
 // Truthful, actually-computed UX metrics for MVP-10C — every number here is
@@ -133,6 +155,7 @@ export const analysisEventSchema = z.discriminatedUnion("type", [
   eventVariant("hypothesis.created", hypothesisCreatedPayloadSchema),
   eventVariant("clarification.required", clarificationRequiredPayloadSchema),
   eventVariant("agent.started", agentStartedPayloadSchema),
+  eventVariant("agent.tool.started", agentToolStartedPayloadSchema),
   eventVariant("agent.tool.completed", agentToolCompletedPayloadSchema),
   eventVariant("agent.completed", agentCompletedPayloadSchema),
   eventVariant("run.completed", runCompletedPayloadSchema),
@@ -158,6 +181,7 @@ export type ClarificationRequiredPayload = z.infer<
 export type RunCompletedPayload = z.infer<typeof runCompletedPayloadSchema>;
 export type RunFailedPayload = z.infer<typeof runFailedPayloadSchema>;
 export type AgentStartedPayload = z.infer<typeof agentStartedPayloadSchema>;
+export type AgentToolStartedPayload = z.infer<typeof agentToolStartedPayloadSchema>;
 export type AgentToolCompletedPayload = z.infer<
   typeof agentToolCompletedPayloadSchema
 >;

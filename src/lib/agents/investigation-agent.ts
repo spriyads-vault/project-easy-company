@@ -31,6 +31,7 @@ import type { MeasurementForHypotheses } from "@/lib/hypotheses/generate-hypothe
 import type {
   AgentCompletedPayload,
   AgentToolCompletedPayload,
+  AgentToolStartedPayload,
 } from "@/lib/analysis/events";
 
 // Target ~8-10 steps (CLAUDE.md/ticket): each tool call plus the model's
@@ -142,6 +143,14 @@ export interface RunInvestigationAgentResult {
   metrics: AgentCompletedPayload;
 }
 
+/** UX-05 Workstream C: one item of investigateStreaming's real-time
+ * activity stream — a genuine started or completed tool-execution moment,
+ * never a synthesized/inferred one. run-analysis.ts branches on `kind` to
+ * emit the matching `agent.tool.started` / `agent.tool.completed` event. */
+export type AgentActivityStreamItem =
+  | { kind: "started"; payload: AgentToolStartedPayload }
+  | { kind: "completed"; payload: AgentToolCompletedPayload };
+
 function toolActivityLabel(
   toolName: string,
   resultCount: number | null,
@@ -159,6 +168,24 @@ function toolActivityLabel(
   const nounText = resultCount === 1 ? noun.singular : (noun.plural ?? `${noun.singular}s`);
   const label = noun.suffix ? `${nounText} ${noun.suffix}` : nounText;
   return `${name} / ${resultCount} ${label}`;
+}
+
+// Present-continuous, distinct from TOOL_DISPLAY_NAMES' completed-tense
+// labels below — the Investigation Trace's "active" step reads as real
+// in-progress work ("Searching engineering documents…"), not a second copy
+// of the completed phrasing.
+const TOOL_STARTED_LABELS: Record<string, string> = {
+  getProductContext: "Loading product context…",
+  getMeasurementContext: "Loading measurement context…",
+  getDeterministicCorrelations: "Checking deterministic relationships…",
+  searchEngineeringDocuments: "Searching engineering documents…",
+  getPreviousRevisions: "Reviewing previous revisions…",
+  getPreviousInvestigations: "Reviewing previous investigations…",
+  getPreviousHypotheses: "Reviewing previous hypotheses…",
+};
+
+function toolStartedLabel(toolName: string): string {
+  return TOOL_STARTED_LABELS[toolName] ?? `Running ${toolName}…`;
 }
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
@@ -306,17 +333,34 @@ export function createInvestigationAgent(
  * once after the entire multi-step run completes — proven live: without
  * this, a real run showed a 15+ second frozen activity list, then every
  * remaining step appearing within one 250ms window (see docs/PROGRESS.md).
+ *
+ * UX-05 Workstream C: now also bridges the SDK's symmetric
+ * `onToolExecutionStart` callback (confirmed present in the installed `ai`
+ * package's own types — `ToolLoopAgent.generate()` accepts it alongside
+ * `onToolExecutionEnd`, "Called when a tool execution begins, before the
+ * tool's execute() function is invoked") into the same pending/wake queue,
+ * tagged `{kind: "started"}` vs `{kind: "completed"}`. This is the real
+ * server execution boundary, not a client-inferred or timer-driven state:
+ * a "started" item is yielded at the exact moment the SDK is about to call
+ * a tool's execute(), paired with its completion via the SDK's own
+ * `toolCall.toolCallId` (see AgentActivityStreamItem/AgentToolStartedPayload)
+ * — deliberately not `event.callId`, which the SDK documents as the
+ * *generation call's* id and is shared by every tool executed within one
+ * model step; using it as a React/reducer key produced real duplicate-key
+ * collisions the instant the model called more than one tool in parallel
+ * (proven live: a single step calling 5 tools together yielded 5 events all
+ * sharing one `callId`).
  */
 export async function* investigateStreaming(
   params: CreateInvestigationAgentParams,
   documentsAvailable: number,
   measurement: MeasurementForHypotheses,
-): AsyncGenerator<AgentToolCompletedPayload, RunInvestigationAgentResult, void> {
+): AsyncGenerator<AgentActivityStreamItem, RunInvestigationAgentResult, void> {
   const agent = createInvestigationAgent(params, documentsAvailable);
   const registry = createEmptyRegistry(documentsAvailable);
   const activity: AgentToolCompletedPayload[] = [];
 
-  const pending: AgentToolCompletedPayload[] = [];
+  const pending: AgentActivityStreamItem[] = [];
   let wake: (() => void) | null = null;
   let generateDone = false;
   let generateError: unknown = null;
@@ -334,6 +378,25 @@ export async function* investigateStreaming(
   const generatePromise = agent
     .generate({
       prompt: buildTaskPrompt(params.caseContext, documentsAvailable),
+      onToolExecutionStart: (event) => {
+        const toolName = event.toolCall.toolName;
+        const query =
+          toolName === "searchEngineeringDocuments" &&
+          event.toolCall.input &&
+          typeof event.toolCall.input === "object"
+            ? ((event.toolCall.input as { query?: string }).query ?? null)
+            : null;
+        pending.push({
+          kind: "started",
+          payload: {
+            toolName,
+            label: toolStartedLabel(toolName),
+            query,
+            toolCallId: event.toolCall.toolCallId,
+          },
+        });
+        wakeConsumer();
+      },
       onToolExecutionEnd: (event) => {
         const toolName = event.toolCall.toolName;
         const failed = event.toolOutput.type === "tool-error";
@@ -354,9 +417,11 @@ export async function* investigateStreaming(
           resultCount,
           durationMs: Math.round(event.toolExecutionMs),
           query,
+          toolCallId: event.toolCall.toolCallId,
+          failed,
         };
         activity.push(item);
-        pending.push(item);
+        pending.push({ kind: "completed", payload: item });
         wakeConsumer();
       },
     })

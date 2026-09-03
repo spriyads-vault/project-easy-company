@@ -11,6 +11,7 @@
 import type {
   AgentCompletedPayload,
   AgentToolCompletedPayload,
+  AgentToolStartedPayload,
   AnalysisEvent,
   CorrelationFoundPayload,
   HypothesisCreatedPayload,
@@ -43,10 +44,20 @@ export interface WorkspaceState {
   errorMessage: string | null;
   summary: RunCompletedPayload | null;
   /** Observable Investigation Agent activity (MVP-10B) — the tool-call log
-   * MVP-10C's UI will render. Never model reasoning; each entry is one
-   * completed tool call's safe display fields. Empty when a run didn't use
-   * the agent (e.g. no correlation candidates). */
+   * the Investigation Trace UI renders as completed steps. Never model
+   * reasoning; each entry is one completed tool call's safe display
+   * fields. Empty when a run didn't use the agent (e.g. no correlation
+   * candidates). */
   agentActivity: AgentToolCompletedPayload[];
+  /** UX-05 Workstream C: tool calls genuinely started but not yet
+   * completed — real, server-instrumented "in progress" steps (see
+   * agent.tool.started in events.ts), not a client-inferred or timer-driven
+   * guess. Normally holds at most one entry; more than one only when the
+   * agent genuinely runs tools concurrently, which the Trace UI then shows
+   * truthfully as concurrent active branches rather than forcing serial
+   * drama. An entry is removed the instant its matching agent.tool.completed
+   * (same toolCallId) arrives. */
+  activeTools: AgentToolStartedPayload[];
   /** True from `agent.started` until `agent.completed`/a terminal event —
    * lets the UI distinguish "the agent is working" from "no agent phase for
    * this run" without inferring it from array length. */
@@ -67,6 +78,7 @@ export const initialWorkspaceState: WorkspaceState = {
   errorMessage: null,
   summary: null,
   agentActivity: [],
+  activeTools: [],
   agentActive: false,
   agentMetrics: null,
 };
@@ -129,15 +141,32 @@ export function applyAnalysisEvent(
         agentActive: true,
         lastEventSummary: "Investigation agent started",
       };
+    case "agent.tool.started":
+      return {
+        ...state,
+        activeTools: [...state.activeTools, event.payload],
+        lastEventSummary: event.payload.label,
+      };
     case "agent.tool.completed":
       return {
         ...state,
+        // The matching started entry (same toolCallId, when the started
+        // event was actually persisted for this run) moves from "active"
+        // to "completed" — an older, pre-UX-05 persisted run with no
+        // started events for its completions simply never had a matching
+        // entry to remove, which is a no-op here, not an error.
+        activeTools: state.activeTools.filter((tool) => tool.toolCallId !== event.payload.toolCallId),
         agentActivity: [...state.agentActivity, event.payload],
         lastEventSummary: event.payload.label,
       };
     case "agent.completed":
       return {
         ...state,
+        // Defensive cleanup, not the normal path: every real tool call's
+        // completed/failed pair already clears itself above. This only
+        // matters if a run legitimately ended (agent.completed) while a
+        // started entry never got a matching completion persisted.
+        activeTools: [],
         agentActive: false,
         agentMetrics: event.payload,
         lastEventSummary: "Investigation agent finished",

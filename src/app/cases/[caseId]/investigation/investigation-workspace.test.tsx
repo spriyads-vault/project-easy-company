@@ -498,7 +498,7 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Agent activity")).toBeInTheDocument();
+      expect(screen.getByText("Investigation trace")).toBeInTheDocument();
     });
     await waitFor(() => {
       expect(screen.getByText("What Crado handled")).toBeInTheDocument();
@@ -528,7 +528,7 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
 
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
 
-    expect(screen.getByText("Agent activity")).toBeInTheDocument();
+    expect(screen.getByText("Investigation trace")).toBeInTheDocument();
     expect(screen.getByText("What Crado handled")).toBeInTheDocument();
 
     // Sources are their own tab (UX-02) — not shown on the default
@@ -599,7 +599,7 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
     ]);
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
 
-    expect(screen.queryByText("Agent activity")).not.toBeInTheDocument();
+    expect(screen.queryByText("Investigation trace")).not.toBeInTheDocument();
     expect(screen.queryByText("What Crado handled")).not.toBeInTheDocument();
     expect(screen.queryByText("Sources used")).not.toBeInTheDocument();
   });

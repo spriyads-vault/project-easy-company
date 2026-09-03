@@ -17,6 +17,15 @@ if (typeof globalThis.ResizeObserver === "undefined") {
   };
 }
 
+// cmdk (the Command Palette's underlying library, UX-04/UX-05) calls
+// Element.scrollIntoView to keep the highlighted item visible, which
+// jsdom does not implement — mounting/opening the command palette in a
+// test throws "scrollIntoView is not a function" before any assertion
+// runs. Same no-op-polyfill pattern as the ResizeObserver fix above.
+if (typeof Element.prototype.scrollIntoView === "undefined") {
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+}
+
 // vitest.config.ts doesn't set `test.globals: true` (tests import
 // describe/it/expect explicitly instead), so Testing Library's automatic
 // afterEach(cleanup) — which only registers itself when it finds a global

@@ -15,6 +15,30 @@ import { measurementPeakInputSchema } from "@/lib/domain/schema";
 import { buildDocumentStoragePath } from "@/lib/documents/storage-path";
 import { ingestDocument } from "@/lib/documents/ingest-document";
 import { documentMimeTypeSchema } from "@/lib/domain/schema";
+import { listInvestigations, type InvestigationSummary } from "@/lib/investigations/queries";
+
+/** UX-05 Workstream B: the New Investigation page's "Recent investigations"
+ * section fetches through this Server Action (client-triggered, not
+ * server-rendered directly into the page) specifically so a failure here
+ * can show a local retry without taking the intake composer above it down
+ * with it — the composer never depends on this call succeeding. */
+export interface RecentInvestigationsResult {
+  investigations: InvestigationSummary[];
+  error: false;
+}
+export interface RecentInvestigationsError {
+  investigations: never[];
+  error: true;
+}
+
+export async function loadRecentInvestigations(): Promise<RecentInvestigationsResult | RecentInvestigationsError> {
+  try {
+    const investigations = await listInvestigations();
+    return { investigations, error: false };
+  } catch {
+    return { investigations: [], error: true };
+  }
+}
 
 function sniffMimeTypeFromFilename(filename: string): string {
   if (filename.endsWith(".md") || filename.endsWith(".markdown")) return "text/markdown";
