@@ -19,7 +19,7 @@
 // multi-item missing-evidence list from silently overlapping the row
 // after it, which is exactly what static estimates alone produced
 // before this correction.
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -32,6 +32,7 @@ import {
   type Edge,
   type Node,
   type NodeMouseHandler,
+  type OnMoveStart,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { MeasurementRow } from "@/lib/cases/queries";
@@ -123,7 +124,7 @@ function InvestigationCanvasInner({
     [graph.edges],
   );
 
-  const { getNodes, fitView, setViewport } = useReactFlow();
+  const { getNodes, fitView, setCenter, setViewport } = useReactFlow();
   const nodesInitialized = useNodesInitialized();
 
   // The corrected, real-measurement-aware node list — a plain derived
@@ -153,6 +154,61 @@ function InvestigationCanvasInner({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- getNodes is a stable ReactFlow store accessor; measurement/state/timeline are already covered by initialNodes (derived from graph, derived from those three) changing identity whenever they do.
   }, [nodesInitialized, initialNodes]);
+
+  // FOLLOW AGENT (UX-04 reopened: real-time flow) — the viewport otherwise
+  // never moves after its initial defaultViewport anchor (deliberately, to
+  // avoid the both-ends-clipping bug fitView caused on a wide graph — see
+  // the CANVAS_PADDING comment above). Once real streamed events can add
+  // nodes far outside that fixed first view (a hypothesis's whole lane,
+  // several columns to the right), something has to reveal them, or the
+  // canvas reads as empty even though the canonical graph already has
+  // content — exactly the reported defect. Default on; a manual pan/zoom
+  // (see onMoveStart below) pauses it so the interface never fights the
+  // user, and the button re-enables it.
+  const [followAgent, setFollowAgent] = useState(true);
+  const knownNodeIdsRef = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    const previousIds = knownNodeIdsRef.current;
+    const currentIds = new Set(graph.nodes.map((n) => n.id));
+    // The very first population of the graph (including the common case of
+    // Measurement appearing immediately on mount) is already handled by
+    // defaultViewport's fixed origin anchor — recording ids here without
+    // moving the viewport avoids a redundant/competing fitBounds call on
+    // first paint.
+    if (previousIds === null) {
+      knownNodeIdsRef.current = currentIds;
+      return;
+    }
+    const newNodes = graph.nodes.filter((n) => !previousIds.has(n.id));
+    knownNodeIdsRef.current = currentIds;
+    if (!followAgent || newNodes.length === 0) return;
+
+    const left = Math.min(...newNodes.map((n) => n.x));
+    const top = Math.min(...newNodes.map((n) => n.y));
+    const right = Math.max(...newNodes.map((n) => n.x + NODE_WIDTH));
+    const bottom = Math.max(...newNodes.map((n) => n.y + ROW_HEIGHTS[n.data.kind]));
+    // setCenter at a FIXED readable zoom, not fitBounds/fitView — the
+    // ticket is explicit that following new work must never shrink the
+    // growing graph to keep fitting it all in. Centering on whatever is
+    // new, at the same DEFAULT_ZOOM every other view in this canvas uses,
+    // reveals it without ever making anything smaller/harder to read.
+    void setCenter((left + right) / 2, (top + bottom) / 2, { zoom: DEFAULT_ZOOM, duration: 450 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setCenter is a stable ReactFlow imperative accessor, not reactive state.
+  }, [graph.nodes, followAgent]);
+
+  const handleToggleFollowAgent = useCallback(() => {
+    setFollowAgent((prev) => !prev);
+  }, []);
+
+  // The documented xyflow convention for telling a user-driven viewport
+  // change apart from a programmatic one (our own fitBounds/setViewport/
+  // fitView calls above): `event` is the real DOM event for a genuine
+  // drag/wheel/pinch, and null when React Flow itself moved the viewport.
+  // Only a real user gesture should pause following.
+  const handleMoveStart = useCallback<OnMoveStart>((event) => {
+    if (event) setFollowAgent(false);
+  }, []);
 
   const handleNodeClick = useCallback<NodeMouseHandler>(
     (event, node) => {
@@ -187,7 +243,11 @@ function InvestigationCanvasInner({
     void fitView({ ...FIT_VIEW_OPTIONS, duration: 200 });
   }, [fitView]);
 
-  if (graph.nodes.length === 0) {
+  const isEmpty = graph.nodes.length === 0;
+  if (isEmpty && state.status === "idle") {
+    // A genuinely idle case (no run has ever started, nothing to follow)
+    // stays exactly as before this correction — no canvas at all, not even
+    // a placeholder, since there is no "current genuine state" to show.
     return null;
   }
 
@@ -200,12 +260,13 @@ function InvestigationCanvasInner({
   );
 
   return (
-    <div className="w-full" style={{ height: containerHeight }}>
+    <div className="relative w-full" style={{ height: containerHeight }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={canvasNodeTypes}
         onNodeClick={handleNodeClick}
+        onMoveStart={handleMoveStart}
         // Without this, <Controls> (added for real zoom/pan navigation)
         // renders using xyflow's own default LIGHT theme CSS variables —
         // a plain white panel clashing with the rest of this dark app.
@@ -237,6 +298,15 @@ function InvestigationCanvasInner({
           showInteractive={false}
           fitViewOptions={FIT_VIEW_OPTIONS}
         >
+          <ControlButton
+            onClick={handleToggleFollowAgent}
+            title={followAgent ? "Following agent — click to pause" : "Follow agent"}
+            aria-label={followAgent ? "Following agent — click to pause" : "Follow agent"}
+            aria-pressed={followAgent}
+            className={followAgent ? "!text-[#22c55e]" : undefined}
+          >
+            <FollowIcon />
+          </ControlButton>
           <ControlButton onClick={handleFitInvestigation} title="Fit investigation" aria-label="Fit investigation">
             <FitIcon />
           </ControlButton>
@@ -245,7 +315,37 @@ function InvestigationCanvasInner({
           </ControlButton>
         </Controls>
       </ReactFlow>
+      {/* UX-04 reopened: never an unexplained empty black canvas — this
+          shows the same real, typed lastEventSummary the compact status
+          line above the canvas already renders (never a fabricated
+          per-node progress guess), and disappears the instant the first
+          real node (almost always Measurement, present from mount) lands
+          in `graph.nodes`. Pointer-events none so it never blocks the
+          canvas underneath once nodes exist behind it during the fade. */}
+      {isEmpty ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none absolute inset-0 flex items-center justify-center"
+        >
+          <div className="flex items-center gap-2.5 text-sm text-[#8b95a3]">
+            <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#22c55e]" />
+            {state.status === "failed" || state.status === "interrupted"
+              ? (state.errorMessage ?? "Analysis did not complete.")
+              : (state.lastEventSummary ?? "Crado is investigating…")}
+          </div>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function FollowIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="3" />
+      <circle cx="12" cy="12" r="8" strokeDasharray="2 3" />
+    </svg>
   );
 }
 

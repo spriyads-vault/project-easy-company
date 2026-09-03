@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { MockLanguageModelV4 } from "ai/test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
-import { runInvestigationAgent, selectActiveTools } from "./investigation-agent";
+import { investigateStreaming, runInvestigationAgent, selectActiveTools } from "./investigation-agent";
 import { createInvestigationTools, type InvestigationToolsContext } from "./tools";
 import { agentOutputSchema } from "./schema";
 
@@ -407,6 +407,64 @@ describe("runInvestigationAgent (fake model, no real Anthropic call)", () => {
     // Bounded well under the SDK's default 20-step allowance.
     expect(call).toBeLessThan(20);
     expect(call).toBeGreaterThan(0);
+  });
+});
+
+describe("investigateStreaming (UX-04 reopened: real-time activity, not batched)", () => {
+  it("yields the first tool's completion before a slower later model step even resolves — proves no batching", async () => {
+    const supabase = fakeSupabase();
+    const caseContext = buildCaseContext(supabase);
+    const output = agentOutputSchema.parse({
+      hypotheses: [],
+      clarificationQuestion: null,
+      investigationStatus: "insufficient_evidence",
+    });
+
+    let call = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        call += 1;
+        if (call === 1) return toolCallStep("call-1", "getMeasurementContext", {});
+        if (call === 2) {
+          // Real "controllable test operation" delay (never a fake
+          // timer) standing in for model "thinking" time between the
+          // first tool finishing and the model requesting the second —
+          // long enough that a batched implementation (collect
+          // everything into an array, only yield once agent.generate()
+          // itself fully resolves) could not possibly satisfy the
+          // elapsed-time assertion below, since it would have to wait out
+          // this whole delay (plus every later step) before producing
+          // its first value.
+          await new Promise((resolve) => setTimeout(resolve, 60));
+          return toolCallStep("call-2", "getDeterministicCorrelations", {});
+        }
+        return textStep(JSON.stringify(output));
+      },
+    });
+
+    const gen = investigateStreaming(
+      { supabase, model, caseContext },
+      0,
+      { frequencyMhz: 200, marginDb: 7.4, operatingMode: "WiFi TX + display active" },
+    );
+
+    const start = performance.now();
+    const first = await gen.next();
+    const firstElapsedMs = performance.now() - start;
+
+    if (first.done) throw new Error("expected a yielded tool-completion, not the final result");
+    expect(first.value.toolName).toBe("getMeasurementContext");
+    expect(firstElapsedMs).toBeLessThan(60);
+
+    const second = await gen.next();
+    if (second.done) throw new Error("expected a yielded tool-completion, not the final result");
+    expect(second.value.toolName).toBe("getDeterministicCorrelations");
+
+    const third = await gen.next();
+    if (!third.done) throw new Error("expected the final result, not another yielded tool-completion");
+    // The generator's return value (done: true) is the same validated
+    // result runInvestigationAgent's non-streaming wrapper returns.
+    expect(third.value.hypotheses).toEqual([]);
   });
 });
 

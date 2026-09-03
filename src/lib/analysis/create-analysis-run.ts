@@ -14,7 +14,7 @@ import type { HypothesisModelAdapter } from "@/lib/ai/provider";
 import { loadProductFactRecords } from "@/lib/products/load-fact-records";
 import { describeProductFact } from "@/lib/products/describe-fact";
 import type { ProductFactForHypotheses } from "@/lib/hypotheses/generate-hypotheses";
-import { runInvestigationAgent } from "@/lib/agents/investigation-agent";
+import { investigateStreaming } from "@/lib/agents/investigation-agent";
 import {
   runAnalysis,
   type AnalysisMeasurementInput,
@@ -159,8 +159,13 @@ export async function createAnalysisRunForFailureCase(
     ]);
 
     agentRunner = {
-      investigate: async (correlationCandidates) =>
-        runInvestigationAgent(
+      // UX-04 real-time-flow fix: a generator, not an async function
+      // returning a Promise — see InvestigationAgentRunner's own doc
+      // comment in run-analysis.ts. investigateStreaming yields each tool
+      // completion as it actually happens instead of collecting them into
+      // an array only readable once the whole agent phase resolves.
+      investigate: (correlationCandidates) =>
+        investigateStreaming(
           {
             supabase,
             model: agentModel,

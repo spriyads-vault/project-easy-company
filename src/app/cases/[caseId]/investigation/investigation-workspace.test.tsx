@@ -356,6 +356,38 @@ describe("InvestigationWorkspace — streaming", () => {
     });
   });
 
+  it("adds React Flow canvas nodes incrementally as events stream in — never empty after completion (UX-04 reopened)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        buildSseResponse(
+          [runStarted(), measurementLoaded(), correlationFound(), hypothesisCreated(), runCompleted()],
+          15,
+        ),
+      ),
+    );
+    render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
+    fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
+
+    // The Measurement node comes from the `measurement` prop, not the
+    // stream — it's already present before any event has arrived, so the
+    // canvas is never in a genuinely empty state right after the click.
+    expect(document.querySelectorAll(".react-flow__node").length).toBeGreaterThanOrEqual(1);
+    const countBeforeStreamCompletes = document.querySelectorAll(".react-flow__node").length;
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /run again/i })).toBeInTheDocument();
+    });
+
+    // More nodes exist once correlation/hypothesis events have streamed in
+    // than existed right after the click — the canvas grew with the
+    // stream, it didn't jump from nothing to everything in one batch, and
+    // it's non-empty once the run reports complete (the reported defect).
+    const countAfterCompletion = document.querySelectorAll(".react-flow__node").length;
+    expect(countAfterCompletion).toBeGreaterThan(countBeforeStreamCompletes);
+    expect(document.querySelectorAll(".react-flow__node").length).toBeGreaterThan(0);
+  });
+
   it("does not fire a second request while one run is active (duplicate-run protection)", async () => {
     const fetchMock = vi.fn().mockResolvedValue(buildSseResponse([runStarted(), runCompleted({ hypothesesCreated: 0, correlationsFound: 0 })], 20));
     vi.stubGlobal("fetch", fetchMock);

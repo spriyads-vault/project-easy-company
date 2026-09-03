@@ -18,7 +18,7 @@ import {
 import type { HypothesisModelAdapter } from "@/lib/ai/provider";
 import type { FinalHypothesis } from "@/lib/hypotheses/schema";
 import type { RunInvestigationAgentResult } from "@/lib/agents/investigation-agent";
-import type { AnalysisEvent, AnalysisEventType } from "./events";
+import type { AgentToolCompletedPayload, AnalysisEvent, AnalysisEventType } from "./events";
 
 /**
  * The DB-touching half of MVP-10B's agent integration. run-analysis.ts stays
@@ -31,9 +31,19 @@ import type { AnalysisEvent, AnalysisEventType } from "./events";
  * involved at all.
  */
 export interface InvestigationAgentRunner {
+  /**
+   * An async generator, not a Promise — UX-04's reopened real-time-flow
+   * fix. Yields one AgentToolCompletedPayload the instant each tool call
+   * actually finishes (see investigateStreaming in investigation-agent.ts),
+   * then returns the final validated result once the whole agent phase
+   * resolves. runAnalysis below forwards each yielded value straight to
+   * the SSE stream as an agent.tool.completed event — that's what makes
+   * the activity list progress one real step at a time instead of a
+   * frozen wait followed by every remaining step appearing at once.
+   */
   investigate(
     correlationCandidates: HarmonicCorrelationCandidate[],
-  ): Promise<RunInvestigationAgentResult>;
+  ): AsyncGenerator<AgentToolCompletedPayload, RunInvestigationAgentResult, void>;
 }
 
 export interface AnalysisMeasurementInput {
@@ -144,10 +154,18 @@ export async function* runAnalysis(
       // them: this branch only ever runs once real candidates already
       // exist.
       yield emit("agent.started", { correlationCount: correlationCandidates.length });
-      const agentResult = await agentRunner.investigate(correlationCandidates);
-      for (const activity of agentResult.activity) {
-        yield emit("agent.tool.completed", activity);
+      // Delegate into the agent's own generator so each tool completion
+      // becomes an SSE event the moment it actually happens — never
+      // collected into an array and replayed after the whole phase
+      // finishes (that was the reopened ticket's proven root cause of the
+      // activity list appearing to batch/freeze then jump all at once).
+      const agentGenerator = agentRunner.investigate(correlationCandidates);
+      let agentStep = await agentGenerator.next();
+      while (!agentStep.done) {
+        yield emit("agent.tool.completed", agentStep.value);
+        agentStep = await agentGenerator.next();
       }
+      const agentResult = agentStep.value;
       yield emit("agent.completed", agentResult.metrics);
       hypothesisResult = {
         hypotheses: agentResult.hypotheses,

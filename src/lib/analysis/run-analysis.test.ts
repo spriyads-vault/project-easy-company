@@ -212,12 +212,24 @@ describe("runAnalysis — failure handling", () => {
 function fakeAgentRunner(
   result: RunInvestigationAgentResult,
 ): InvestigationAgentRunner {
-  return { investigate: async () => result };
+  return {
+    // Mirrors investigateStreaming's real shape: yields each of the
+    // fixture's activity entries (proving runAnalysis forwards them one at
+    // a time, in order) before returning the final result.
+    investigate: async function* () {
+      for (const item of result.activity) {
+        yield item;
+      }
+      return result;
+    },
+  };
 }
 
 function throwingAgentRunner(error: unknown): InvestigationAgentRunner {
   return {
-    investigate: async () => {
+    // Deliberately throws before ever yielding, matching a real agent
+    // phase that fails before its first tool call.
+    investigate: async function* () {
       throw error;
     },
   };
@@ -327,7 +339,9 @@ describe("runAnalysis — Investigation Agent phase (MVP-10B)", () => {
   it("falls back to the plain adapter path when there are no correlation candidates, even with an agentRunner provided (no relevant documents to ground on)", async () => {
     let agentCalled = false;
     const agentRunner: InvestigationAgentRunner = {
-      investigate: async () => {
+      // Never actually called (that's this test's whole point); only needs
+      // to satisfy the generator-returning interface.
+      investigate: async function* () {
         agentCalled = true;
         throw new Error("should never be called with zero correlation candidates");
       },

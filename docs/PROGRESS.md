@@ -2865,3 +2865,192 @@ test:integration` 61/61 (12 files) · `pnpm run build` succeeds.
 **Outcome**: all 8 implementation items complete and live-verified.
 `UX-04.passes` restored to `true` in `features.json`; `UX-04-LIGHT` left
 untouched.
+
+## UX-04 — reopened #2: real-time agentic flow correction
+
+Reopened after live testing (baseline `d6df97a`) showed a critical
+execution defect distinct from the earlier visual-layout correction: after
+confirming intake, the first activity step appeared, then the UI froze for
+several seconds, then every remaining activity step appeared simultaneously
+and the status jumped straight to `CRADO · COMPLETE` — while the React Flow
+canvas stayed empty until the browser was refreshed.
+
+### Diagnosis (proven, not assumed)
+
+The server-to-client transport itself was already real: `POST
+/api/analysis-runs` (route.ts) already returned a genuine SSE stream
+(`JsonToSseTransformStream`), and `create-analysis-run.ts`'s
+`persistAndYield` generator already persisted each event to
+`analysis_events` **before** yielding it, so transport/persistence
+ordering was never the problem. The client (`investigation-workspace.tsx`)
+already read the stream incrementally (`reader.read()` in a loop,
+`setState` per parsed event) and passed the live `state` straight into
+`InvestigationCanvas`, whose `graph` is a `useMemo` over that same `state`
+— so the canvas was already wired to re-render on every event in
+principle.
+
+**Root cause A — batched activity (live-reproduced via chrome-devtools
+MCP polling a real Gateway X run, 100–250ms samples, `docs/PROGRESS.md`
+timestamps below):** `runInvestigationAgent`'s `onToolExecutionEnd`
+callback fired correctly *during* the SDK's internal multi-step tool loop,
+but only ever pushed into a local, in-memory `activity: []` array —
+nothing was observable outside that one `await agent.generate({...})`
+call until it fully resolved. `run-analysis.ts` then looped over that
+already-complete array with no `await` between iterations. A live run
+proved this exactly: DOM polling showed the activity list and node count
+frozen for **15.6 seconds** (2 nodes, 1 activity row, unchanged), then
+every remaining item (5 tool completions, `agent.completed`,
+`hypothesis.created`, `run.completed`) landed inside a single ~250ms
+polling window. This is "events generated only after the whole [agent]
+phase completes" — true for exactly the phase that dominates a run's real
+wall-clock time.
+
+**Root cause B — canvas requiring a refresh / requiring manual panning to
+find new content:** the canvas's `defaultViewport` (fixed at the graph's
+origin, a deliberate fix from the prior visual-correction ticket to avoid
+`fitView`'s both-ends-clipping bug) is applied once, at mount, and never
+moves again on its own. Once Root Cause A is fixed and a burst of new
+nodes can legitimately still arrive together (a whole hypothesis lane from
+one `hypothesis.created` event), nothing ever panned the viewport toward
+them — they landed in the canonical graph and the DOM, just outside the
+still-origin-anchored visible window, which is indistinguishable from
+"empty" without deliberately panning to find them (item 7 in the ticket's
+own defect list, "users must manually pan and move around to find them,"
+independently corroborates this exact mechanism). A full page refresh
+"fixed" it only because a fresh SSR mount starts the same fixed-origin
+anchor over from scratch on a graph that, by then, already has everything
+— not because anything was structurally different about a refresh's data.
+
+### Architecture implemented
+
+**Real incremental agent-activity streaming**
+(`src/lib/agents/investigation-agent.ts`): added `investigateStreaming`,
+an async generator that bridges the SDK's synchronous
+`onToolExecutionEnd` callback to genuine incremental yields via a small
+pull-queue + one-slot wake-up promise (`agent.generate()` runs
+concurrently with a loop that yields each tool's completion the instant
+it happens, and only returns the final validated result once
+`agent.generate()` itself resolves). `runInvestigationAgent` is now a
+thin wrapper that drains this generator silently, so every existing
+caller/test that awaits one Promise needed no change.
+`InvestigationAgentRunner.investigate` (`run-analysis.ts`) changed from
+`Promise<RunInvestigationAgentResult>` to
+`AsyncGenerator<AgentToolCompletedPayload, RunInvestigationAgentResult>`;
+`runAnalysis` now delegates into it with `agentGenerator.next()` in a
+loop, `yield emit("agent.tool.completed", ...)` for each value as it
+arrives — never collected into an array first. `create-analysis-run.ts`'s
+real `agentRunner` now calls `investigateStreaming` directly.
+Live-verified: the same real Gateway X pipeline now shows activity items
+completing seconds apart (proven again via polling: activity count
+progressing 1→4→6 across real, separated timestamps, not one frozen
+block) instead of a multi-second freeze followed by a single batch.
+
+**Canvas follow-agent + empty-state placeholder**
+(`investigation-canvas.tsx`): a `followAgent` toggle (default on) tracks
+previously-seen node ids in a ref; a `useEffect` (calling the imperative
+`setCenter` API, never `setState`, so it doesn't trip this repo's
+`react-hooks/set-state-in-effect` rule) diffs newly-added canvas nodes
+against that ref on every graph change and, when following is enabled,
+centers the viewport on the new nodes' bounding box at the same fixed
+`DEFAULT_ZOOM` every other view in this canvas uses — deliberately
+`setCenter`, not `fitBounds`/`fitView`, so revealing new work never
+shrinks the graph to keep fitting it in (the ticket's explicit
+requirement). The very first population of the graph is recorded without
+moving the viewport, since `defaultViewport`'s fixed origin anchor
+already handles that moment correctly. `onMoveStart` distinguishes a real
+user gesture from a programmatic move via xyflow's own documented
+convention (`event` is `null` for a call this code made itself, the real
+DOM event for a genuine drag/wheel/pinch) and pauses following only on
+the latter; a `ControlButton` re-enables it. A `graph.nodes.length === 0`
+empty-state overlay (role="status", the same real `lastEventSummary`/
+`errorMessage` already shown elsewhere, never a fabricated per-node
+guess) replaces the previous bare `return null`, but only for a run that
+has actually started — a genuinely idle case (no measurement, no run
+ever attempted) still renders nothing, since there's no "current genuine
+state" worth describing there.
+
+Live-verified against a real completed run with a hypothesis: on
+completion, the canvas had already auto-panned to center the
+Hypothesis/Missing-evidence/Next-test lane (the newest content) — fully
+readable, no manual panning needed, matching the screenshot evidence in
+this ticket's report almost exactly inverted. A real drag gesture
+(synthetic `mousedown`/`mousemove`/`mouseup` on the pane, exercising
+xyflow's actual D3-drag handling, not a fake state flip) correctly
+flipped the Follow-agent button's `aria-pressed` to `false`; clicking it
+again correctly restored `true`.
+
+### What was not rebuilt
+
+The existing SSE transport, `analysis_events` persistence-before-yield
+ordering, and refresh-reconstruction (`reconstructFromPersistedEvents`)
+were already correct and are unmodified — this ticket's fix is entirely
+about (a) not batching the agent phase's own activity behind one
+unobserved `await`, and (b) making the canvas viewport follow live
+growth instead of staying fixed at its first-paint anchor. No new
+database tables, no new event types, and no second competing state model
+were introduced. Server-side cross-request idempotency (an idempotency
+key preventing two different tabs/clients from starting two runs for the
+same failure case within the same instant) was **not** implemented —
+the existing client-side guard (`runInFlightRef`, disabled button) still
+correctly collapses rapid same-tab double-clicks to exactly one POST
+(re-verified live: 3 rapid clicks on RUN AGAIN produced exactly one
+network request), but a genuinely concurrent request from two separate
+tabs would still create two rows today. This is a known, documented
+remaining limitation, not a silent gap.
+
+### Tests
+
+`investigation-agent.test.ts`: new `investigateStreaming` suite proves
+real incremental yielding — a tool call's completion is consumed via
+`.next()` before an artificially slower *second* model step (60ms,
+`setTimeout`, never a fake timer) even resolves, which a
+collect-then-replay implementation could not satisfy.
+`run-analysis.test.ts`: `fakeAgentRunner`/`throwingAgentRunner` updated
+to the generator interface (behavior-preserving — all 12 existing
+assertions about event order/fallback/failure unchanged and still pass).
+`investigation-canvas.test.tsx` (new): empty-state placeholder shows the
+real `lastEventSummary`, disappears the instant a real node exists, and
+is never present once the run is complete with a non-empty graph; the
+Follow-agent button defaults pressed and toggles both directions.
+`investigation-workspace.test.tsx`: new test proves the React Flow node
+count grows strictly between the click and completion (not a 0→everything
+jump) and is non-empty once complete.
+
+### Automated results
+
+`pnpm exec tsc --noEmit` clean · `pnpm run lint` clean ·
+`pnpm exec vitest run` 373/373 (49 files) · `pnpm run test:integration`
+61/61 (12 files) · `pnpm run build` succeeds.
+
+### Live end-to-end verification
+
+Two full, real Gateway X runs (real Anthropic model, real deterministic
+correlation, real Supabase persistence — no mocked browser responses),
+submitted through the actual intake flow, polled via chrome-devtools MCP
+at 100–250ms resolution:
+
+- Run 1 (first submission): activity progressed 1→4→6 items across real,
+  separated timestamps (t≈0, t≈3.0s, t≈3.1s) — no multi-second freeze —
+  before completing with 5 canvas nodes; the canvas had already
+  auto-panned to center the new Hypothesis/Missing/Next-test lane by the
+  time of the first post-completion screenshot, no refresh, no manual
+  pan.
+- Run 2 (RUN AGAIN, 3 rapid clicks): exactly one `/api/analysis-runs`
+  POST fired (network tab confirmed); activity again progressed across
+  separated timestamps, completed with 5 nodes, canvas non-empty.
+- Refresh after Run 1: reconstructs the identical persisted state
+  (`reconstructFromPersistedEvents`, unmodified) — "5 actions completed ·
+  17.3s", full graph, same origin-anchored view a fresh mount always
+  starts at.
+- Follow-agent: default on (`aria-pressed="true"`); a real drag gesture
+  paused it (`aria-pressed="false"`); the control button re-enabled it.
+- Breakpoints 1440/768/390 re-checked live: no regressions, console clean
+  apart from the one pre-existing, documented React Flow attribution
+  warning at every size.
+
+### Outcome
+
+Both proven root causes are fixed and live-verified without a browser
+refresh. `UX-04.passes` restored to `true`; `UX-04-LIGHT` untouched.
+Remaining limitation: no server-side cross-tab/cross-client idempotency
+key (see above) — documented, not silently dropped.

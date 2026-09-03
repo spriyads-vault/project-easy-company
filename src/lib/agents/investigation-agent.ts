@@ -290,50 +290,102 @@ export function createInvestigationAgent(
 }
 
 /**
- * Runs one investigation: builds a fresh agent+tools, executes the tool
- * loop, and independently validates the result before returning it. Never
- * throws for a model/tool failure that the SDK already turned into a
- * tool-error or a step-limit finish — those surface as an
- * investigationStatus/empty-hypotheses outcome, not a crash; only a truly
- * unrecoverable error (e.g. no output at all) propagates, matching
- * MVP-08's runAnalysis convention of letting the caller turn it into
- * run.failed.
+ * The real-time half of MVP-10B's fix for UX-04's reopened "batched
+ * activity" defect. `agent.generate()` is one long single await — the
+ * SDK's own `onToolExecutionEnd` callback fires DURING that call, per tool
+ * call, but a plain callback has nowhere to send that "this just finished"
+ * moment to a caller that's still `await`-ing the whole thing. This is a
+ * minimal callback-to-async-generator bridge: `agent.generate()` runs
+ * concurrently with a `while` loop that yields each tool-completion the
+ * instant it happens (via a one-slot wake-up promise + a small pending
+ * queue, in case two tool calls complete faster than the generator is
+ * asked for its next value), and only returns the final validated result
+ * once `agent.generate()` itself resolves. run-analysis.ts's `for await`
+ * over this is what lets `agent.tool.completed` reach the SSE stream (and
+ * so the browser) as each tool call genuinely finishes, instead of all at
+ * once after the entire multi-step run completes — proven live: without
+ * this, a real run showed a 15+ second frozen activity list, then every
+ * remaining step appearing within one 250ms window (see docs/PROGRESS.md).
  */
-export async function runInvestigationAgent(
+export async function* investigateStreaming(
   params: CreateInvestigationAgentParams,
   documentsAvailable: number,
   measurement: MeasurementForHypotheses,
-): Promise<RunInvestigationAgentResult> {
+): AsyncGenerator<AgentToolCompletedPayload, RunInvestigationAgentResult, void> {
   const agent = createInvestigationAgent(params, documentsAvailable);
   const registry = createEmptyRegistry(documentsAvailable);
   const activity: AgentToolCompletedPayload[] = [];
 
+  const pending: AgentToolCompletedPayload[] = [];
+  let wake: (() => void) | null = null;
+  let generateDone = false;
+  let generateError: unknown = null;
+  let generateResult: Awaited<ReturnType<typeof agent.generate>> | null = null;
+
+  function wakeConsumer(): void {
+    if (wake) {
+      const resolve = wake;
+      wake = null;
+      resolve();
+    }
+  }
+
   const startedAt = Date.now();
-  const result = await agent.generate({
-    prompt: buildTaskPrompt(params.caseContext, documentsAvailable),
-    onToolExecutionEnd: (event) => {
-      const toolName = event.toolCall.toolName;
-      const failed = event.toolOutput.type === "tool-error";
-      const output = event.toolOutput.type === "tool-result" ? event.toolOutput.output : null;
-      if (!failed) absorbToolResult(registry, toolName, output);
+  const generatePromise = agent
+    .generate({
+      prompt: buildTaskPrompt(params.caseContext, documentsAvailable),
+      onToolExecutionEnd: (event) => {
+        const toolName = event.toolCall.toolName;
+        const failed = event.toolOutput.type === "tool-error";
+        const output = event.toolOutput.type === "tool-result" ? event.toolOutput.output : null;
+        if (!failed) absorbToolResult(registry, toolName, output);
 
-      const resultCount = failed ? null : extractResultCount(toolName, output);
-      const query =
-        toolName === "searchEngineeringDocuments" &&
-        event.toolCall.input &&
-        typeof event.toolCall.input === "object"
-          ? ((event.toolCall.input as { query?: string }).query ?? null)
-          : null;
+        const resultCount = failed ? null : extractResultCount(toolName, output);
+        const query =
+          toolName === "searchEngineeringDocuments" &&
+          event.toolCall.input &&
+          typeof event.toolCall.input === "object"
+            ? ((event.toolCall.input as { query?: string }).query ?? null)
+            : null;
 
-      activity.push({
-        toolName,
-        label: toolActivityLabel(toolName, resultCount, failed),
-        resultCount,
-        durationMs: Math.round(event.toolExecutionMs),
-        query,
-      });
-    },
-  });
+        const item: AgentToolCompletedPayload = {
+          toolName,
+          label: toolActivityLabel(toolName, resultCount, failed),
+          resultCount,
+          durationMs: Math.round(event.toolExecutionMs),
+          query,
+        };
+        activity.push(item);
+        pending.push(item);
+        wakeConsumer();
+      },
+    })
+    .then((result) => {
+      generateResult = result;
+    })
+    .catch((error: unknown) => {
+      generateError = error;
+    })
+    .finally(() => {
+      generateDone = true;
+      wakeConsumer();
+    });
+
+  while (true) {
+    if (pending.length > 0) {
+      yield pending.shift()!;
+      continue;
+    }
+    if (generateDone) break;
+    await new Promise<void>((resolve) => {
+      wake = resolve;
+    });
+  }
+  await generatePromise; // already settled; surfaces nothing new, just keeps this an awaited tail
+
+  if (generateError) throw generateError;
+  if (!generateResult) throw new Error("Investigation agent produced no result.");
+  const result = generateResult as Awaited<ReturnType<typeof agent.generate>>;
 
   const agentOutput = agentOutputSchema.parse(result.output);
 
@@ -388,4 +440,27 @@ export async function runInvestigationAgent(
     clarificationQuestion: validated.clarificationQuestion,
     metrics,
   };
+}
+
+/**
+ * Non-streaming convenience wrapper — drains investigateStreaming's
+ * incremental `agent.tool.completed` values without surfacing them, then
+ * returns the same final result it always returned. Kept so every existing
+ * caller/test that awaits one promise (this file's own test suite, any
+ * direct/manual use) needs no change; the real production path
+ * (create-analysis-run.ts's agentRunner) calls investigateStreaming
+ * directly so run-analysis.ts can forward each tool completion to the SSE
+ * stream as it actually happens.
+ */
+export async function runInvestigationAgent(
+  params: CreateInvestigationAgentParams,
+  documentsAvailable: number,
+  measurement: MeasurementForHypotheses,
+): Promise<RunInvestigationAgentResult> {
+  const gen = investigateStreaming(params, documentsAvailable, measurement);
+  let step = await gen.next();
+  while (!step.done) {
+    step = await gen.next();
+  }
+  return step.value;
 }
