@@ -30,6 +30,7 @@ import { SseEventParser } from "@/lib/investigation/parse-sse-events";
 import type { MeasurementComparison } from "@/lib/measurements/compare-measurements";
 import { InvestigationCanvas } from "./canvas/investigation-canvas";
 import { MobileInvestigationStack } from "./canvas/investigation-stack";
+import { DecisionView } from "./decision-view";
 import { InvestigationControls } from "./investigation-controls";
 import { InvestigationTimeline } from "./investigation-timeline";
 import { AgentActivityPanel } from "./agent-activity-panel";
@@ -118,6 +119,10 @@ interface InvestigationWorkspaceProps {
    * always has this from getFailureCase. */
   productName?: string;
   hasMultipleRevisions?: boolean;
+  /** UX-05: the failure_cases row's own status — the only source of
+   * "Resolved" in the top-bar status pill. Optional/defaults to "open" so
+   * every pre-UX-05 test call site keeps working unmodified. */
+  caseStatus?: "open" | "resolved" | "archived";
   productFacts: ProductFactRecord[];
   measurement: MeasurementRow | null;
   initialState: WorkspaceState;
@@ -140,6 +145,7 @@ export function InvestigationWorkspace({
   currentRevisionLabel = "",
   productName = "",
   hasMultipleRevisions = false,
+  caseStatus = "open",
   productFacts,
   measurement,
   initialState,
@@ -150,7 +156,8 @@ export function InvestigationWorkspace({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openCitation, setOpenCitation] = useState<OpenCitationState | null>(null);
   const [selection, setSelection] = useState<RailSelection>(null);
-  const [activeTab, setActiveTab] = useState<InvestigationTab>("investigation");
+  // UX-05: Decision is the default landing tab — see view-switcher.tsx.
+  const [activeTab, setActiveTab] = useState<InvestigationTab>("decision");
   // MVP-11 timeline live-update fix: local state seeded from the
   // server-fetched timeline, appended to directly inside the SSE loop below
   // as hypothesis.created events arrive — never via a useEffect watching
@@ -263,7 +270,10 @@ export function InvestigationWorkspace({
     }
     runInFlightRef.current = true;
     setIsSubmitting(true);
-    setActiveTab("investigation");
+    // UX-05: no forced tab switch here any more — both Decision and Map
+    // now render live from the same WorkspaceState, so starting a run no
+    // longer needs to yank the engineer to a specific tab. Whichever tab
+    // they're already on (Decision by default) keeps updating in place.
 
     try {
       const response = await fetch("/api/analysis-runs", {
@@ -343,7 +353,7 @@ export function InvestigationWorkspace({
   const busy = isSubmitting || state.status === "running";
 
   function handleRecordResult() {
-    setActiveTab("investigation");
+    setActiveTab("decision");
     document.getElementById(CASE_COMPOSER_INPUT_ID)?.focus();
   }
 
@@ -359,6 +369,46 @@ export function InvestigationWorkspace({
           activeTab === "investigation" ? canvasBackground : ""
         }`}
       >
+        {activeTab === "decision" ? (
+          <div className="mx-auto flex w-full max-w-[900px] flex-col gap-4">
+            <InvestigationControls
+              caseId={caseId}
+              productId={productId}
+              revisionId={revisionId}
+              currentRevisionLabel={currentRevisionLabel}
+              hasMultipleRevisions={hasMultipleRevisions}
+              state={state}
+              canRunAnalysis={canRunAnalysis}
+              isSubmitting={isSubmitting}
+              disabledReason={disabledReason}
+              onRunInvestigation={handleRunInvestigation}
+            />
+            <AgentActivityPanel
+              activity={state.agentActivity}
+              active={state.agentActive}
+              durationMs={state.agentMetrics?.totalDurationMs}
+              defaultCollapsed={!state.agentActive && state.hypotheses.length > 0}
+            />
+            <DecisionView
+              caseId={caseId}
+              measurement={measurement}
+              state={state}
+              timeline={timeline}
+              onSelectMeasurement={handleSelectMeasurement}
+              onSelectHypothesis={handleSelectHypothesis}
+              onOpenCitation={handleOpenCitation}
+              onRecordResult={handleRecordResult}
+            />
+            {state.agentMetrics ? (
+              <AgentMetricsPanel
+                metrics={state.agentMetrics}
+                toolCallCount={state.agentActivity.length}
+                sourcesUsedCount={sourcesUsedCount}
+              />
+            ) : null}
+          </div>
+        ) : null}
+
         {activeTab === "investigation" ? (
           <div className="mx-auto flex w-full max-w-[900px] flex-col gap-4">
             <InvestigationControls
@@ -428,7 +478,16 @@ export function InvestigationWorkspace({
           productName={productName}
           revisionLabel={currentRevisionLabel}
           caseTitle="Radiated emissions"
-          statusPill={<AgentStatusPill status={state.status} busy={isSubmitting} hasMeasurement={measurement !== null} />}
+          statusPill={
+            <AgentStatusPill
+              runStatus={state.status}
+              busy={isSubmitting}
+              hasMeasurement={measurement !== null}
+              hypotheses={state.hypotheses}
+              timeline={timeline}
+              caseStatus={caseStatus}
+            />
+          }
           rightSlot={<ViewSwitcher activeTab={activeTab} onSelectTab={setActiveTab} />}
         />
 

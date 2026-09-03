@@ -196,6 +196,10 @@ describe("InvestigationWorkspace — streaming", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
+    // UX-05: Decision is the default tab now — switch to Map so this
+    // test's assertions still exercise the React Flow canvas's own
+    // (compact) node rendering, unchanged from before.
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
     // Immediately after the click, before the stream has delivered
@@ -228,6 +232,9 @@ describe("InvestigationWorkspace — streaming", () => {
       ),
     );
     render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
+    // UX-05: Decision is the default tab now — switch to Map for this
+    // canvas-node-rendering-specific assertion.
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
     await waitFor(() => {
@@ -253,8 +260,10 @@ describe("InvestigationWorkspace — streaming", () => {
     fireEvent.click(screen.getByRole("button", { name: "Timeline" }));
     expect(screen.queryByText("Investigation timeline")).not.toBeInTheDocument();
 
-    // The run button only lives on the Investigation tab.
-    fireEvent.click(screen.getByRole("button", { name: "Investigation" }));
+    // The run button also lives on the Decision tab (UX-05) — this test
+    // deliberately exercises it via Map to keep covering that tab's own
+    // InvestigationControls instance.
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
     await waitFor(() => {
@@ -289,6 +298,9 @@ describe("InvestigationWorkspace — streaming", () => {
       ),
     );
     render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
+    // UX-05: Decision is the default tab now — switch to Map for this
+    // canvas-node-rendering-specific assertion.
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
     await waitFor(() => {
@@ -367,6 +379,9 @@ describe("InvestigationWorkspace — streaming", () => {
       ),
     );
     render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
+    // UX-05: Decision is the default tab now — switch to Map so the React
+    // Flow canvas is actually mounted for this test.
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
     // The Measurement node comes from the `measurement` prop, not the
@@ -419,6 +434,9 @@ describe("InvestigationWorkspace — refresh reconstruction", () => {
     ]);
 
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+    // UX-05: Decision is the default tab now — switch to Map for this
+    // canvas-node-rendering-specific assertion.
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
 
     expect(screen.getByText("40 × 5 = 200")).toBeInTheDocument();
     expect(screen.getByText("5th harmonic of 40 MHz system clock")).toBeInTheDocument();
@@ -532,6 +550,10 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
       runCompleted(),
     ]);
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+    // UX-05: Decision is the default tab now — switch to Map, where the
+    // hypothesis node's own click-to-select behavior (not just its
+    // "Details" button) lives.
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     // UX-04: the hypothesis node itself only shows a compact summary —
@@ -621,6 +643,9 @@ describe("InvestigationWorkspace — responsive breakpoints (UX-04 visual correc
       runCompleted(),
     ]);
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+    // UX-05: Decision is the default tab now — switch to Map, where the
+    // mobile stack (this breakpoint's canvas substitute) lives.
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
 
     expect(screen.getByRole("list", { name: "Investigation, in order" })).toBeInTheDocument();
     expect(screen.getByText("5th harmonic of 40 MHz system clock")).toBeInTheDocument();
@@ -638,6 +663,9 @@ describe("InvestigationWorkspace — responsive breakpoints (UX-04 visual correc
       runCompleted(),
     ]);
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+    // UX-05: Decision is the default tab now — switch to Map, where the
+    // mobile stack (this breakpoint's canvas substitute) lives.
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("5th harmonic of 40 MHz system clock"));
@@ -663,6 +691,9 @@ describe("InvestigationWorkspace — responsive breakpoints (UX-04 visual correc
       runCompleted(),
     ]);
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+    // UX-05: Decision is the default tab now — switch to Map, where the
+    // canvas lives at this breakpoint.
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
 
     // The canvas, identified by React Flow's own application role — not
     // the mobile stack's plain <ol>.
@@ -686,6 +717,9 @@ describe("InvestigationWorkspace — responsive breakpoints (UX-04 visual correc
       runCompleted(),
     ]);
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+    // UX-05: Decision is the default tab now — switch to Map, where the
+    // canvas + persistent rail live at this breakpoint.
+    fireEvent.click(screen.getByRole("button", { name: "Map" }));
 
     expect(screen.getByRole("application")).toBeInTheDocument();
     expect(screen.getByLabelText("Case context")).toBeInTheDocument();

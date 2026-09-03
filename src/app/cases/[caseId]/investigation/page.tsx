@@ -42,6 +42,7 @@ export default async function InvestigationPage({ params, searchParams }: Invest
       currentRevisionLabel={currentRevisionLabel}
       productName={failureCase.productName}
       hasMultipleRevisions={hasMultipleRevisions}
+      caseStatus={failureCase.status}
       productFacts={productFacts}
       measurement={measurement}
       initialState={workspaceState}

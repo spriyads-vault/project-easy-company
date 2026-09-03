@@ -3054,3 +3054,136 @@ Both proven root causes are fixed and live-verified without a browser
 refresh. `UX-04.passes` restored to `true`; `UX-04-LIGHT` untouched.
 Remaining limitation: no server-side cross-tab/cross-client idempotency
 key (see above) — documented, not silently dropped.
+
+## UX-05 — Decision-centred investigation workspace (partial)
+
+New, bounded ticket (not a continuation of UX-04 bug-fixing): redesign
+the investigation journey to be failure-first and decision-first, not
+graph-navigation-first. `UX-05` is a new `features.json` entry;
+`UX-04`/`UX-04-LIGHT` are untouched. Baseline confirmed before any edit:
+HEAD was exactly `e6cb8c2`, all 8 named UX-04 invariants intact, no
+`AGENTS.md` exists anywhere in the repo. No SSE/event-store/persistence
+rework was performed — every new surface below consumes the existing
+`WorkspaceState`/`TimelineEntry[]` projection (`reconstruct.ts`,
+`timeline.ts`) unmodified, per the ticket's own explicit instruction not
+to rebuild working streaming infrastructure.
+
+### What shipped
+
+- **New default tab: Decision** (`decision-view.tsx`). Reuses four
+  fully-built-but-dead UX-03 components verbatim — `MeasurementPanel`,
+  `CorrelationCard`, `HypothesisCard`, `RevisionComparisonCard` — found
+  during audit to be referenced by nothing live (superseded by
+  `canvas-nodes.tsx`'s compact registry for the canvas/mobile-stack, but
+  never deleted). Composes them into one readable stack: Measurement →
+  What Crado knows (real correlations only) → Leading hypotheses (real
+  hypotheses only, ranked) → Recommended next test (new — the only truly
+  new content) → Outcome (most recent real `result` timeline entry, via
+  the existing `RevisionComparisonCard`). Every section renders nothing
+  until the real data behind it exists — no placeholder implies content
+  that isn't there yet.
+- **`src/lib/investigation/rank-hypotheses.ts`**: deterministic
+  leading/plausible/weakened/unresolved ranking from the run's own real
+  `confidenceBand` + `update.status` fields. A hypothesis explicitly
+  weakened by later evidence always ranks last regardless of its
+  original confidence; absent an update, strength follows confidence
+  band directly. No invented percentage, score, or "contradicting
+  evidence count" (the domain has no such field).
+- **`src/lib/investigation/derive-workflow-state.ts`**: replaces the old
+  5-state Complete/Ready/Investigating/Failed/Waiting vocabulary with the
+  ticket's truthful set (awaiting_measurement / idle /
+  analysis_in_progress / analysis_failed / interrupted /
+  more_evidence_needed / ready_for_next_test / change_ready_to_verify /
+  outcome_ready_for_review / resolved). Derived from real `RunStatus` +
+  timeline `engineering_change`/`result` ordering (a second change after
+  a result correctly reverts to `change_ready_to_verify`, not a stale
+  `outcome_ready_for_review`) + the `failure_cases` row's own
+  `status` — `resolved` is never inferred from an agent run finishing.
+  `AgentStatusPill` now reads this, wired through `page.tsx`'s real
+  `failureCase.status`.
+- **Tab rename + no forced navigation**: `"investigation"` relabeled
+  `"Map"` (Decision is now the default/first tab). The RUN-start forced
+  tab-switch was removed — both Decision and Map now render live from
+  the same state, so starting/re-running a run no longer yanks the
+  engineer to a specific tab; whichever tab they're on keeps updating in
+  place. `AgentMetricsPanel` was added to the Decision tab (previously
+  Investigation-tab-only) so agent metrics don't regress for engineers
+  who land on the new default.
+- **Record result**: the Decision view's RECORD RESULT button reuses the
+  existing `handleRecordResult` (focuses the composer) — one entry
+  point, not a second divergent one.
+
+### Tests
+
+`derive-workflow-state.test.ts` (14 cases incl. the change-after-result
+boundary), `rank-hypotheses.test.ts` (10 cases), `decision-view.test.tsx`
+(7 cases), `agent-status-pill.test.tsx` (5 cases) — 36 new tests, all
+passing. `investigation-workspace.test.tsx`'s pre-existing 24 tests
+updated (not weakened) for the new default tab and the
+`"Investigation"`→`"Map"` rename — each updated test still asserts
+exactly what it asserted before, just via the tab that now hosts that
+behavior.
+
+### Automated results
+
+`pnpm exec tsc --noEmit` clean · `pnpm run lint` clean ·
+`pnpm exec vitest run` 408/409 (53 files) — the one failure
+(`case-composer.test.tsx`) is a pre-existing full-run timing flake,
+confirmed passing 14/14 in isolation; that file was not touched by this
+ticket · `pnpm run build` succeeds. Integration tests were not re-run:
+no backend/query/schema code changed.
+
+### Live end-to-end verification
+
+A brand-new Gateway X investigation was created through the real intake
+flow (chrome-devtools MCP, signed in as the seeded demo user, no mocks)
+and RUN INVESTIGATION clicked from a fresh Decision tab. Timestamped
+polling proved sequential, non-batched arrival:
+
+```
+t=0ms     "Reviewed previous revisions / 3 revisions found"   pill: Agent analysis in progress
+t=4560ms  hypothesis appears                                  pill: Agent analysis in progress
+t=4711ms  run completes                                       pill: Ready for next test  (never "Complete")
+```
+
+Decision was populated with real Measurement/correlation content
+*during* the run, not only after. At completion, Decision showed the
+full stack (Measurement, What Crado knows, Leading hypotheses with the
+real evidence grid, Recommended next test, agent metrics) with no
+refresh; switching to Map showed 5 real canvas nodes fully connected
+with no refresh either, reconfirming the UX-04 reopened-#2 fix still
+holds under the new default tab. RECORD RESULT correctly focused the
+composer. Breakpoints 1440/1280/1024/768/390 all screenshotted: layout
+reflows correctly at every size (persistent rail ≥1024, Sheet-based
+selection below), no horizontal overflow, zero new console
+errors/warnings (the one pre-existing React Flow attribution dev warning
+reappeared, unrelated to this ticket, not a regression).
+
+### Deferred (not built this session, not silently dropped)
+
+- Investigations work-queue's four-bucket filters and a literal per-row
+  "required next action" string.
+- A dedicated Before/After comparison screen beyond the Decision view's
+  Outcome section, and a dedicated resolved-trajectory narrative view
+  beyond Decision + the existing Timeline tab.
+- Investigation Map minimap / jump-to-active-step control and its own
+  readable-default-zoom tuning pass.
+- A real `agent.tool.started` durable event: no reliable SDK lifecycle
+  callback was located this session for a genuine per-tool active state.
+  Per the ticket's own explicit instruction, this was **not** synthesized
+  client-side — the honest overall "Working…" state plus the completed
+  tool sequence was retained as-is.
+- A full WCAG/keyboard-navigation audit specific to the new Decision
+  surface (it reuses existing heading/landmark/focus/live-region
+  patterns, but wasn't independently re-audited beyond that).
+- Cross-tab/cross-client run-start idempotency remains unenforced
+  server-side — unchanged from UX-04, and out of scope here since this
+  ticket never touched the run-start boundary.
+
+### Outcome
+
+A coherent, fully-verified core slice shipped: the failure-first Decision
+view is real, live, and truthful, reusing 100% existing data with zero
+new event types or backend changes. `UX-05.passes` is `false` — several
+sections of the full ticket (above) remain unbuilt. `UX-04`/`UX-04-LIGHT`
+are untouched.

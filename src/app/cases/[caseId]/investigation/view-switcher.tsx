@@ -9,10 +9,16 @@
 // case-nav.tsx had, new shape.
 import { segmented } from "./theme";
 
-export type InvestigationTab = "investigation" | "evidence" | "timeline" | "sources";
+export type InvestigationTab = "decision" | "investigation" | "evidence" | "timeline" | "sources";
 
+// UX-05: Decision is the new default/first tab — the failure-first,
+// decision-first read (measurement, known facts, leading hypotheses,
+// recommended next test, outcome) with zero graph navigation required.
+// "Investigation" (the React Flow canvas) stays as the secondary Map view
+// for engineers who want the topology, unchanged from UX-04.
 const TABS: { id: InvestigationTab; label: string }[] = [
-  { id: "investigation", label: "Investigation" },
+  { id: "decision", label: "Decision" },
+  { id: "investigation", label: "Map" },
   { id: "evidence", label: "Evidence" },
   { id: "timeline", label: "Timeline" },
   { id: "sources", label: "Sources" },
