@@ -46,6 +46,18 @@ interface InvestigationTracePanelProps {
    * "adjusting state on prop change" below. Defaults to false so every
    * pre-existing call site is unaffected. */
   defaultCollapsed?: boolean;
+  /** App Redesign: real, limited "selecting a trace step focuses the
+   * affected workspace item" support — called with the step's own
+   * already-safe display label on click of a completed/failed step
+   * (never the active one, which hasn't produced anything to focus yet).
+   * The wire schema carries no structured link from a tool call to the
+   * specific hypothesis/correlation it produced, so the caller routes on
+   * the label's real text (see investigation-workspace.tsx's
+   * handleTraceStepSelect) rather than a fabricated 1:1 id — an honest,
+   * category-level connection, not a precise one. Optional/undefined
+   * keeps every pre-existing call site's steps non-interactive, exactly
+   * as before. */
+  onSelectStep?: (label: string) => void;
 }
 
 /** Splits "Searched engineering documents / 3 passages retrieved" into a
@@ -104,6 +116,7 @@ export function InvestigationTracePanel({
   active,
   durationMs,
   defaultCollapsed = false,
+  onSelectStep,
 }: InvestigationTracePanelProps) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   // Adjusting state during render in response to a prop change (React's
@@ -203,22 +216,39 @@ export function InvestigationTracePanel({
       <ul className="relative flex flex-col gap-3 pl-8 before:absolute before:left-[15px] before:top-1 before:bottom-1 before:w-px before:bg-border">
         {steps.map((step) => {
           const { primary, detail } = splitLabel(step.label);
+          // Only a completed/failed step is genuinely selectable — an
+          // active step hasn't produced a result yet, so there's nothing
+          // real to focus.
+          const selectable = onSelectStep && step.status !== "active";
+          const body = (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm">
+                {primary}
+                {detail ? <span className={text.muted}> — {detail}</span> : null}
+                {step.status === "active" ? <span className={text.muted}>…</span> : null}
+              </span>
+              {step.query ? (
+                <span className={`text-xs ${text.muted}`}>Query: &ldquo;{step.query}&rdquo;</span>
+              ) : null}
+              {step.status !== "active" ? (
+                <span className={`text-xs ${text.muted}`}>{formatDuration(step.durationMs)}</span>
+              ) : null}
+            </div>
+          );
           return (
             <li key={step.key} className="relative flex items-start gap-2.5">
               <StepMarker status={step.status} />
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm">
-                  {primary}
-                  {detail ? <span className={text.muted}> — {detail}</span> : null}
-                  {step.status === "active" ? <span className={text.muted}>…</span> : null}
-                </span>
-                {step.query ? (
-                  <span className={`text-xs ${text.muted}`}>Query: &ldquo;{step.query}&rdquo;</span>
-                ) : null}
-                {step.status !== "active" ? (
-                  <span className={`text-xs ${text.muted}`}>{formatDuration(step.durationMs)}</span>
-                ) : null}
-              </div>
+              {selectable ? (
+                <button
+                  type="button"
+                  onClick={() => onSelectStep(step.label)}
+                  className={`flex-1 rounded-md text-left transition-colors hover:text-foreground ${focusRing}`}
+                >
+                  {body}
+                </button>
+              ) : (
+                body
+              )}
             </li>
           );
         })}

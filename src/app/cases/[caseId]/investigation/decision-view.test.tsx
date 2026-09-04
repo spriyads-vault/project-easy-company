@@ -1,11 +1,11 @@
-// UX-05 (Decision-centred investigation workspace): DecisionView composes
-// four already-tested UX-03 artifact components verbatim
-// (MeasurementPanel, CorrelationCard, HypothesisCard,
-// RevisionComparisonCard) — these tests focus on what's actually new here:
-// section presence/absence tracking real data (never a fabricated
-// section), hypothesis ranking/strength labeling, and the
-// Recommended-next-test card being sourced from the real leading
-// hypothesis with no invented fields.
+// App Redesign, Workstream C correction: DecisionView is now a flat
+// workbench (failure strip + master investigation item table + real
+// outcome), not a stack of cards. These tests focus on what changed:
+// the strip's real measurement fields, table row presence/ordering
+// tracking real data (never a fabricated row), and row-click selection
+// — the pinned "Recommended next test" bar and "Record result" action
+// moved to next-action-bar.tsx (see that file's own test) since they
+// must stay visible outside this component's own scroll region.
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { MeasurementRow } from "@/lib/cases/queries";
@@ -31,24 +31,26 @@ function renderView(state: WorkspaceState, timeline: TimelineEntry[] = []) {
       measurement={measurement}
       state={state}
       timeline={timeline}
+      selection={null}
       onSelectMeasurement={vi.fn()}
+      onSelectCorrelation={vi.fn()}
       onSelectHypothesis={vi.fn()}
-      onOpenCitation={vi.fn()}
-      onRecordResult={vi.fn()}
     />,
   );
 }
 
-describe("DecisionView — section presence tracks real data (UX-05)", () => {
-  it("always shows the Measurement panel, even with no correlations or hypotheses yet", () => {
+describe("DecisionView — flat workbench tracks real data (App Redesign)", () => {
+  it("always shows the failure strip's real measurement fields, even with no correlations or hypotheses yet", () => {
     renderView(initialWorkspaceState);
-    expect(screen.getByText("Measurement")).toBeInTheDocument();
-    expect(screen.queryByText("What Crado knows")).not.toBeInTheDocument();
-    expect(screen.queryByText("Leading hypotheses")).not.toBeInTheDocument();
-    expect(screen.queryByText("Recommended next test")).not.toBeInTheDocument();
+    // "200 MHz" appears twice — the failure strip's stat cell and the
+    // spectrum plot's own peak label — so this asserts presence, not
+    // uniqueness.
+    expect(screen.getAllByText("200 MHz").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("+7.4 dB").length).toBeGreaterThan(0);
+    expect(screen.getByText("No deterministic correlations or hypotheses yet for this measurement.")).toBeInTheDocument();
   });
 
-  it("shows 'What Crado knows' only once a real correlation exists", () => {
+  it("shows a Known deterministic row only once a real correlation exists", () => {
     const state: WorkspaceState = {
       ...initialWorkspaceState,
       correlations: [
@@ -67,10 +69,11 @@ describe("DecisionView — section presence tracks real data (UX-05)", () => {
       ],
     };
     renderView(state);
-    expect(screen.getByText("What Crado knows")).toBeInTheDocument();
+    expect(screen.getByText("Known")).toBeInTheDocument();
+    expect(screen.getByText(/40 MHz × 5 = 200 MHz/)).toBeInTheDocument();
   });
 
-  it("orders leading hypotheses before weaker ones and labels each honestly", () => {
+  it("orders leading hypotheses before weaker ones and labels each row honestly, as Inferred", () => {
     const state: WorkspaceState = {
       ...initialWorkspaceState,
       hypotheses: [
@@ -92,60 +95,70 @@ describe("DecisionView — section presence tracks real data (UX-05)", () => {
     };
     renderView(state);
 
-    const headings = screen.getAllByRole("heading", { level: 3 }).map((el) => el.textContent);
-    expect(headings.indexOf("High-confidence lead")).toBeLessThan(headings.indexOf("Low-confidence lead"));
+    const rowTitles = screen.getAllByRole("button").map((el) => el.textContent).filter((text) => text?.includes("confidence lead"));
+    const highIndex = rowTitles.findIndex((text) => text?.includes("High-confidence lead"));
+    const lowIndex = rowTitles.findIndex((text) => text?.includes("Low-confidence lead"));
+    expect(highIndex).toBeLessThan(lowIndex);
+    expect(screen.getAllByText("Inferred").length).toBe(2);
     expect(screen.getByText("Leading")).toBeInTheDocument();
     expect(screen.getByText("Unresolved")).toBeInTheDocument();
   });
 
-  it("Recommended next test is sourced from the leading hypothesis's real recommendedNextStep — no fabricated fields", () => {
-    const state: WorkspaceState = {
-      ...initialWorkspaceState,
-      hypotheses: [
-        {
-          productFactId: "fact-clock-40mhz",
-          title: "5th harmonic of 40 MHz system clock",
-          confidenceBand: "high",
-          recommendedNextStep: "Disconnect the display path and re-measure.",
-          evidence: [{ category: "missing", description: "Measurement with display disconnected." }],
-        },
-      ],
+  it("clicking a hypothesis row calls onSelectHypothesis with the real hypothesis and its original index", () => {
+    const onSelectHypothesis = vi.fn();
+    const hypothesis = {
+      productFactId: "fact-clock-40mhz",
+      title: "5th harmonic of 40 MHz system clock",
+      confidenceBand: "high" as const,
+      recommendedNextStep: "Disconnect the display path and re-measure.",
+      evidence: [],
     };
-    renderView(state);
-
-    const section = screen.getByText("Recommended next test").closest("section")!;
-    expect(section).toHaveTextContent("Disconnect the display path and re-measure.");
-    expect(section).toHaveTextContent("5th harmonic of 40 MHz system clock");
-  });
-
-  it("clicking Record result calls onRecordResult", () => {
-    const onRecordResult = vi.fn();
-    const state: WorkspaceState = {
-      ...initialWorkspaceState,
-      hypotheses: [
-        {
-          productFactId: "fact-clock-40mhz",
-          title: "5th harmonic of 40 MHz system clock",
-          confidenceBand: "high",
-          recommendedNextStep: "Disconnect the display path and re-measure.",
-          evidence: [],
-        },
-      ],
-    };
+    const state: WorkspaceState = { ...initialWorkspaceState, hypotheses: [hypothesis] };
     render(
       <DecisionView
         caseId="case-1"
         measurement={measurement}
         state={state}
         timeline={[]}
+        selection={null}
         onSelectMeasurement={vi.fn()}
-        onSelectHypothesis={vi.fn()}
-        onOpenCitation={vi.fn()}
-        onRecordResult={onRecordResult}
+        onSelectCorrelation={vi.fn()}
+        onSelectHypothesis={onSelectHypothesis}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Record result" }));
-    expect(onRecordResult).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText("5th harmonic of 40 MHz system clock"));
+    expect(onSelectHypothesis).toHaveBeenCalledWith(hypothesis, 0);
+  });
+
+  it("clicking a deterministic row calls onSelectCorrelation with the real correlation", () => {
+    const onSelectCorrelation = vi.fn();
+    const correlation = {
+      productFactId: "fact-clock-40mhz",
+      productFactCategory: "clock" as const,
+      productFactLabel: "system clock",
+      sourceFrequencyMhz: 40,
+      harmonicNumber: 5,
+      expectedFrequencyMhz: 200,
+      measuredFrequencyMhz: 200,
+      deviationMhz: 0,
+      deviationRatio: 0,
+      description: "200 MHz is consistent with the 5th harmonic.",
+    };
+    const state: WorkspaceState = { ...initialWorkspaceState, correlations: [correlation] };
+    render(
+      <DecisionView
+        caseId="case-1"
+        measurement={measurement}
+        state={state}
+        timeline={[]}
+        selection={null}
+        onSelectMeasurement={vi.fn()}
+        onSelectCorrelation={onSelectCorrelation}
+        onSelectHypothesis={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText(/40 MHz × 5 = 200 MHz/));
+    expect(onSelectCorrelation).toHaveBeenCalledWith(correlation);
   });
 
   it("shows the before/after outcome only once a real result exists on the timeline, using the most recent one", () => {

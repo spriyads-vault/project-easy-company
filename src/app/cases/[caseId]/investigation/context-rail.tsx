@@ -18,17 +18,18 @@
 // The same component is also reused, uncollapsible, inside the mobile
 // Sheet (investigation-workspace.tsx) — this file has no width/breakpoint
 // opinions of its own any more, sizing is entirely up to the caller.
-import type { AgentCompletedPayload, HypothesisCreatedPayload } from "@/lib/analysis/events";
+import type { AgentCompletedPayload, CorrelationFoundPayload, HypothesisCreatedPayload } from "@/lib/analysis/events";
 import type { MeasurementRow } from "@/lib/cases/queries";
 import type { ProductFactRecord } from "@/lib/correlation/harmonic-correlation";
 import type { EvidenceCategory } from "@/lib/domain/schema";
 import type { EvidenceCitation } from "@/lib/hypotheses/schema";
 import { describeDocumentType } from "@/lib/documents/describe-document-type";
 import { HYPOTHESIS_UPDATE_LABEL, HYPOTHESIS_UPDATE_STYLE } from "./describe-hypothesis-update";
-import { evidence, focusRing, surface, text } from "./theme";
+import { evidence, focusRing, text } from "./theme";
 
 export type RailSelection =
   | { kind: "measurement" }
+  | { kind: "correlation"; correlation: CorrelationFoundPayload }
   | { kind: "hypothesis"; hypothesis: HypothesisCreatedPayload; index: number }
   | {
       kind: "source";
@@ -127,6 +128,27 @@ function MeasurementDetail({ measurement }: { measurement: MeasurementRow | null
       {measurement.operatingMode ? <RailField label="Operating mode" value={measurement.operatingMode} /> : null}
       {peak.detector ? <RailField label="Detector" value={<span className={text.mono}>{peak.detector}</span>} /> : null}
       {peak.limitLine ? <RailField label="Limit line" value={<span className={text.mono}>{peak.limitLine}</span>} /> : null}
+    </div>
+  );
+}
+
+function CorrelationDetail({ correlation }: { correlation: CorrelationFoundPayload }) {
+  const deviationLabel =
+    correlation.deviationRatio === 0
+      ? "Exact match"
+      : `${(correlation.deviationRatio * 100).toFixed(3)}% deviation`;
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <span className={`${text.kicker} text-[10px]`}>Deterministic relationship</span>
+        <p className={`${text.mono} text-lg font-semibold`}>
+          {correlation.sourceFrequencyMhz} MHz × {correlation.harmonicNumber} = {correlation.expectedFrequencyMhz} MHz
+        </p>
+      </div>
+      <RailField label="Source" value={`ProductFact · ${correlation.productFactCategory} · ${correlation.productFactLabel}`} />
+      <RailField label="Observed" value={<span className={text.mono}>{correlation.measuredFrequencyMhz} MHz peak</span>} />
+      <RailField label="Deviation" value={<span className={text.mono}>{deviationLabel}</span>} />
+      <p className={`text-xs ${text.muted}`}>{correlation.description}</p>
     </div>
   );
 }
@@ -253,7 +275,7 @@ export function ContextRail({
         onClick={onExpand}
         title="Show case panel"
         aria-label="Show case panel"
-        className={`flex h-full w-full items-start justify-center rounded-[10px] border border-border bg-card px-2 py-3 text-xs text-muted-foreground hover:text-foreground ${focusRing}`}
+        className={`flex h-full w-full items-start justify-center border-l border-border bg-card px-2 py-3 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary/60 ${focusRing}`}
       >
         ◂
       </button>
@@ -263,15 +285,17 @@ export function ContextRail({
   const heading =
     selection?.kind === "measurement"
       ? "Measurement"
-      : selection?.kind === "hypothesis"
-        ? "Hypothesis details"
-        : selection?.kind === "source"
-          ? "Source"
-          : "Case";
+      : selection?.kind === "correlation"
+        ? "Deterministic relationship"
+        : selection?.kind === "hypothesis"
+          ? "Hypothesis details"
+          : selection?.kind === "source"
+            ? "Source"
+            : "Case";
 
   return (
-    <aside aria-label="Case context" className={`flex h-full w-full flex-col gap-4 overflow-y-auto p-4 ${surface.card}`}>
-      <div className="flex items-center justify-between gap-2">
+    <aside aria-label="Case context" className="flex h-full w-full flex-col gap-4 overflow-y-auto border-l border-border bg-card p-4">
+      <div className="flex h-[26px] shrink-0 items-center justify-between gap-2">
         <span className={text.kicker}>{heading}</span>
         <div className="flex items-center gap-2">
           {selection ? (
@@ -306,6 +330,8 @@ export function ContextRail({
         />
       ) : selection.kind === "measurement" ? (
         <MeasurementDetail measurement={measurement} />
+      ) : selection.kind === "correlation" ? (
+        <CorrelationDetail correlation={selection.correlation} />
       ) : selection.kind === "hypothesis" ? (
         <HypothesisDetail
           hypothesis={selection.hypothesis}

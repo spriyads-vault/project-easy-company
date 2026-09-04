@@ -12,7 +12,7 @@
 // section, present for anyone who wants it but never competing with the
 // investigation hypothesis for attention.
 import type { AgentCompletedPayload } from "@/lib/analysis/events";
-import { surface, text } from "./theme";
+import { text } from "./theme";
 
 interface AgentMetricsPanelProps {
   metrics: AgentCompletedPayload;
@@ -72,7 +72,7 @@ export function AgentMetricsPanel({ metrics, toolCallCount, sourcesUsedCount }: 
   return (
     <section
       aria-labelledby="agent-metrics-heading"
-      className={`flex flex-col gap-3 p-4 ${surface.cardQuiet}`}
+      className="flex flex-col gap-3 border-t border-border px-4 py-3"
     >
       <h2 id="agent-metrics-heading" className={text.kicker}>
         What Crado handled

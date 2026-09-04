@@ -1,103 +1,33 @@
-// INVESTIGATION CONTROLS (UX-04 Agent-Native): the leaner, controls-only
-// half of what used to be investigation-panel.tsx. Status text, the
-// RUN/RE-EVALUATE button, the failed-run alert, the clarification note, the
-// empty-result message, and the "record an engineering change" action all
-// still live here — but correlation/hypothesis rendering does not. Those
-// are now artifacts on <InvestigationCanvas>, not stacked cards a controls
-// strip renders inline. This keeps the run lifecycle's accessible status
-// region and error alert in one place, directly above the canvas, exactly
-// where investigation-workspace.test.tsx's accessibility assertions expect
-// them (getByRole("status")/getByRole("alert")).
-import type { RunStatus, WorkspaceState } from "@/lib/investigation/reconstruct";
-import { RecordEngineeringChangeForm } from "./record-engineering-change-form";
+// INVESTIGATION CONTROLS (App Redesign, Workstream C correction): the
+// Run button and the workflow-state status line have moved into the
+// case header (top-bar.tsx, via run-investigation-button.tsx and
+// agent-status-pill.tsx) per the ticket's "Move Run, Run again, Resume
+// ... into this header. Remove the separate Investigation complete
+// banner from the centre pane." "Record engineering change" moved into
+// the pinned next-action bar (next-action-bar.tsx). What's left here is
+// exactly the content that still genuinely belongs inline in the
+// Decision workbench: the failed-run alert, the clarification note, and
+// the honest empty-result message — none of these are status chrome,
+// they're real conditional facts about this run.
+import type { WorkspaceState } from "@/lib/investigation/reconstruct";
 import { accent, radius, text } from "./theme";
 
 interface InvestigationControlsProps {
-  caseId: string;
-  productId: string;
-  revisionId: string;
-  currentRevisionLabel: string;
-  /** MVP-11: once the case's evidence spans more than one revision, RUN
-   * AGAIN is relabeled RE-EVALUATE INVESTIGATION — same run mechanism, no
-   * new agent behavior, just a label that reflects what's actually being
-   * asked: "look at the case as it stands now, after the change." */
-  hasMultipleRevisions: boolean;
   state: WorkspaceState;
-  canRunAnalysis: boolean;
-  /** True the instant the button is clicked, before the first run.started
-   * event round-trips — keeps the button feeling responsive and closes the
-   * double-click window without waiting on the network. */
-  isSubmitting: boolean;
-  disabledReason: string | null;
-  onRunInvestigation: () => void;
 }
 
-const STATUS_LABEL: Record<RunStatus, string> = {
-  idle: "No investigation run yet",
-  running: "Analysis active",
-  completed: "Investigation complete",
-  failed: "Analysis failed",
-  interrupted: "Analysis interrupted",
-};
-
-const STATUS_DOT_COLOR: Record<RunStatus, string> = {
-  idle: "bg-border",
-  running: "bg-primary animate-pulse",
-  completed: "bg-success",
-  failed: "bg-warning",
-  interrupted: "bg-warning",
-};
-
-function buttonLabel(status: RunStatus, busy: boolean, hasMultipleRevisions: boolean): string {
-  if (busy) return "ANALYZING…";
-  if (status === "idle") return "RUN INVESTIGATION";
-  return hasMultipleRevisions ? "RE-EVALUATE INVESTIGATION" : "RUN AGAIN";
-}
-
-export function InvestigationControls({
-  caseId,
-  productId,
-  revisionId,
-  currentRevisionLabel,
-  hasMultipleRevisions,
-  state,
-  canRunAnalysis,
-  isSubmitting,
-  disabledReason,
-  onRunInvestigation,
-}: InvestigationControlsProps) {
-  const busy = isSubmitting || state.status === "running";
-  const hasRunAtLeastOnce = state.status !== "idle";
+export function InvestigationControls({ state }: InvestigationControlsProps) {
+  if (
+    state.status !== "failed" &&
+    state.status !== "interrupted" &&
+    !state.clarification &&
+    !(state.status === "completed" && state.hypotheses.length === 0 && state.correlations.length === 0)
+  ) {
+    return null;
+  }
 
   return (
-    <section aria-labelledby="investigation-panel-heading" className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span
-            aria-hidden="true"
-            className={`h-2 w-2 rounded-full ${busy ? STATUS_DOT_COLOR.running : STATUS_DOT_COLOR[state.status]}`}
-          />
-          <p id="investigation-panel-heading" role="status" aria-live="polite" className="text-sm">
-            {busy && state.status !== "running"
-              ? "Analyzing measurement…"
-              : (state.lastEventSummary ?? STATUS_LABEL[state.status])}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onRunInvestigation}
-          disabled={!canRunAnalysis || busy}
-          title={disabledReason ?? undefined}
-          className={`${radius.control} border border-primary/50 bg-primary/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:border-border disabled:bg-transparent disabled:text-muted-foreground`}
-        >
-          {buttonLabel(state.status, busy, hasMultipleRevisions)}
-        </button>
-      </div>
-
-      {!canRunAnalysis && !hasRunAtLeastOnce && disabledReason ? (
-        <p className={`text-sm ${text.muted}`}>{disabledReason}</p>
-      ) : null}
-
+    <div className="flex flex-col gap-3 px-4 pt-3">
       {state.status === "failed" || state.status === "interrupted" ? (
         <div role="alert" className={`flex flex-col gap-1 ${radius.card} border border-warning/40 bg-warning/10 p-3`}>
           <span className={`${text.kicker} text-[10px] ${accent.warnText}`}>Failed run</span>
@@ -115,30 +45,6 @@ export function InvestigationControls({
         </div>
       ) : null}
 
-      {/* Recording an observation OR an engineering change now primarily
-          goes through the floating bottom composer (case-composer.tsx) —
-          "Changed the display termination and created Rev18." classifies
-          as an Engineering change intent there, the same
-          createEngineeringChange write this structured form makes.
-          UX-04: kept here too, as a reliable manual fallback for a change
-          too irregularly worded for the deterministic parser to read
-          cleanly — RecordEngineeringChangeForm already starts collapsed
-          behind its own single button (see that component), which is
-          already the "not the default/easiest visible path" behavior
-          Advanced elsewhere in this pass provides, so it isn't
-          double-wrapped in a second disclosure here. Only makes sense
-          once there's at least one hypothesis to follow up on. */}
-      {state.status !== "running" && state.hypotheses.length > 0 ? (
-        <div className="flex flex-wrap gap-3">
-          <RecordEngineeringChangeForm
-            caseId={caseId}
-            productId={productId}
-            fromRevisionId={revisionId}
-            currentRevisionLabel={currentRevisionLabel}
-          />
-        </div>
-      ) : null}
-
       {state.status === "completed" &&
       state.hypotheses.length === 0 &&
       state.correlations.length === 0 ? (
@@ -148,6 +54,6 @@ export function InvestigationControls({
           generated.
         </p>
       ) : null}
-    </section>
+    </div>
   );
 }

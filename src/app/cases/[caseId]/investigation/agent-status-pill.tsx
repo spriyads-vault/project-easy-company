@@ -12,7 +12,19 @@
 import { deriveWorkflowState, WORKFLOW_STATE_LABEL, WORKFLOW_STATE_TONE } from "@/lib/investigation/derive-workflow-state";
 import type { RunStatus, WorkspaceState } from "@/lib/investigation/reconstruct";
 import type { TimelineEntry } from "@/lib/investigation/timeline";
-import { heroStatusStyle } from "./theme";
+
+// Compact text + a small semantic dot (App Redesign correction) — the
+// prior version rendered a rounded, bordered, tinted-background pill,
+// which read as a generated-dashboard status badge. Dot color is the
+// only color signal; the label text carries the actual meaning either
+// way, so status is never communicated by color alone.
+const DOT_TONE_CLASS: Record<string, string> = {
+  waiting: "bg-muted-foreground/50",
+  idle: "bg-muted-foreground/50",
+  active: "bg-primary motion-safe:animate-pulse",
+  complete: "bg-success",
+  failed: "bg-destructive",
+};
 
 interface AgentStatusPillProps {
   runStatus: RunStatus;
@@ -46,11 +58,11 @@ export function AgentStatusPill({
 
   return (
     <span
-      className={`hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide sm:inline-flex ${heroStatusStyle[tone]}`}
+      role="status"
+      aria-live="polite"
+      className="hidden shrink-0 items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex"
     >
-      {tone === "active" ? (
-        <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
-      ) : null}
+      <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${DOT_TONE_CLASS[tone]}`} />
       Crado · {label}
     </span>
   );

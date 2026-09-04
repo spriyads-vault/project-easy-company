@@ -9,6 +9,12 @@ import { accent } from "./theme";
 interface SpectrumChartProps {
   frequencyMhz: number;
   marginDb: number;
+  /** Overrides the default full-width chart size — the App Redesign
+   * failure strip (failure-strip.tsx) needs a small, fixed-size plot
+   * instead of a large one, without duplicating this SVG. Defaults to
+   * the original full-width size so every pre-existing call site is
+   * unaffected. */
+  className?: string;
 }
 
 const VIEW_WIDTH = 320;
@@ -18,7 +24,7 @@ const LIMIT_Y = VIEW_HEIGHT / 2;
 // chart — the exact number is always shown as text regardless.
 const DISPLAY_RANGE_DB = 12;
 
-export function SpectrumChart({ frequencyMhz, marginDb }: SpectrumChartProps) {
+export function SpectrumChart({ frequencyMhz, marginDb, className = "h-28 w-full" }: SpectrumChartProps) {
   const clamped = Math.max(-DISPLAY_RANGE_DB, Math.min(DISPLAY_RANGE_DB, marginDb));
   const peakY = LIMIT_Y - (clamped / DISPLAY_RANGE_DB) * (LIMIT_Y - 16);
   const peakX = VIEW_WIDTH * 0.62;
@@ -30,7 +36,7 @@ export function SpectrumChart({ frequencyMhz, marginDb }: SpectrumChartProps) {
       viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
       role="img"
       aria-label={`${frequencyMhz} megahertz peak, ${marginDb > 0 ? "+" : ""}${marginDb} decibels relative to the selected limit`}
-      className="h-28 w-full"
+      className={className}
     >
       {/* Selected limit line */}
       <line

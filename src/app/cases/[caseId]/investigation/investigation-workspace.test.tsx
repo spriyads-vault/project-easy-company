@@ -737,7 +737,7 @@ describe("InvestigationWorkspace — responsive breakpoints (UX-04 visual correc
     expect(within(sheet).getByLabelText("Case context")).toBeInTheDocument();
   });
 
-  it("renders the canvas with the real persistent resizable rail at the large-desktop tier (matchMedia unmocked, default false)", () => {
+  it("renders the canvas with the real persistent resizable Inspector at the large-desktop tier, collapsed by default and expanding on selection (App Redesign)", () => {
     const persistedState = reconstructFromPersistedEvents([
       runStarted(),
       measurementLoaded(),
@@ -747,10 +747,17 @@ describe("InvestigationWorkspace — responsive breakpoints (UX-04 visual correc
     ]);
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
     // UX-05: Decision is the default tab now — switch to Map, where the
-    // canvas + persistent rail live at this breakpoint.
+    // canvas + persistent Inspector live at this breakpoint.
     fireEvent.click(screen.getByRole("button", { name: "Map" }));
 
     expect(screen.getByRole("application")).toBeInTheDocument();
+    // App Redesign: the Inspector starts collapsed to a narrow rail, not a
+    // large empty "nothing selected" panel — the main workbench gets the
+    // recovered width until a real selection happens.
+    expect(screen.queryByLabelText("Case context")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show case panel" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("5th harmonic of 40 MHz system clock"));
     expect(screen.getByLabelText("Case context")).toBeInTheDocument();
   });
 });

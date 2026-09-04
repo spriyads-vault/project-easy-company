@@ -3844,3 +3844,133 @@ asks for (see "Deferred" below).
 8. Full accessibility/keyboard audit and live QA at every specified
    breakpoint (1280/768/390) not done this session — only 1440, 900,
    and (for the shell) 390 were spot-checked.
+
+## Workstream C correction — flat Decision workbench (rejected-screenshot fixes, delivery-sequence items 1-7)
+
+The Investigation result page was explicitly rejected after the prior
+pass: the three-pane concept was accepted but the centre pane still
+read as "the old card-based dashboard" (large Measurement card,
+oversized deterministic card, stacked hypothesis cards, page-wide
+floating composer, near-empty default Inspector, detached Run/
+engineering-change actions). This pass replaces the centre pane's
+information architecture — not just its border radii — with a dense,
+flat operational workbench, strictly scoped to delivery-sequence items
+1-7 (Decision view only; Evidence/Timeline/Map and the homepage are
+explicitly deferred until this passes review).
+
+### What shipped
+
+- **Failure strip** (`failure-strip.tsx`, new) replaces the Measurement
+  card: a single 88-112px row of compact stat cells (peak frequency,
+  margin, selected limit, operating mode, revision) plus a small inline
+  spectrum plot — no bordered/rounded card wrapper.
+- **Investigation item table** (`investigation-item-table.tsx`, new)
+  replaces both the deterministic-relationship card and the hypothesis
+  card stack with one master table (Classification / Investigation item
+  / Evidence summary / State / Updated by / Updated). Deterministic
+  correlations render as `KNOWN` rows, ranked hypotheses (via the
+  existing `rankHypotheses`) as `INFERRED` rows — no invented
+  confidence percentages, no fabricated per-row timestamps (a
+  correlation has no timeline representation at all and renders "—";
+  a hypothesis's timestamp is looked up by title match against the real
+  timeline and is "—" when no match exists, never guessed). Rows are
+  keyboard-selectable (`role="button"`, Enter/Space) and drive the
+  Inspector.
+- **Pinned next-action bar** (`next-action-bar.tsx`, new) replaces the
+  "Recommended Next Test" card: a 72-104px bar pinned below the table
+  (outside its scroll region) showing the real leading hypothesis's
+  `recommendedNextStep`/title, "Record result", and (relocated
+  unchanged, not rewritten) the existing `RecordEngineeringChangeForm`
+  trigger. Renders nothing when there's neither a leading hypothesis
+  nor engineering-change history — never an empty bar.
+- **Case header consolidation**: the standalone status-pill banner and
+  detached Run button moved into the 48-52px contextual header
+  (`agent-status-pill.tsx` rewritten from a bordered/tinted pill to
+  compact text + a small semantic dot; `run-investigation-button.tsx`
+  extracted and placed in the header's right slot alongside last-
+  event-time text). A separate 44px toolbar directly below the header
+  now holds the Decision/Map/Evidence/Timeline/Sources tabs.
+  `investigation-controls.tsx` was reduced to only the failed-run/
+  clarification/empty-result messages it now exclusively owns.
+- **Composer relocated**: the page-wide floating composer is gone on
+  the desktop tier; `CaseComposer` is now docked to the bottom of the
+  Trace pane itself (mobile/tablet tiers keep their existing sticky-
+  bottom composer, unchanged, since their layout doesn't have a
+  persistent Trace pane to dock into).
+- **Inspector collapsed by default**: `railCollapsed` now starts `true`
+  (was `false`) — no more giant empty "CASE" panel on load. Selecting
+  any correlation/hypothesis/measurement/citation now calls a new
+  `expandInspector()` helper that both drives the resizable-panel ref
+  *and* directly sets `railCollapsed`, so expansion is deterministic
+  regardless of the panel library's internal resize timing (this
+  double-update pattern was required to make the behavior reliably
+  testable and is more robust in real browsers too).
+- **Trace-step → workspace focus**: clicking a non-active trace step
+  now calls `onSelectStep`, routed by an honest keyword match on the
+  step label (measurement / hypothesis / deterministic-relationship)
+  to either open the Inspector on the measurement or apply a transient
+  1.2s highlight to the matching table row(s). This is deliberately a
+  category-level routing, not a fabricated precise 1:1 step→row link —
+  the wire schema has no structured data to support that, and the
+  alternative (inventing one) would violate the no-fabricated-evidence
+  rule. Documented as a known limitation in the code itself.
+- `RailSelection` gained a `{ kind: "correlation" }` variant and
+  `context-rail.tsx` a matching `CorrelationDetail` view; the rail's
+  outer chrome was flattened from a bordered/shadowed card surface to
+  a plain `border-l` panel, consistent with the "no card containers for
+  static sections" rule.
+- Panel sizing: Trace 27% (20-35% range) / Main 69% / Inspector
+  collapsed-to-4% (18-30% expanded) — rebalanced to sum to 100 after
+  raising Main's share to absorb Inspector's smaller collapsed default
+  (a `react-resizable-panels` group whose `defaultSize`s don't sum to
+  100 logs a normalization warning and can render unpredictably).
+
+### Verification
+
+- `pnpm exec tsc --noEmit` / `pnpm run lint` — clean.
+- 185/185 tests pass across the investigation folder (25 files, up from
+  181/24 — new files: `next-action-bar.test.tsx` plus rewritten
+  `decision-view.test.tsx` and `investigation-workspace.test.tsx`
+  covering the collapsed-by-default Inspector and the new table's row
+  data/selection/ordering contracts).
+- Live-verified in the running dev server on a real completed case
+  (`CASE-4FA53E`, Gateway X Rev18):
+  - **1440px, dark and light** — full target structure confirmed:
+    compact header, 44px tab toolbar, persistent Trace with docked
+    composer, flat failure strip, 2-row item table (KNOWN/INFERRED),
+    "What Crado handled" metrics, pinned next-action bar, Inspector
+    collapsed to a narrow rail by default. All of failure summary +
+    correlations + hypotheses + recommended action visible without
+    scrolling, as required.
+  - **1280px, dark and light** — same structure holds; one minor
+    non-blocking cosmetic issue noted (the failure strip's stat cells
+    wrap the Revision cell to a second line competing with the
+    spectrum-plot/actions cluster) — no clipping, overlap, or scroll,
+    left as a deferred polish item rather than blocking on it.
+  - **390px (mobile)** — re-verified no regression from the shared
+    component changes (status pill, controls, trace panel): header,
+    tabs, strip, table, metrics, and pinned action bar with composer
+    all stack correctly with no overflow.
+  - Row selection → Inspector: clicking an INFERRED row opens real
+    "Hypothesis details" content and marks the row `data-state=
+    selected`.
+  - Trace-step → focus routing: clicking "Loaded measurement context"
+    opens the Inspector on the real measurement; clicking "Checked
+    deterministic relationships" applies and correctly clears (after
+    ~1.2s, confirmed via timed re-checks) a transient highlight on the
+    KNOWN row.
+  - Manual Inspector collapse: confirmed the table recovers width.
+
+### Deferred (explicitly gated — do not start until this section's items pass review)
+
+1. Evidence/Timeline/Map tabs not yet adapted to the same flat
+   workbench grammar (delivery-sequence item 8).
+2. Homepage restructuring, Workstream B (item 9).
+3. Responsive tiers below 1024px not rebuilt to the full ticket spec
+   (item 10) — mobile/tablet composer intentionally left as-is.
+4. Systematic accessibility/keyboard audit across every breakpoint
+   (item 11) not performed this session; only spot-checks above.
+5. The 1280px failure-strip wrap noted above.
+6. Trace-step→row linking is honest category-level routing, not a
+   precise per-item link — would need a schema change (a real
+   step→artifact id) to do better.
