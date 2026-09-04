@@ -3974,3 +3974,226 @@ explicitly deferred until this passes review).
 6. Trace-step→row linking is honest category-level routing, not a
    precise per-item link — would need a schema change (a real
    step→artifact id) to do better.
+
+## UX-06 — Enterprise authentication redesign
+
+Isolated increment per the explicit override after `ea0ef25`: redesign
+Sign in/Sign up (and their real recovery/verification states) to match
+the approved application shell; do not touch Evidence/Timeline/Map or
+the homepage in the same pass. Scoped strictly to what the current
+Supabase auth implementation actually supports — nothing fabricated for
+visual completeness.
+
+### Baseline confirmed before editing
+
+- HEAD was exactly `ea0ef25`, worktree clean.
+- Auth provider: Supabase Auth, email + password only
+  (`supabase.auth.signInWithPassword` / `.signUp`). No OAuth/SSO
+  provider is configured (`supabase/config.toml`'s `[auth.external.*]`
+  block: every provider present is `enabled = false`), no magic-link
+  sign-in, no passkeys.
+- Routes/handlers inspected: `src/app/login/page.tsx` +
+  `src/app/login/actions.ts` (single page, two buttons — Sign in and
+  Sign up sharing one form), `src/app/auth/confirm/route.ts` (exchanges
+  a signup-confirmation `token_hash` for a session via `verifyOtp`),
+  `src/lib/supabase/middleware.ts` (`src/proxy.ts` — Next 16 renamed
+  `middleware.ts` — session refresh + private-route redirect to
+  `/login?next=<path>`), `src/app/workspace/actions.ts`'s `signOut`.
+- No forgot-password, no password-reset, no email-verification resend,
+  no workspace-invitation system anywhere in the codebase (confirmed by
+  grep — zero matches for `resetPasswordForEmail`, `reset-password`,
+  `invitation`). No `/privacy` or `/terms` routes exist.
+- `next`/`error` query params: `middleware.ts` already set `next` on
+  its redirect, but `/login` never read either `next` or the confirm
+  route's `?error=confirmation-failed` — both were silently dropped.
+  Real gaps, not by design; fixed as part of this pass (see below).
+- A DB trigger (`handle_new_user`, `20260831034622_workspaces.sql`)
+  auto-creates a workspace on signup — "secure access to your
+  engineering workspace" is truthful even for a signup-only account.
+
+### What shipped
+
+- **New `/signup` route** (was previously two buttons on one `/login`
+  page). `src/lib/auth/actions.ts` (moved from `src/app/login/actions.ts`,
+  now shared by both pages) keeps the exact same Supabase calls,
+  session-presence check, and credential schema — provider, credential
+  strategy and session model are all unchanged.
+- **`src/lib/design/auth-shell.tsx`** — the shared two-region shell:
+  a restrained Crado context pane (real logo, "Regulation, inside the
+  engineering loop.", the three product principles, copyright — no
+  Privacy/Terms links, since neither route exists) and a focused,
+  card-free auth pane (theme control + contextual Sign in/Create
+  account link top-right on desktop, compact top bar + short context
+  sentence on mobile). Replaces the old floating premium card on a
+  dot-grid canvas.
+- **`src/lib/design/themed-mark.tsx`** — picks the real
+  `crado-mark-{white,black}.png` asset by resolved theme (the context
+  pane's surface actually flips light/dark, unlike the sidebar, which
+  always uses the white mark).
+- **Honest error mapping** (`src/lib/auth/map-auth-error.ts`, split out
+  of `actions.ts` because a `"use server"` file may only export async
+  functions): branches only on real `AuthError.status`/`.code`/`.name`
+  values Supabase documents — rate limiting (429 /
+  `over_request_rate_limit` / `over_email_send_rate_limit`), a
+  retryable network/server failure (`AuthRetryableFetchError`), an
+  unconfirmed email on sign-in (`email_not_confirmed`), a weak password
+  on sign-up (surfaces Supabase's own policy message). Sign-in's
+  `invalid_credentials` and sign-up's collision case both still use one
+  generic message each — deliberately: Supabase's own anti-enumeration
+  behavior (no distinguishing error, `identities: []` on a colliding
+  signup) is what makes that correct, and adding a more specific branch
+  would leak account existence.
+- **`src/lib/auth/redirect.ts`** (`sanitizeRedirectTarget`) — every
+  `next` value (from the proxy's redirect, the sign-in/up forms' hidden
+  field, and `/auth/confirm`'s query string) now passes through this
+  before reaching `redirect()`. Rejects anything but a same-origin,
+  single-leading-slash path — absolute URLs, protocol-relative `//`,
+  the `/\` backslash bypass, embedded control characters. `/auth/confirm`
+  previously passed its `next` query param straight to `redirect()`
+  unsanitized — a real open-redirect-shaped gap (low practical risk
+  today, since Supabase only ever sets `next` from `emailRedirectTo`,
+  currently unset — but sanitized as a scoped defect fix regardless,
+  not a new feature).
+- **Already-authenticated redirect**: both `/login` and `/signup` are
+  now Server Components that check `auth.getUser()` and redirect to
+  the sanitized `next` (default `/investigations`) before rendering
+  the form at all — previously an authenticated visitor could still
+  see the sign-in form.
+- **Session-expiry signal**: `middleware.ts` now checks for a
+  `sb-*-auth-token` cookie *before* calling `getUser()`
+  (`hasSupabaseAuthCookie`) — if one was present but the user came back
+  null, the redirect adds `&expired=1`, and `/login` shows "Your
+  session has expired. Sign in again to continue." instead of the
+  default supporting line. A visitor who was never signed in gets the
+  honest default copy instead — this only fires when there really was a
+  stale/invalid session cookie, live-verified against the real
+  `sb-127-auth-token` cookie name.
+- **`error=confirmation-failed`** (already set by `/auth/confirm` on a
+  bad token, previously never displayed) now renders as a real error
+  banner on `/login`: "That confirmation link is invalid or has
+  expired. Sign in below, or create a new account to get a fresh one."
+- **Password visibility toggle** (`src/lib/design/password-input.tsx`)
+  — keyboard-operable (`aria-pressed`, live-verified via a real Tab +
+  Enter sequence in the browser, not just a click), accessible name
+  states the action ("Show password"/"Hide password").
+- **Preserved entered email after a recoverable error** — a **real
+  defect found via live QA**, not anticipated up front: React resets a
+  form's uncontrolled fields once its `useActionState` action settles
+  (documented React 19 behavior, "similar to a native form reset"), so
+  the initial implementation silently cleared the email field on every
+  server-side error. Fixed by tracking email as real component state
+  instead of an uncontrolled field (password is deliberately left
+  uncontrolled/cleared — never re-populate a submitted password).
+  Caught live (typed real credentials, submitted, watched the field go
+  blank), then reproduced in a unit test and fixed.
+- **Fields limited to the real schema**: no name/company/phone field on
+  sign-up (schema has none), no password-confirmation field (the
+  existing single-`signUp`-call design never needed one), no forgot-
+  password link on sign-in (no such route exists — a link would point
+  nowhere).
+- Typography/tokens/geometry: IBM Plex Sans (already global, untouched),
+  existing semantic tokens only, 44px (`h-11`) inputs/buttons, `rounded-
+  [6px]` controls, no card wrapper around the form, no gradients.
+
+### Verification
+
+- `pnpm exec tsc --noEmit` / `pnpm run lint` / `pnpm run build` — all
+  clean. Production route list now includes `/signup` as its own
+  dynamic route.
+- Unit tests: 521/521 across 65 files (was 519 before this ticket's
+  edits during the session, +new: `redirect.test.ts` (9),
+  `map-auth-error.test.ts` (7), `middleware.test.ts` (5, mocking
+  `@supabase/ssr` — first test file to do so in this repo),
+  `sign-in-form.test.tsx` (7), `sign-up-form.test.tsx` (6)). One real
+  test-writing lesson: a submit-button click is silently swallowed by
+  jsdom's native HTML5 constraint validation if required fields are
+  empty (no error thrown, the mocked action just never fires) — every
+  submitting test now fills both fields first, matching the codebase's
+  existing pattern in `record-engineering-change-form.test.tsx`. A
+  second lesson: a `mockImplementation` promise that never resolves
+  measurably leaked React's internal transition tracking into the next
+  test in the same file — fixed by using a resolvable deferred and
+  resolving it before each such test ends.
+- Live QA (chrome-devtools MCP, real dev server, real local Supabase —
+  no mocks), signed out via clearing the real `sb-127-auth-token`
+  cookie (the sidebar's own "Sign out" menu item turned out not to
+  reliably submit via CDP's synthetic click — a pre-existing UI
+  quirk unrelated to this ticket, not investigated further since
+  clearing the cookie directly is an equally valid signed-out state):
+  - **1440 dark/light, 1280 dark/light, 768 dark(light checked)/light,
+    390 dark/light** — Sign in and Sign up both screenshotted; flat
+    two-pane desktop composition, single-column mobile tier below
+    1024px, no horizontal overflow, no clipped footer/primary action at
+    any size.
+  - Real incorrect-credentials error: "Could not sign in. Check your
+    email and password." — confirmed non-enumerating.
+  - Real successful sign-up end-to-end: created a throwaway test
+    account (`crado-auth-qa@example.com`), got a real session and a
+    real auto-created workspace, landed on the genuine empty-state
+    `/investigations` page — then **deleted the test account via the
+    Supabase admin API** afterward (`auth.admin.deleteUser`), per
+    CLAUDE.md's "do not create unnecessary production users" and "clear
+    deletion path for pilot data."
+  - Real duplicate-email sign-up attempt (the seeded
+    `gateway-x-demo@crado.local`): generic "Could not create an account
+    with those details." — confirmed it does not disclose the account
+    exists.
+  - Real expired-session banner: set a stale `sb-127-auth-token` cookie,
+    navigated a private route, landed on `/login` with `expired=1` and
+    the correct copy.
+  - Real invalid-confirmation-link banner via
+    `/login?error=confirmation-failed`.
+  - Already-authenticated redirect: confirmed live before any other
+    change was made (navigating to `/login` while signed in landed on
+    `/investigations` instead of showing the form) — this was true
+    before this ticket too; the new Server Component check makes it
+    explicit and adds the same behavior to `/signup`.
+  - `next` preservation live end-to-end: `/login?next=/cases/abc-123/…`
+    → Create account → `/signup?next=/cases/abc-123/…` → Sign in →
+    back to `/login?next=/cases/abc-123/…`, unbroken.
+  - Password visibility toggle exercised via a real Tab + Enter
+    keyboard sequence (not just a click), confirmed the field's `type`
+    flips and back.
+  - Zero console errors across every screenshot. One warning fixed
+    during this pass: Tailwind's Preflight `img{height:auto}` fought
+    `ThemedMark`'s explicit `height` prop, producing a next/image
+    "width or height modified, but not the other" warning — fixed with
+    an explicit inline `style={{ width, height }}` override; confirmed
+    clean afterward. (The sidebar's own `Image` in
+    `app-shell-chrome.tsx` likely has the same latent warning — out of
+    scope for this ticket, not fixed.)
+
+### Deliberately not fabricated (recorded as absent, per the ticket's own instruction)
+
+1. **Forgot password / password reset** — no `resetPasswordForEmail`
+   call or reset route exists anywhere in the codebase. No link, no
+   page. Adding one is a real, reversible feature addition (Supabase
+   supports it natively) but is new scope, not a redesign of something
+   that exists — left for a future ticket rather than added unasked.
+2. **Email-verification resend** — the "Check your email to confirm
+   your account" state has no resend action; none existed before.
+3. **Workspace invitations** (inviting org, inviter identity, intended
+   email, role, expiry) — no invitation system exists in the schema or
+   codebase at all.
+4. **OAuth/SSO/magic-link sign-in** — no provider is configured
+   (verified in `supabase/config.toml`); nothing shown.
+5. **Privacy Policy / Terms of Service links** — no such routes exist;
+   only the copyright text renders, not the two legal links the ticket
+   asked for.
+6. **Rate-limited state** — implemented and unit-tested
+   (`map-auth-error.test.ts`), but not triggered live (would require
+   spamming real sign-in attempts against a shared dev Supabase
+   project's rate limiter — judged unsafe/disruptive for QA purposes).
+
+### Deferred
+
+- Evidence/Timeline/Map flat-workbench adaptation and the homepage
+  restructuring remain untouched, per the ticket's explicit "do not
+  start" instruction — this session did not touch either.
+- A dedicated `sign-out` reliability check: the sidebar's "Sign out"
+  menu item did not reliably submit when clicked via CDP's synthetic
+  click during this session's QA (worked around by clearing the auth
+  cookie directly). `signOut` itself (`src/app/workspace/actions.ts`)
+  was not modified and is outside this ticket's scope (sidebar/global
+  shell, not the auth pages) — noted here as a possible real UI defect
+  worth a future look, not confirmed as one.

@@ -2,12 +2,24 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getPublicSupabaseEnv } from "./env";
 
-const PUBLIC_PATHS = ["/", "/login", "/auth"];
+const PUBLIC_PATHS = ["/", "/login", "/signup", "/auth"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`),
   );
+}
+
+// Supabase's own SSR cookie storage key, e.g. "sb-<project-ref>-auth-token"
+// (see @supabase/ssr's default cookie name derivation). Used only to
+// distinguish "this visitor had a session that no longer validates"
+// (an expired/invalid refresh token) from "this visitor never signed
+// in" — the sign-in page can then say "Your session has expired"
+// honestly instead of guessing.
+const SUPABASE_AUTH_COOKIE_PATTERN = /^sb-.*-auth-token/;
+
+function hasSupabaseAuthCookie(request: NextRequest): boolean {
+  return request.cookies.getAll().some((cookie) => SUPABASE_AUTH_COOKIE_PATTERN.test(cookie.name));
 }
 
 /**
@@ -18,6 +30,10 @@ function isPublicPath(pathname: string): boolean {
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
   const env = getPublicSupabaseEnv();
+  // Captured before getUser() runs — a failed refresh can clear the
+  // cookie via setAll(), and by then we'd no longer be able to tell a
+  // stale session from no session at all.
+  const hadAuthCookie = hasSupabaseAuthCookie(request);
 
   const supabase = createServerClient(
     env.NEXT_PUBLIC_SUPABASE_URL,
@@ -49,6 +65,7 @@ export async function updateSession(request: NextRequest) {
   if (!user && !isPublicPath(request.nextUrl.pathname)) {
     const redirectUrl = new URL("/login", request.url);
     redirectUrl.searchParams.set("next", request.nextUrl.pathname);
+    if (hadAuthCookie) redirectUrl.searchParams.set("expired", "1");
     return NextResponse.redirect(redirectUrl);
   }
 
