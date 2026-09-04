@@ -3772,3 +3772,75 @@ started — see "Deferred" below.
 6. Final 14-item report per the ticket's mandated structure — withheld
    until the above are actually done; this entry is an honest interim
    checkpoint, not that report.
+
+---
+
+## 2026-09-04 (cont.) — Investigation workspace: persistent Trace pane (Workstream C, partial)
+
+Continuation of the same session. This is the ticket's own "largest
+structural improvement" item, scoped down to its single highest-value
+piece rather than attempted whole: pulling the Investigation Trace out
+of Decision's scrolling content and giving it a persistent, full-height
+pane so it stays visible switching to Map/Evidence/Timeline/Sources —
+not the full Decision-table/master-detail rebuild, trace-step
+click-to-focus, or trace-pane-local composer relocation the ticket also
+asks for (see "Deferred" below).
+
+### What shipped
+
+- `investigation-workspace.tsx`'s ≥1024px desktop layout changed from a
+  two-pane split (canvas/tab-content 76% + ContextRail 24%) to a real
+  three-pane `ResizablePanelGroup`: **Trace** (persistent, ~27% default/
+  20-35% range, approximating the spec's 320-420px band) / **Decision-or-
+  active-tab** (main, flexible) / **Inspector** (ContextRail, unchanged,
+  24%/18-38%). `InvestigationTracePanel` is now mounted once outside the
+  tab-switched content instead of once per tab body.
+- `renderTabContent` gained an `includeTracePanel` boolean so the
+  <1024px mobile-stack and tablet (no-persistent-rail) tiers keep their
+  original behavior unchanged — Trace still renders inline inside
+  Decision's content there, exactly as before this pass. Only the
+  ≥1024px tier changed shape.
+- A truthful empty state ("No trace yet. Run an investigation to see
+  Crado's live agent activity here.") fills the pane before any run has
+  happened, instead of an empty void — `InvestigationTracePanel` itself
+  still returns `null` when there's nothing to show (untouched), so the
+  empty-state text lives in the new wrapper, not the component.
+
+### Verification
+
+- `pnpm exec tsc --noEmit` / `pnpm run lint` — clean.
+- 181/181 tests pass across the whole investigation folder (24 files);
+  2 new tests added directly for this change (Trace renders exactly
+  once and stays present across all 5 tabs; the empty-state text
+  appears before any run).
+- Live-verified in the running dev server on a real completed case: at
+  1440px, Trace's full step list stays visible switching Decision ->
+  Map (previously it would have scrolled away/disappeared, since it
+  only existed inside Decision's own tab body); Inspector selection
+  (clicking a canvas node) still populates correctly; at 900px (tablet
+  tier) the original inline-collapsed trace summary is unchanged; both
+  themes render the three panes correctly.
+
+### Deferred (from this same Workstream C item)
+
+1. Decision view is still the existing stacked-card layout, not the
+   dense hypothesis table/master-detail the ticket asks for.
+2. Evidence view not yet rebuilt into the specified table (item/
+   classification/source/revision/config/applicability/citations/
+   verification/added-by/updated).
+3. Trace-step click-to-focus ("selecting a trace step focuses the
+   affected workspace item") not implemented — steps aren't
+   interactive yet.
+4. The trace-pane-local composer (add observation/measurement/change
+   from the bottom of the Trace pane itself) not implemented — the
+   floating full-width composer is unchanged.
+5. "Run/resume" is still per-tab inside `InvestigationControls`
+   (duplicated across Decision/Investigation tab bodies), not hoisted
+   into the compact contextual case header the ticket describes.
+6. Responsive tiers below 1024px were deliberately left exactly as they
+   were (not rebuilt to the ticket's mobile-tab-for-Trace/Decision
+   spec) — out of scope for this pass, not silently dropped.
+7. Homepage restructuring (Workstream B) not started this session.
+8. Full accessibility/keyboard audit and live QA at every specified
+   breakpoint (1280/768/390) not done this session — only 1440, 900,
+   and (for the shell) 390 were spot-checked.

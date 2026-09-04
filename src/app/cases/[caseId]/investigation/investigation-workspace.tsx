@@ -361,8 +361,14 @@ export function InvestigationWorkspace({
   // Timeline, Sources and Investigation-controls/agent-activity bodies
   // are written once — only the Investigation tab's canvas artifact
   // (`canvas` param: the real React Flow canvas on desktop, the plain
-  // vertical stack on mobile) differs between the two callers.
-  function renderTabContent(canvas: ReactNode): ReactNode {
+  // vertical stack on mobile) and whether the trace panel renders inline
+  // differ between callers. `includeTracePanel` is true for the mobile
+  // stack and tablet (no-persistent-rail) tiers, where Trace has nowhere
+  // else to live — unchanged from before this pass. It's false for the
+  // ≥1024px desktop tier, where Trace is hoisted into its own persistent
+  // pane (see the three-pane ResizablePanelGroup below) instead of
+  // scrolling away inside Decision's content.
+  function renderTabContent(canvas: ReactNode, includeTracePanel: boolean): ReactNode {
     return (
       <div
         className={`flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-32 pt-5 sm:px-6 ${
@@ -383,13 +389,15 @@ export function InvestigationWorkspace({
               disabledReason={disabledReason}
               onRunInvestigation={handleRunInvestigation}
             />
-            <InvestigationTracePanel
-              activeTools={state.activeTools}
-              completedActivity={state.agentActivity}
-              active={state.agentActive}
-              durationMs={state.agentMetrics?.totalDurationMs}
-              defaultCollapsed={!state.agentActive && state.hypotheses.length > 0}
-            />
+            {includeTracePanel ? (
+              <InvestigationTracePanel
+                activeTools={state.activeTools}
+                completedActivity={state.agentActivity}
+                active={state.agentActive}
+                durationMs={state.agentMetrics?.totalDurationMs}
+                defaultCollapsed={!state.agentActive && state.hypotheses.length > 0}
+              />
+            ) : null}
             <DecisionView
               caseId={caseId}
               measurement={measurement}
@@ -424,13 +432,15 @@ export function InvestigationWorkspace({
               disabledReason={disabledReason}
               onRunInvestigation={handleRunInvestigation}
             />
-            <InvestigationTracePanel
-              activeTools={state.activeTools}
-              completedActivity={state.agentActivity}
-              active={state.agentActive}
-              durationMs={state.agentMetrics?.totalDurationMs}
-              defaultCollapsed={!state.agentActive && state.hypotheses.length > 0}
-            />
+            {includeTracePanel ? (
+              <InvestigationTracePanel
+                activeTools={state.activeTools}
+                completedActivity={state.agentActivity}
+                active={state.agentActive}
+                durationMs={state.agentMetrics?.totalDurationMs}
+                defaultCollapsed={!state.agentActive && state.hypotheses.length > 0}
+              />
+            ) : null}
             {canvas}
             {state.agentMetrics ? (
               <div className="mt-2">
@@ -518,6 +528,7 @@ export function InvestigationWorkspace({
                 onSelectHypothesis={handleSelectHypothesis}
                 onRecordResult={handleRecordResult}
               />,
+              true,
             )}
           </div>
         ) : belowRailBreakpoint ? (
@@ -531,12 +542,39 @@ export function InvestigationWorkspace({
                 onSelectHypothesis={handleSelectHypothesis}
                 onRecordResult={handleRecordResult}
               />,
+              true,
             )}
           </div>
         ) : (
           <div className="flex min-h-0 flex-1">
+            {/* Desktop three-pane split (App Redesign Workstream C): Trace
+                (persistent, left) / Decision-or-active-tab (main) /
+                Inspector (right) — Trace is no longer buried inside
+                Decision's own scroll, so it stays visible switching to
+                Evidence/Timeline/Map too. Percentage sizes approximate the
+                spec's px bands (Trace 320-420px, Inspector 300-360px)
+                against a typical ≥1024px content width after the sidebar;
+                each pane still resizes independently within its min/max. */}
             <ResizablePanelGroup direction="horizontal">
-              <ResizablePanel defaultSize={76} minSize={50}>
+              <ResizablePanel defaultSize={27} minSize={20} maxSize={35} className="border-r border-border">
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
+                  {state.agentActivity.length === 0 && state.activeTools.length === 0 && !state.agentActive ? (
+                    <p className={`text-sm ${text.muted}`}>
+                      No trace yet. Run an investigation to see Crado&rsquo;s live agent activity here.
+                    </p>
+                  ) : (
+                    <InvestigationTracePanel
+                      activeTools={state.activeTools}
+                      completedActivity={state.agentActivity}
+                      active={state.agentActive}
+                      durationMs={state.agentMetrics?.totalDurationMs}
+                      defaultCollapsed={false}
+                    />
+                  )}
+                </div>
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel defaultSize={49} minSize={30}>
                 {/* One canvas, four views — switching tabs never unmounts
                     the SSE connection above; only what's rendered here
                     changes. The dot grid is the canvas's one deliberate
@@ -551,6 +589,7 @@ export function InvestigationWorkspace({
                     onSelectHypothesis={handleSelectHypothesis}
                     onRecordResult={handleRecordResult}
                   />,
+                  false,
                 )}
               </ResizablePanel>
               <ResizableHandle withHandle />

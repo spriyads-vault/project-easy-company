@@ -603,6 +603,35 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
     expect(screen.queryByText("What Crado handled")).not.toBeInTheDocument();
     expect(screen.queryByText("Sources used")).not.toBeInTheDocument();
   });
+
+  it("keeps the Investigation trace pane visible and unduplicated across every tab (App Redesign: persistent left pane, not buried in Decision's scroll)", () => {
+    const persistedState = reconstructFromPersistedEvents([
+      runStarted(),
+      measurementLoaded(),
+      correlationFound(),
+      agentStarted(),
+      agentToolCompleted(),
+      agentCompleted(),
+      hypothesisCreatedWithCitation(),
+      runCompleted(),
+    ]);
+    render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
+
+    // Default tab (Decision): present, exactly once.
+    expect(screen.getAllByText("Investigation trace")).toHaveLength(1);
+
+    for (const tabName of ["Map", "Evidence", "Timeline", "Sources"]) {
+      fireEvent.click(screen.getByRole("button", { name: tabName }));
+      expect(screen.getAllByText("Investigation trace")).toHaveLength(1);
+    }
+  });
+
+  it("shows a truthful empty state in the trace pane before any run has started, never a blank pane", () => {
+    render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
+    expect(
+      screen.getByText("No trace yet. Run an investigation to see Crado’s live agent activity here."),
+    ).toBeInTheDocument();
+  });
 });
 
 /** Simulates a viewport matching exactly the given media query strings by
