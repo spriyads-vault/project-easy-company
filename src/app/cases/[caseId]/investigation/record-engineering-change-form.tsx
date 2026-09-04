@@ -17,7 +17,7 @@ import { accent, focusRing, surface, text } from "./theme";
 
 const initialState: RecordEngineeringChangeFormState = {};
 
-const inputClass = `w-full border border-[#2d3440] bg-transparent px-3 py-2 text-sm outline-none placeholder:text-[#6b7684] ${focusRing}`;
+const inputClass = `w-full border border-border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground ${focusRing}`;
 
 interface RecordEngineeringChangeFormProps {
   caseId: string;
@@ -54,7 +54,7 @@ export function RecordEngineeringChangeForm({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className={`self-start border border-[#2d3440] px-3 py-2 text-xs font-medium uppercase tracking-wide text-[#9aa3af] transition-colors hover:border-[#22c55e]/50 hover:text-[#22c55e] ${focusRing}`}
+        className={`self-start border border-border px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary ${focusRing}`}
       >
         Record engineering change
       </button>
@@ -63,7 +63,7 @@ export function RecordEngineeringChangeForm({
 
   if (state.success) {
     return (
-      <div className={`flex flex-col gap-2 border border-[#22c55e]/40 p-4 ${surface.panelElevated}`}>
+      <div className={`flex flex-col gap-2 border border-primary/40 p-4 ${surface.panelElevated}`}>
         <p role="status" className={`text-sm ${accent.greenText}`}>
           Engineering change recorded. {fromLabel} → {state.newRevisionLabel}
           {" "}created.
@@ -74,7 +74,7 @@ export function RecordEngineeringChangeForm({
         <button
           type="button"
           onClick={closeAfterSuccess}
-          className={`self-start text-xs ${text.muted} hover:text-[#f5f6f7] ${focusRing}`}
+          className={`self-start text-xs ${text.muted} hover:text-foreground ${focusRing}`}
         >
           Done
         </button>
@@ -86,7 +86,7 @@ export function RecordEngineeringChangeForm({
     <form
       action={formAction}
       aria-labelledby={`${formId}-heading`}
-      className={`flex flex-col gap-3 border border-[#2d3440] p-4 ${surface.panelElevated}`}
+      className={`flex flex-col gap-3 border border-border p-4 ${surface.panelElevated}`}
     >
       <div className="flex items-center justify-between">
         <span id={`${formId}-heading`} className={text.kicker}>
@@ -95,7 +95,7 @@ export function RecordEngineeringChangeForm({
         <button
           type="button"
           onClick={() => setIsOpen(false)}
-          className={`text-xs ${text.muted} hover:text-[#f5f6f7] ${focusRing}`}
+          className={`text-xs ${text.muted} hover:text-foreground ${focusRing}`}
         >
           Cancel
         </button>
@@ -176,7 +176,7 @@ export function RecordEngineeringChangeForm({
       </label>
 
       {state.error ? (
-        <p role="alert" className={`border border-[#f59e0b]/40 bg-[#f59e0b]/10 p-2 text-sm ${accent.warnText}`}>
+        <p role="alert" className={`border border-warning/40 bg-warning/10 p-2 text-sm ${accent.warnText}`}>
           {state.error}
         </p>
       ) : null}
@@ -188,7 +188,7 @@ export function RecordEngineeringChangeForm({
       <button
         type="submit"
         disabled={pending}
-        className="self-start border border-[#22c55e]/50 bg-[#22c55e]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#22c55e] transition-colors hover:bg-[#22c55e]/20 disabled:cursor-not-allowed disabled:border-[#2d3440] disabled:bg-transparent disabled:text-[#6b7684]"
+        className="self-start border border-primary/50 bg-primary/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:border-border disabled:bg-transparent disabled:text-muted-foreground"
       >
         {pending ? "Recording…" : "Record engineering change"}
       </button>

@@ -252,7 +252,10 @@ function StepMarker({ status }: { status: TraceStepView["status"] }) {
     );
   }
   return (
-    <span aria-hidden="true" className="z-10 mt-0.5 shrink-0 text-sm text-primary">
+    // A completed tool call — matches investigation-controls.tsx's
+    // STATUS_DOT_COLOR.completed: the reserved success green, not the
+    // cobalt "active work" accent this marker uses while still running.
+    <span aria-hidden="true" className="z-10 mt-0.5 shrink-0 text-sm text-success">
       ✓
     </span>
   );

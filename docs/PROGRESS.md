@@ -3391,3 +3391,266 @@ future session, in that dependency order (Before/After and resolved-
 trajectory are independent of each other and of the Map minimap; the WCAG
 audit is best done last, once every surface it needs to cover exists).
 `UX-04`/`UX-04-LIGHT` remain untouched.
+
+## Enterprise Investigation UI Revamp — theme system, scroll/clipping root cause, Map fixes (partial)
+
+Ad hoc principal-design/staff-frontend ticket (not a `features.json` id —
+no entry added there; this is additive polish/correctness work on top of
+UX-05, not a new product-scope feature). Baseline: HEAD was `13e1141`
+(UX-05 continuation) before any edit, confirmed clean via `git status`.
+Scope actually completed this session is a bounded, fully-verified slice
+of the full 12-section brief — not the whole thing. Documented honestly
+below, in the "Deferred" section, per CLAUDE.md's explicit permission to
+stop at a clean checkpoint rather than claim more than was done.
+
+### What shipped
+
+**1. Dual-theme design system (Light/Dark/System)** — the app had exactly
+one hardcoded dark theme before this session. `src/app/globals.css`
+rewritten into three token blocks sharing one name set: bare `:root`
+(light, the default/fallback), `@media (prefers-color-scheme: dark)`
+guarded by `:not([data-theme="light"])` (follows the OS until the user
+pins a choice), and `:root[data-theme="dark"]` (an explicit choice wins
+over the OS in both directions). Added a real `--success`/
+`--success-foreground` pair (was missing — green was previously just
+`--primary`) and repointed `--primary`/`--ring`/`--sidebar-primary`/
+`--sidebar-ring` from green to a restrained cobalt/indigo
+(`#4f46e5` light / `#818cf8` dark) per the ticket's explicit "stop using
+green as the general brand/action color... green: verified success only"
+rule. `src/lib/design/theme-provider.tsx` (new): a hand-rolled
+`ThemeProvider`/`useTheme()` — no `next-themes` dependency needed for a
+~150-line contract this codebase already had 90% of the pattern for.
+Persists to `localStorage` (`crado.theme`), a blocking inline script
+(`THEME_INIT_SCRIPT`, inlined into `<head>` by `layout.tsx`) applies the
+saved theme to `<html>` before first paint so a returning dark-mode user
+never sees a light flash, and the React-side state itself is read via
+`useSyncExternalStore` (reusing the exact matchMedia-subscription pattern
+`use-media-query.ts` already established for the sidebar/canvas
+breakpoints) rather than `useState`+`useEffect` — this repo's lint config
+hard-errors on synchronous `setState` inside an effect
+(`react-hooks/set-state-in-effect`), which a naive
+"read localStorage, then setState" implementation hit immediately.
+`useTheme()` outside a `ThemeProvider` returns a safe inert
+light default instead of throwing, specifically so the ~30 existing
+component tests that render `InvestigationCanvas`/`AppShellChrome` in
+isolation (no full app tree) keep passing unmodified. Theme control added
+to the workspace/account dropdown menu (`app-shell-chrome.tsx`) as a
+three-way segmented control (Light/Dark/System, `role="radiogroup"`),
+deliberately plain buttons rather than `DropdownMenuItem`s so picking a
+theme doesn't close the menu (comparing themes side-by-side).
+**Live-verified**: theme switches instantly across sidebar/topbar/cards/
+canvas/composer/dropdown with zero console errors and zero layout shift,
+persists across reload and across navigation, System correctly shows
+"System" selected in the menu.
+
+**2. Root cause of the reported "sometimes impossible to scroll to the
+final content" clipping bug — found and fixed.** Diagnosed via live DOM
+geometry (chrome-devtools MCP), not guessed: at a constrained viewport
+height, the Decision content pane's `.overflow-y-auto` div reported
+`scrollHeight === clientHeight === 1906px` (i.e. "no overflow") while its
+own `getBoundingClientRect()` extended to y=1957 — far past the 700px
+viewport — meaning it was rendering at its full, unclamped content
+height instead of being constrained to available space. Walking the
+ancestor chain found the actual cause: `react-resizable-panels`'
+`<Panel>` renders a plain `display: block` wrapper div with its own
+`overflow: hidden` (for resize clipping); `flex-1`/`min-h-0` on our
+content pane are flex-context-only CSS and are inert inside a
+`display: block` parent, so the child sized to its content instead of
+its available space, and the *panel's own* `overflow: hidden` then
+silently clipped everything past ~571px with no scrollbar and no way to
+reach it — precisely the reported defect. Fixed once at the shared
+primitive (`src/components/ui/resizable.tsx`): `ResizablePanel` now
+always renders `flex h-full min-h-0 flex-col` (merged with any caller
+`className`), establishing the flex column context both of its current
+consumers (the Decision/Map content pane and `ContextRail`) already
+assumed existed. **Proof, not just a fix**: re-measured live after the
+change — the same div now reports `clientHeight: 571` (correctly
+clamped) / `scrollHeight: 1906` (real content) / `overflowing: true`;
+`scrollIntoView({block:"end"})` on the wrapper's actual last section
+("What Crado handled") landed it fully above the composer (`bottom:622`
+vs `composerTop:630`) and fully inside the viewport — screenshotted.
+Regression test: `src/components/ui/resizable.test.tsx` (2 cases) locks
+in the className contract; jsdom does not run real CSS layout so the
+geometry proof itself lives in this session's live QA, not a unit test.
+
+**3. Investigation Map (React Flow) — real bug found and fixed, plus the
+requested minimap.** Added `<MiniMap>` (themed via the same CSS
+variables as the rest of the app — `bgColor`/`maskColor`/`nodeColor`/
+`nodeStrokeColor` all `var(--...)` references, not xyflow's default light
+chrome) and made `colorMode`/the dot-grid background theme-aware
+(`useTheme()` instead of a hardcoded `"dark"`/hardcoded
+`rgba(245,246,247,...)`). Live-verifying the minimap surfaced a second
+real, previously-invisible bug: it rendered zero nodes despite the main
+canvas showing all 5 correctly. Traced into `@xyflow/react`'s own source
+(`node_modules/.pnpm/@xyflow+system@0.0.82/.../getNodeDimensions`/
+`nodeHasDimensions`): a node's height comes from
+`measured.height ?? height ?? initialHeight`. This canvas's own two-pass
+layout-correction `useMemo` (real, pre-existing, unrelated to this
+session) rebuilds its returned `nodes` array from the original
+`initialNodes` objects every render — which only ever carried `width`,
+never `height` — discarding whatever `.measured` React Flow had attached
+internally. The main `<ReactFlow>` node renderer tolerates this fine (it
+positions/sizes from its own internal measurement pass regardless), but
+`<MiniMap>`'s node list reads the `height` field directly off each node
+object and silently drops any node where it's `undefined` — so every
+node vanished from the minimap specifically, with no error. Fixed by
+adding an explicit `height: ROW_HEIGHTS[node.data.kind]` (the same
+per-kind estimate `build-canvas-graph.ts`'s own default layout pass
+already uses) alongside the existing `width: NODE_WIDTH` on
+`initialNodes`, so height no longer depends on `.measured` surviving the
+rebuild. Verified live in both themes: minimap now shows all 5 nodes,
+correctly styled. `Fit investigation`/`Reset to readable zoom`/
+`Follow agent` (all pre-existing, unchanged) reconfirmed still distinct
+and working. New tests: 3 cases in
+`canvas/investigation-canvas.test.tsx` (minimap renders + node count,
+Fit/Reset stay distinct controls, canvas honors the resolved theme
+instead of a hardcoded `colorMode`).
+
+**4. Semantic color sweep (green → success-only, cobalt for
+action/nav/active) across the investigation workspace and home queue.**
+The ticket's rule — "Green: verified success/pass/resolved/completed
+only. Blue/cobalt: navigation, focus, selection, primary actions, active
+agent work" — meant the single old `--primary` (green, used for
+literally every accent) had to split into two real tokens with per-call-
+site judgment, not a blind find-replace. Mechanically swept ~150
+hardcoded-hex occurrences (`#22c55e`, `#f59e0b`, and 8 other raw grays
+that were the *same* single dark palette hand-duplicated as literal hex
+across ~20 files) to the matching semantic Tailwind utility, then
+individually reclassified every green occurrence as either `success`
+(genuinely "verified/pass/resolved/completed" — e.g. `heroStatusStyle
+.complete`, the queue's ✓ glyph, a completed trace step's checkmark, an
+improved before/after result, a passing margin) or `primary`/cobalt
+(action buttons, navigation, active-run indicators, citation/link
+chips). One deliberate re-labeling beyond a pure color swap: the
+"Candidate relationship" badge (both `correlation-card.tsx` and its Map-
+view twin in `canvas-nodes.tsx`) was green before — but a "candidate" is
+explicitly *not yet confirmed* per this codebase's own product-truth
+comment ("never root cause... a coincidence worth investigating, not a
+diagnosis"), so labeling it success-green would have been a real
+semantic lie; recolored neutral instead, consistent with the existing
+evidence-glyph convention where KNOWN facts are already neutral, not
+green. Also fixed three call sites that were *already* using the
+semantic `text-primary` class (not hardcoded hex, so invisible to the
+grep-based sweep) for genuinely success-tone content — found only by
+live-viewing the app in Light theme, where the reused-old-green-as-
+primary intent became visually obvious: `investigations/page.tsx`'s
+queue-row ✓ glyph, `recent-investigations.tsx`'s `complete` tone, and
+`login/page.tsx`'s Sign-in button/mark (outside the ticket's stated
+"home and investigation experience" scope, but a two-line fix left
+unfixed would have put a glaringly inconsistent green button on literally
+the first screen every user sees, undermining the whole redesign).
+
+**5. Diagnosed, not "fixed", the reported 390px composer "+ Attach"
+clipping.** Live DOM measurement at a true 390px viewport
+(`getBoundingClientRect` on the real button) showed zero horizontal
+overflow and the full "+ Attach" label rendering correctly — the bug did
+not reproduce as a layout defect. Found the actual cause: Next.js's
+dev-only build-activity indicator (`<nextjs-portal>`, shadow DOM,
+fixed bottom-left, `Open Next.js Dev Tools`) sitting exactly on top of
+the composer's Attach button in dev mode — confirmed by locating it
+inside the portal's shadow root and comparing its rect
+(`x:22–54, y:790–822`) against the Attach button's rect
+(`x:25–92, y:783–819`): near-total overlap. This indicator does not
+exist in a production build. Moved it out of the way rather than leaving
+it to keep tripping up dev-mode QA:
+`devIndicators: { position: "bottom-right" }` in `next.config.ts`.
+
+### Automated results
+
+`pnpm exec tsc --noEmit` clean · `pnpm run lint` clean ·
+`pnpm exec vitest run` 479/479 (59 files) · `pnpm test:integration`
+62/62 (12 files) · `pnpm run build` succeeds. 15 new tests this session:
+`theme-provider.test.tsx` (10), `resizable.test.tsx` (2), 3 new cases in
+`investigation-canvas.test.tsx`.
+
+### Live end-to-end verification (chrome-devtools MCP, real seeded
+Gateway X data, no mocks)
+
+- Theme: Light/Dark/System switched live from the workspace menu at
+  1440px on `/investigations`, `/investigations/new`, and the case
+  investigation page (Decision + Map tabs) — zero console errors, theme
+  persisted across a full page reload and across client-side navigation,
+  System correctly reflected as selected.
+- A real `RUN AGAIN` on an existing Gateway X case, timestamped: run
+  started with a live "Crado is investigating" elapsed timer, 7 real
+  tool-trace steps streamed in with correct per-call durations
+  (3/2/2/68/100/103/16 ms) and green success checkmarks, status pill
+  correctly flipped `analysis in progress` (cobalt) → `Investigation
+  complete`/`Ready for next test` (green/neutral), zero console errors
+  beyond one pre-existing, unrelated React Flow attribution dev warning.
+- Breakpoints 1440/1280/1024/768/390 swept on the Decision/Map surfaces:
+  zero horizontal overflow at any size (`document.documentElement
+  .scrollWidth === window.innerWidth` verified programmatically, not
+  eyeballed), clean reflow, composer's "+ Attach"/"SEND" both fully
+  legible at 390px.
+- The scroll-ownership/clipping proof (see item 2 above): DOM geometry
+  captured before and after the fix, final section's `scrollIntoView`
+  landing fully above the composer and inside the viewport, screenshotted.
+- Map view: minimap node count verified via DOM query (0 → 5 after the
+  fix) in both themes; Fit/Reset/Follow controls re-confirmed distinct.
+
+### Deferred — NOT built this session, listed in dependency order
+
+This session covered a bounded, high-value slice of the ticket's full
+12-section brief — it does not claim the whole thing is done. In rough
+dependency order for whoever picks this up next:
+
+1. **Full hex-to-semantic-token sweep on the remaining routes**
+   (Products, Sources/documents, Benchmarks) — these still contain
+   literal hardcoded `#22c55e` green from earlier UX-04 work, unswept
+   this session (out of this ticket's stated "home and investigation
+   experience" scope). They will render with the new cobalt `--primary`
+   everywhere it cascades automatically via CSS variables, but any
+   hardcoded-hex green specific to those pages' own markup stays green,
+   inconsistent with the rest of the app. Same mechanical technique this
+   session used (enumerate the closed hex palette, map 1:1 to semantic
+   tokens, hand-classify only the green occurrences) applies directly.
+2. **Homepage/queue information architecture** — largely already matches
+   the ticket's "work queue, not a dashboard" spec from prior UX-05 work
+   (real filter counts, no KPI cards, row-based); not rearchitected this
+   session beyond color tokens. The default (unfiltered) view's per-row
+   status still uses the older `latestRunStatus === "completed"` →
+   "✓ Investigation complete" vocabulary rather than the more truthful
+   `derive-queue-workflow-state.ts` bucket + literal required-next-action
+   string the *filtered* view already uses (a real, pre-existing product-
+   truth gap, not introduced this session — UX-05's own PROGRESS entry
+   flagged the filtered view as the fix and left the default view alone).
+   Unifying both rows onto the truthful vocabulary is the natural next
+   step here.
+3. **Decision-view visual hierarchy** — the current Decision page already
+   substantially matches the ticket's target shape live (measurement
+   strip → deterministic relationship → leading hypothesis with
+   evidence → recommended next test → agent-metrics disclosure → trace),
+   inherited from prior UX-03/UX-05 work; this session did not rebuild
+   its structure, only fixed the color tokens and the scroll bug beneath
+   it. A dedicated pass against the ticket's exact recommended section
+   order/emphasis (in particular, "Recommended next action" getting the
+   *strongest* visual emphasis, above the leading hypothesis) was not
+   performed.
+4. **Composer**: bounded-height-then-internal-scroll for long input was
+   not verified/changed this session; the 390px Attach/Send legibility
+   was confirmed but the "start compact, expand with content, then
+   scroll internally" behavior from the ticket's Section 7 was not
+   specifically audited.
+5. **A full WCAG/keyboard-navigation audit** — not performed as a
+   dedicated pass (same gap UX-05 already deferred). The new theme
+   toggle uses a real `role="radiogroup"`/`aria-checked` and visible
+   focus rings were spot-checked, but a systematic audit across every
+   surface (queue rows, tabs, disclosures, trace, inspector, map
+   controls, composer) was not done.
+6. **"New" affordance for newly streamed content** (a non-color-only
+   indicator when a hypothesis/missing-evidence request/recommended
+   action arrives mid-run) — not added or verified this session.
+7. Cross-tab/cross-client run-start idempotency remains unenforced
+   server-side, unchanged from UX-04/UX-05, still out of scope.
+
+### Outcome
+
+Theme system (Light/Dark/System, real persistence, no hydration
+mismatch), the scroll/clipping root cause, and the Map's real minimap
+bug are all shipped and live-verified, not just proposed. UX-05's own
+`passes` field is left untouched (`false`) — this work sits on top of it
+and does not itself claim completion of UX-05's remaining deferred
+items (Before/After screen, resolved-trajectory view, full WCAG audit)
+nor the seven items listed above. Next session should pick up in the
+order listed.

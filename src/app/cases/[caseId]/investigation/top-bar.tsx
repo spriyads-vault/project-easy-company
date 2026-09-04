@@ -40,13 +40,13 @@ export function TopBar({
     <div className={topbar.container}>
       <Link
         href={backHref}
-        className={`shrink-0 text-xs ${text.muted} hover:text-[#f5f6f7] hover:underline`}
+        className={`shrink-0 text-xs ${text.muted} hover:text-foreground hover:underline`}
       >
         ← {backLabel}
       </Link>
-      <span aria-hidden="true" className="hidden h-4 w-px bg-[#232933] sm:block" />
+      <span aria-hidden="true" className="hidden h-4 w-px bg-border sm:block" />
       <p className="min-w-0 truncate text-sm">
-        {productName ? <span className="font-medium text-[#f5f6f7]">{productName}</span> : null}
+        {productName ? <span className="font-medium text-foreground">{productName}</span> : null}
         {revisionLabel ? <span className={text.muted}> · {revisionLabel}</span> : null}
         <span className={text.muted}> · {caseRef(caseId)}</span>
         <span className={text.muted}> · {caseTitle}</span>

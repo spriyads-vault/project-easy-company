@@ -232,7 +232,7 @@ export function CaseComposer({
         <button
           type="button"
           onClick={handleStartNew}
-          className={`text-xs ${text.muted} hover:text-[#f5f6f7] ${focusRing}`}
+          className={`text-xs ${text.muted} hover:text-foreground ${focusRing}`}
         >
           New message
         </button>
@@ -255,8 +255,8 @@ export function CaseComposer({
                 onClick={() => applyIntent(option)}
                 className={`${radius.control} px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide transition-colors ${focusRing} disabled:cursor-not-allowed disabled:opacity-50 ${
                   intent === option
-                    ? "border border-[#22c55e]/50 bg-[#22c55e]/10 text-[#22c55e]"
-                    : `border border-[#2d3440] ${text.muted} hover:text-[#f5f6f7]`
+                    ? "border border-primary/50 bg-primary/10 text-primary"
+                    : `border border-border ${text.muted} hover:text-foreground`
                 }`}
               >
                 {INTENT_LABEL[option]}
@@ -268,12 +268,12 @@ export function CaseComposer({
         {intent === "observation" ? (
           <form action={observationFormAction} onSubmit={() => setSubmitted(true)} className="flex flex-col gap-3">
             <div className="flex flex-col gap-2">
-              <div className="flex flex-col gap-0.5 rounded-lg border-l-2 border-l-[#22c55e] bg-[#22c55e]/[0.03] py-1.5 pl-2.5">
+              <div className="flex flex-col gap-0.5 rounded-lg border-l-2 border-l-primary bg-primary/[0.03] py-1.5 pl-2.5">
                 <span className={`${text.kicker} text-[10px]`}>Observation</span>
                 <p className="text-sm">{parsedObservation?.observation}</p>
               </div>
               {parsedObservation?.measurementChange ? (
-                <div className="flex flex-col gap-0.5 rounded-lg border-l-2 border-l-[#f5f6f7]/60 py-1.5 pl-2.5">
+                <div className="flex flex-col gap-0.5 rounded-lg border-l-2 border-l-foreground/60 py-1.5 pl-2.5">
                   <span className={`${text.kicker} text-[10px]`}>Measurement change</span>
                   <p className={`text-sm font-medium ${text.mono}`}>{parsedObservation.measurementChange}</p>
                 </div>
@@ -284,7 +284,7 @@ export function CaseComposer({
               <input type="hidden" name="measurementChange" value={parsedObservation.measurementChange} />
             ) : null}
             {observationState.error ? (
-              <p role="alert" className={`rounded-lg border border-[#f59e0b]/40 bg-[#f59e0b]/10 p-2 text-sm ${accent.warnText}`}>
+              <p role="alert" className={`rounded-lg border border-warning/40 bg-warning/10 p-2 text-sm ${accent.warnText}`}>
                 {observationState.error}
               </p>
             ) : null}
@@ -338,7 +338,7 @@ export function CaseComposer({
             </ComposerField>
             <p className={`text-xs ${text.muted}`}>Recorded against {currentRevisionLabel || "the current revision"}.</p>
             {measurementState.error ? (
-              <p role="alert" className={`rounded-lg border border-[#f59e0b]/40 bg-[#f59e0b]/10 p-2 text-sm ${accent.warnText}`}>
+              <p role="alert" className={`rounded-lg border border-warning/40 bg-warning/10 p-2 text-sm ${accent.warnText}`}>
                 {measurementState.error}
               </p>
             ) : null}
@@ -389,7 +389,7 @@ export function CaseComposer({
               />
             </ComposerField>
             {changeState.error ? (
-              <p role="alert" className={`rounded-lg border border-[#f59e0b]/40 bg-[#f59e0b]/10 p-2 text-sm ${accent.warnText}`}>
+              <p role="alert" className={`rounded-lg border border-warning/40 bg-warning/10 p-2 text-sm ${accent.warnText}`}>
                 {changeState.error}
               </p>
             ) : null}
@@ -411,7 +411,7 @@ export function CaseComposer({
           onClick={() => setAttachOpen((prev) => !prev)}
           aria-expanded={attachOpen}
           aria-haspopup="menu"
-          className={`flex h-9 items-center gap-1 ${radius.control} px-2.5 text-xs font-medium ${text.muted} hover:text-[#f5f6f7] ${focusRing}`}
+          className={`flex h-9 items-center gap-1 ${radius.control} px-2.5 text-xs font-medium ${text.muted} hover:text-foreground ${focusRing}`}
         >
           <span aria-hidden="true">+</span> Attach
         </button>
@@ -427,7 +427,7 @@ export function CaseComposer({
                 setAttachOpen(false);
                 document.getElementById(inputId)?.focus();
               }}
-              className={`rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-[#151a21] ${focusRing}`}
+              className={`rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-secondary ${focusRing}`}
             >
               Observation
             </button>
@@ -439,7 +439,7 @@ export function CaseComposer({
                 applyIntent("measurement");
                 setStage("confirm");
               }}
-              className={`rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-[#151a21] ${focusRing}`}
+              className={`rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-secondary ${focusRing}`}
             >
               Measurement
             </button>
@@ -451,7 +451,7 @@ export function CaseComposer({
                 applyIntent("engineering_change");
                 setStage("confirm");
               }}
-              className={`rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-[#151a21] ${focusRing}`}
+              className={`rounded-[7px] px-2.5 py-1.5 text-left text-sm hover:bg-secondary ${focusRing}`}
             >
               Engineering change
             </button>
@@ -467,12 +467,12 @@ export function CaseComposer({
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         placeholder="Tell Crado what changed, attach a result, or ask about this case…"
-        className={`flex-1 border-0 bg-transparent px-1 py-1.5 text-sm outline-none placeholder:text-[#6b7684] ${focusRing}`}
+        className={`flex-1 border-0 bg-transparent px-1 py-1.5 text-sm outline-none placeholder:text-muted-foreground ${focusRing}`}
       />
       <button
         type="submit"
         disabled={!draft.trim()}
-        className={`shrink-0 ${radius.control} border border-[#22c55e]/50 bg-[#22c55e]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#22c55e] transition-colors hover:bg-[#22c55e]/20 disabled:cursor-not-allowed disabled:border-[#2d3440] disabled:bg-transparent disabled:text-[#6b7684]`}
+        className={`shrink-0 ${radius.control} border border-primary/50 bg-primary/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:border-border disabled:bg-transparent disabled:text-muted-foreground`}
       >
         Send
       </button>
@@ -480,7 +480,7 @@ export function CaseComposer({
   );
 }
 
-const fieldInputClass = `border border-[#2d3440] bg-transparent px-3 py-2 text-sm outline-none placeholder:text-[#6b7684] ${focusRing}`;
+const fieldInputClass = `border border-border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground ${focusRing}`;
 
 function ComposerField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -505,7 +505,7 @@ function ConfirmActions({
       <button
         type="submit"
         disabled={pending}
-        className={`${radius.control} border border-[#22c55e]/50 bg-[#22c55e]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#22c55e] transition-colors hover:bg-[#22c55e]/20 disabled:cursor-not-allowed disabled:border-[#2d3440] disabled:bg-transparent disabled:text-[#6b7684]`}
+        className={`${radius.control} border border-primary/50 bg-primary/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:border-border disabled:bg-transparent disabled:text-muted-foreground`}
       >
         {pending ? "Saving…" : submitLabel}
       </button>
@@ -513,7 +513,7 @@ function ConfirmActions({
         type="button"
         onClick={onCancel}
         disabled={pending}
-        className={`${radius.control} px-4 py-2 text-xs font-medium uppercase tracking-wide ${text.muted} hover:text-[#f5f6f7] ${focusRing}`}
+        className={`${radius.control} px-4 py-2 text-xs font-medium uppercase tracking-wide ${text.muted} hover:text-foreground ${focusRing}`}
       >
         Cancel
       </button>

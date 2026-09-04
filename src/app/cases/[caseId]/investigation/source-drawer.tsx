@@ -113,7 +113,7 @@ export function SourceDrawer({
             ref={closeButtonRef}
             type="button"
             onClick={onClose}
-            className="shrink-0 border border-[#2d3440] px-2 py-1 text-xs uppercase tracking-wide hover:border-[#22c55e]/60 hover:text-[#22c55e]"
+            className="shrink-0 border border-border px-2 py-1 text-xs uppercase tracking-wide hover:border-primary/60 hover:text-primary"
           >
             Close
           </button>
@@ -126,7 +126,7 @@ export function SourceDrawer({
           </div>
         ) : null}
 
-        <div className={`flex flex-col gap-2 border-t border-b border-[#232933] py-4`}>
+        <div className={`flex flex-col gap-2 border-t border-b border-border py-4`}>
           <span className={text.kicker}>Relevant passage</span>
           <p className="text-sm leading-relaxed">{citation.passage}</p>
         </div>

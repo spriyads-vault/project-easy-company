@@ -133,3 +133,31 @@ describe("InvestigationCanvas — Follow agent control (UX-04 reopened)", () => 
     expect(screen.getByRole("button", { name: /following agent/i })).toHaveAttribute("aria-pressed", "true");
   });
 });
+
+describe("InvestigationCanvas — Map usability (Enterprise Investigation UI Revamp)", () => {
+  it("renders a minimap overview alongside the zoom/fit/follow controls", () => {
+    renderCanvas({ measurement, state: completedState });
+    expect(document.querySelector(".react-flow__minimap")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Fit investigation" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset to readable zoom" })).toBeInTheDocument();
+  });
+
+  it("Fit investigation and Reset to readable zoom stay distinct controls, not aliases of each other", () => {
+    renderCanvas({ measurement, state: completedState });
+    const fit = screen.getByRole("button", { name: "Fit investigation" });
+    const reset = screen.getByRole("button", { name: "Reset to readable zoom" });
+    expect(fit).not.toBe(reset);
+    expect(fit.title).not.toBe(reset.title);
+  });
+
+  it("follows the app's resolved theme (light) rather than a hardcoded dark colorMode", () => {
+    const { container } = renderCanvas({ measurement, state: completedState });
+    // useTheme() falls back to "light" outside a ThemeProvider (see
+    // theme-provider.tsx) — this test renders the canvas the same way
+    // every other test in this file does (no provider), proving the
+    // canvas actually reads the resolved theme rather than the old
+    // hardcoded colorMode="dark".
+    expect(container.querySelector(".react-flow.light")).toBeInTheDocument();
+    expect(container.querySelector(".react-flow.dark")).not.toBeInTheDocument();
+  });
+});

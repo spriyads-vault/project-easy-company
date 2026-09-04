@@ -25,6 +25,7 @@ import {
   BackgroundVariant,
   ControlButton,
   Controls,
+  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   useNodesInitialized,
@@ -39,6 +40,7 @@ import type { MeasurementRow } from "@/lib/cases/queries";
 import type { HypothesisCreatedPayload } from "@/lib/analysis/events";
 import type { WorkspaceState } from "@/lib/investigation/reconstruct";
 import type { TimelineEntry } from "@/lib/investigation/timeline";
+import { useTheme } from "@/lib/design/theme-provider";
 import { buildCanvasGraph, NODE_WIDTH, ROW_HEIGHTS, type CanvasNodeData } from "./build-canvas-graph";
 import { canvasNodeTypes } from "./canvas-nodes";
 
@@ -101,8 +103,23 @@ function InvestigationCanvasInner({
         // NODE_WIDTH) gives React Flow correct bounds for the very first
         // fitView, before it has measured the real DOM node — this is
         // what avoids an initial "jump" from a wrong guess to the
-        // corrected layout, not just cosmetic.
+        // corrected layout, not just cosmetic. Height was previously
+        // left for React Flow's own ResizeObserver-driven `.measured` to
+        // fill in — which the main canvas relies on fine (it re-derives
+        // its own layout from a fresh getNodes() read) but which
+        // <MiniMap> does not: its node list comes straight from the
+        // `nodes` prop's own `.height`/`.measured.height`, and this
+        // component's own two-pass "corrected" nodes array (below) is
+        // rebuilt from THIS initialNodes object every render, discarding
+        // whatever `.measured` React Flow had attached — so `.height`
+        // stayed permanently undefined here, and xyflow's own
+        // nodeHasDimensions() silently drops every node from the
+        // minimap. An explicit, real per-kind height (the same
+        // ROW_HEIGHTS estimate build-canvas-graph's own default layout
+        // pass already uses) fixes this at the source rather than
+        // reaching into MiniMap internals.
         width: NODE_WIDTH,
+        height: ROW_HEIGHTS[node.data.kind],
         data: node.data as unknown as Record<string, unknown>,
         draggable: false,
         connectable: false,
@@ -126,6 +143,11 @@ function InvestigationCanvasInner({
 
   const { getNodes, fitView, setCenter, setViewport } = useReactFlow();
   const nodesInitialized = useNodesInitialized();
+  // Enterprise Revamp Section 1/6: the Map view must render correctly in
+  // both themes, not just the original single dark theme — colorMode and
+  // the dot-grid/minimap chrome all need the live resolved theme, not a
+  // hardcoded "dark".
+  const { resolved: resolvedTheme } = useTheme();
 
   // The corrected, real-measurement-aware node list — a plain derived
   // value computed at render time (useMemo), not local state kept in
@@ -267,13 +289,15 @@ function InvestigationCanvasInner({
         nodeTypes={canvasNodeTypes}
         onNodeClick={handleNodeClick}
         onMoveStart={handleMoveStart}
-        // Without this, <Controls> (added for real zoom/pan navigation)
-        // renders using xyflow's own default LIGHT theme CSS variables —
-        // a plain white panel clashing with the rest of this dark app.
-        // The custom node cards were never affected by this (their colors
-        // come from this app's own theme classes, not xyflow's), which is
-        // why the app looked fine before Controls existed.
-        colorMode="dark"
+        // Without this, <Controls>/<MiniMap> (xyflow's own chrome) render
+        // using xyflow's default LIGHT theme CSS variables regardless of
+        // the app's actual theme. The custom node cards were never
+        // affected (their colors come from this app's own theme classes,
+        // not xyflow's) — only this chrome needs telling. Enterprise
+        // Revamp: was hardcoded "dark" from the single-theme era; now
+        // follows the live resolved theme so Light/Dark/System all
+        // render this chrome correctly.
+        colorMode={resolvedTheme}
         // No `fitView` prop on mount — see CANVAS_PADDING above. The
         // starting view is always the graph's origin at a fixed, readable
         // zoom, never an auto-fit that can center on empty space between
@@ -290,7 +314,25 @@ function InvestigationCanvasInner({
         zoomOnPinch
         proOptions={{ hideAttribution: true }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="rgba(245,246,247,0.06)" />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--canvas-grid-dot)" />
+        {/* Section 6: "Add/retain minimap" — an overview for investigations
+            wider than the viewport, so panning right to later stages
+            never feels like navigating blind. Positioned opposite the
+            zoom/fit/follow Controls so neither obscures the other; themed
+            via the same CSS variables as the rest of the app rather than
+            xyflow's own default light chrome. */}
+        <MiniMap
+          position="bottom-right"
+          pannable
+          zoomable
+          bgColor="var(--card)"
+          maskColor="color-mix(in srgb, var(--background) 65%, transparent)"
+          nodeColor="var(--muted-foreground)"
+          nodeStrokeColor="var(--border)"
+          nodeBorderRadius={4}
+          style={{ border: "1px solid var(--border)", borderRadius: 8 }}
+          ariaLabel="Investigation map overview"
+        />
         <Controls
           position="bottom-left"
           showZoom
@@ -303,7 +345,7 @@ function InvestigationCanvasInner({
             title={followAgent ? "Following agent — click to pause" : "Follow agent"}
             aria-label={followAgent ? "Following agent — click to pause" : "Follow agent"}
             aria-pressed={followAgent}
-            className={followAgent ? "!text-[#22c55e]" : undefined}
+            className={followAgent ? "!text-primary" : undefined}
           >
             <FollowIcon />
           </ControlButton>
@@ -328,8 +370,8 @@ function InvestigationCanvasInner({
           aria-live="polite"
           className="pointer-events-none absolute inset-0 flex items-center justify-center"
         >
-          <div className="flex items-center gap-2.5 text-sm text-[#8b95a3]">
-            <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#22c55e]" />
+          <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+            <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
             {state.status === "failed" || state.status === "interrupted"
               ? (state.errorMessage ?? "Analysis did not complete.")
               : (state.lastEventSummary ?? "Crado is investigating…")}

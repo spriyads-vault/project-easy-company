@@ -34,10 +34,16 @@ export const text = {
   mono: "font-mono tabular-nums",
 };
 
+// Semantic status accent — green is reserved for verified success/pass/
+// resolved/completed (never a general brand color; see the "SEMANTIC
+// COLOR RULES" comment in globals.css). `green`/`warn` are raw CSS
+// var() references for non-Tailwind consumers (inline SVG stroke/fill in
+// spectrum-chart.tsx); `greenText`/`warnText` are the equivalent
+// Tailwind utility for everywhere else.
 export const accent = {
-  green: "#22c55e",
-  greenText: "text-primary",
-  warn: "#f59e0b",
+  green: "var(--success)",
+  greenText: "text-success",
+  warn: "var(--warning)",
   warnText: "text-warning",
 };
 
@@ -87,7 +93,11 @@ export const heroStatusStyle: Record<HeroStatusTone, string> = {
   waiting: "border-border text-muted-foreground",
   idle: "border-border text-muted-foreground",
   active: "border-primary/50 bg-primary/10 text-primary",
-  complete: "border-primary/40 text-primary",
+  // "complete" is only ever reached via a truthful "resolved" case
+  // status (see WORKFLOW_STATE_TONE in derive-workflow-state.ts) — a
+  // genuine success/pass state, so it gets the reserved success green,
+  // not the cobalt "active work" accent.
+  complete: "border-success/40 text-success",
   failed: "border-destructive/50 bg-destructive/10 text-destructive",
 };
 

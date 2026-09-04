@@ -21,7 +21,10 @@ const TONE_CLASS: Record<string, string> = {
   waiting: "text-muted-foreground",
   idle: "text-muted-foreground",
   active: "text-primary",
-  complete: "text-primary",
+  // Matches heroStatusStyle.complete (agent-status-pill.tsx) — "complete"
+  // only reaches this tone via a truthful "resolved" case status, so it
+  // gets the reserved success green, not the cobalt "active work" accent.
+  complete: "text-success",
   failed: "text-destructive",
 };
 

@@ -15,8 +15,8 @@ export const HYPOTHESIS_UPDATE_LABEL: Record<HypothesisUpdateStatus, string> = {
 // a percentage, score, or probability bar. See docs/PROGRESS.md's MVP-11
 // entry for why no Bayesian/probability update is implemented.
 export const HYPOTHESIS_UPDATE_STYLE: Record<HypothesisUpdateStatus, string> = {
-  supported_by_new_evidence: "border-[#22c55e]/50 bg-[#22c55e]/10 text-[#22c55e]",
-  weakened_by_new_evidence: "border-[#f59e0b]/50 bg-[#f59e0b]/10 text-[#f59e0b]",
-  unchanged: "border-[#2d3440] text-[#9aa3af]",
-  needs_more_evidence: "border-dashed border-[#2d3440] text-[#9aa3af]",
+  supported_by_new_evidence: "border-success/50 bg-success/10 text-success",
+  weakened_by_new_evidence: "border-warning/50 bg-warning/10 text-warning",
+  unchanged: "border-border text-muted-foreground",
+  needs_more_evidence: "border-dashed border-border text-muted-foreground",
 };

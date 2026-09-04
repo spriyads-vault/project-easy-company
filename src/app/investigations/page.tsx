@@ -28,7 +28,10 @@ function statusGlyph(investigation: InvestigationSummary): { glyph: string; clas
     return { glyph: "●", className: "text-primary animate-pulse" };
   }
   if (investigation.status === "resolved" || investigation.latestRunStatus === "completed") {
-    return { glyph: "✓", className: "text-primary" };
+    // A checkmark reads as "done/passed" — the reserved success green,
+    // not the cobalt "active work" accent (see globals.css's semantic
+    // color rules).
+    return { glyph: "✓", className: "text-success" };
   }
   if (investigation.latestRunStatus === "failed") {
     return { glyph: "✕", className: "text-destructive" };
@@ -177,7 +180,7 @@ export default async function InvestigationsPage({ searchParams }: Investigation
                   <EmptyState message="No investigations in this bucket right now. Clear the filter to see every investigation." />
                 </div>
               ) : (
-                <ul className={`flex flex-col divide-y divide-[#1c212a] p-1 ${surface.card}`}>
+                <ul className={`flex flex-col divide-y divide-border p-1 ${surface.card}`}>
                   {filtered.map((investigation) => (
                     <FilteredInvestigationRow key={investigation.id} investigation={investigation} />
                   ))}
@@ -189,7 +192,7 @@ export default async function InvestigationsPage({ searchParams }: Investigation
               {active.length > 0 ? (
                 <section className="flex flex-col gap-2">
                   <h2 className={typography.sectionHeading}>Active</h2>
-                  <ul className={`flex flex-col divide-y divide-[#1c212a] p-1 ${surface.card}`}>
+                  <ul className={`flex flex-col divide-y divide-border p-1 ${surface.card}`}>
                     {active.map((investigation) => (
                       <InvestigationRow key={investigation.id} investigation={investigation} />
                     ))}
@@ -200,7 +203,7 @@ export default async function InvestigationsPage({ searchParams }: Investigation
               {recent.length > 0 ? (
                 <section className="flex flex-col gap-2">
                   <h2 className={typography.sectionHeading}>Recent</h2>
-                  <ul className={`flex flex-col divide-y divide-[#1c212a] p-1 ${surface.card}`}>
+                  <ul className={`flex flex-col divide-y divide-border p-1 ${surface.card}`}>
                     {recent.map((investigation) => (
                       <InvestigationRow key={investigation.id} investigation={investigation} />
                     ))}

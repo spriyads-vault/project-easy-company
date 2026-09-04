@@ -30,7 +30,7 @@ export default function LoginPage() {
         <div className="flex flex-col items-center gap-3 text-center">
           <span
             aria-hidden="true"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-[#22c55e]/40 bg-[#22c55e]/10 text-sm font-semibold text-[#22c55e]"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-sm font-semibold text-primary"
           >
             C
           </span>
@@ -74,7 +74,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={signInPending}
-            className={`mt-1 ${radius.control} border border-[#22c55e]/50 bg-[#22c55e]/10 px-4 py-2 text-sm font-medium text-[#22c55e] transition-colors hover:bg-[#22c55e]/20 disabled:cursor-not-allowed disabled:opacity-60`}
+            className={`mt-1 ${radius.control} border border-primary/50 bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-60`}
           >
             {signInPending ? "Signing in…" : "Sign in"}
           </button>

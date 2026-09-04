@@ -52,7 +52,7 @@ export function ProductPanel({ productId, revisionId, facts }: ProductPanelProps
         </h2>
         <Link
           href={`/products/${productId}/revisions/${revisionId}`}
-          className={`text-xs ${text.muted} hover:text-[#f5f6f7] hover:underline`}
+          className={`text-xs ${text.muted} hover:text-foreground hover:underline`}
         >
           Edit facts
         </Link>
@@ -67,9 +67,9 @@ export function ProductPanel({ productId, revisionId, facts }: ProductPanelProps
           {facts.map((fact) => (
             <li
               key={fact.id}
-              className="flex flex-col gap-0.5 border-b border-[#232933] pb-3 last:border-b-0 last:pb-0"
+              className="flex flex-col gap-0.5 border-b border-border pb-3 last:border-b-0 last:pb-0"
             >
-              <span className={`${text.kicker} text-[10px] text-[#6b7684]`}>
+              <span className={`${text.kicker} text-[10px] text-muted-foreground`}>
                 {CATEGORY_LABEL[fact.category]}
               </span>
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">

@@ -14,7 +14,23 @@ function ResizablePanelGroup({ className, ...props }: React.ComponentProps<typeo
   );
 }
 
-const ResizablePanel = ResizablePrimitive.Panel;
+// Enterprise Investigation UI Revamp — root cause of the reported
+// "sometimes impossible to scroll to the final content" defect, found by
+// walking the live DOM ancestor chain of the investigation workspace's
+// scroll container: react-resizable-panels' own <Panel> renders a plain
+// display:block div. Every consumer here (this file's own
+// investigation-workspace.tsx content pane, ContextRail) sizes its
+// content with flex-context classes — flex-1/min-h-0 — which are inert
+// inside a block formatting context; the child instead grows to its full
+// content height, and the *panel's own* `overflow: hidden` (set by the
+// library itself, for resize clipping) then silently clips whatever
+// doesn't fit, with no scrollbar and no way to reach it. `flex h-full
+// min-h-0 flex-col` here establishes the flex column context every
+// consumer already assumed existed, fixed once at the shared primitive
+// rather than patched per page.
+function ResizablePanel({ className, ...props }: React.ComponentProps<typeof ResizablePrimitive.Panel>) {
+  return <ResizablePrimitive.Panel className={cn("flex h-full min-h-0 flex-col", className)} {...props} />;
+}
 
 function ResizableHandle({
   withHandle,

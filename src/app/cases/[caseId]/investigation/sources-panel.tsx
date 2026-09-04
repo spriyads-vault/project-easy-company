@@ -46,7 +46,7 @@ export function SourcesPanel({ hypotheses, metrics }: SourcesPanelProps) {
 
       {metrics.documentsAvailable === 0 ? (
         <div className="flex flex-col gap-0.5">
-          <span className={`${text.kicker} text-[10px] text-[#9aa3af]`}>No sources</span>
+          <span className={`${text.kicker} text-[10px] text-muted-foreground`}>No sources</span>
           <p className={`text-sm ${text.muted}`}>
             No engineering documents have been added for this product.
           </p>
@@ -86,7 +86,7 @@ export function SourcesPanel({ hypotheses, metrics }: SourcesPanelProps) {
 
       <Link
         href="/documents"
-        className={`self-start text-xs ${text.muted} hover:text-[#f5f6f7] hover:underline`}
+        className={`self-start text-xs ${text.muted} hover:text-foreground hover:underline`}
       >
         View all sources →
       </Link>

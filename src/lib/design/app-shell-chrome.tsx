@@ -16,9 +16,12 @@ import {
   FolderOpen,
   LayoutList,
   LogOut,
+  Monitor,
+  Moon,
   Package,
   PlusCircle,
   Search as SearchIcon,
+  Sun,
 } from "lucide-react";
 import { signOut } from "@/app/workspace/actions";
 import {
@@ -29,6 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useTheme, type ThemeChoice } from "./theme-provider";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Sidebar,
@@ -50,6 +54,47 @@ import {
 import { CommandPalette, useCommandPaletteShortcut, type PaletteInvestigation, type PaletteProduct } from "./command-palette";
 
 export type RailSection = "investigations" | "products" | "sources" | "benchmarks";
+
+const THEME_OPTIONS: { value: ThemeChoice; label: string; icon: typeof Sun }[] = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "System", icon: Monitor },
+];
+
+// A compact three-way segmented control, not a submenu — switching
+// themes is a single click and the menu deliberately stays open so the
+// choice can be compared without reopening it. Plain buttons (not
+// DropdownMenuItem) so Radix's select-to-close behavior doesn't fire.
+function ThemeMenuControl() {
+  const { choice, setChoice } = useTheme();
+  return (
+    <div className="px-2 py-1.5">
+      <div className="mb-1.5 text-xs text-muted-foreground">Theme</div>
+      <div role="radiogroup" aria-label="Theme" className="inline-flex w-full rounded-[8px] border border-border bg-secondary p-0.5">
+        {THEME_OPTIONS.map(({ value, label, icon: Icon }) => {
+          const active = choice === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              aria-label={label}
+              title={label}
+              onClick={() => setChoice(value)}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-[6px] px-2 py-1.5 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${
+                active ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 interface AppShellChromeProps {
   children: React.ReactNode;
@@ -208,6 +253,8 @@ export function AppShellChrome({
                   <DropdownMenuItem asChild>
                     <Link href="/workspace">Workspace</Link>
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <ThemeMenuControl />
                   <DropdownMenuSeparator />
                   <form action={signOut}>
                     <DropdownMenuItem asChild>

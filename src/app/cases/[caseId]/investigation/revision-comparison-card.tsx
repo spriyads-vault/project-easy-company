@@ -34,7 +34,7 @@ export function RevisionComparisonCard({ comparison }: RevisionComparisonCardPro
           Before / after comparison
         </h2>
         <span
-          className={`text-2xl font-semibold sm:text-3xl ${text.mono} ${improved ? "text-[#22c55e]" : "text-[#f59e0b]"}`}
+          className={`text-2xl font-semibold sm:text-3xl ${text.mono} ${improved ? "text-success" : "text-warning"}`}
         >
           {deltaDb === 0 ? "No change" : `${improved ? "" : "-"}${Math.abs(deltaDb).toFixed(1)} dB`}
         </span>
@@ -48,17 +48,17 @@ export function RevisionComparisonCard({ comparison }: RevisionComparisonCardPro
       ) : null}
 
       <div className="grid items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
-        <div className="flex flex-col gap-1 border border-[#232933] p-4">
+        <div className="flex flex-col gap-1 border border-border p-4">
           <span className={`${text.kicker} text-[10px]`}>Before · {before.revisionLabel}</span>
           <span className={`${text.mono} text-2xl`}>{before.frequencyMhz} MHz</span>
           <span className={`text-sm ${text.muted}`}>{marginPhrase(before.marginDb)}</span>
         </div>
-        <span aria-hidden="true" className="hidden text-2xl text-[#6b7684] sm:block">
+        <span aria-hidden="true" className="hidden text-2xl text-muted-foreground sm:block">
           →
         </span>
         <div
           className={`flex flex-col gap-1 border p-4 ${
-            improved ? "border-[#22c55e]/40 bg-[#22c55e]/5" : "border-[#f59e0b]/40 bg-[#f59e0b]/5"
+            improved ? "border-success/40 bg-success/5" : "border-warning/40 bg-warning/5"
           }`}
         >
           <span className={`${text.kicker} text-[10px]`}>After · {after.revisionLabel}</span>

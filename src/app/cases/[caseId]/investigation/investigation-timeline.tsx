@@ -76,13 +76,26 @@ export function InvestigationTimeline({ entries }: InvestigationTimelineProps) {
           <li
             key={`${entry.type}-${entry.id}`}
             className={`relative flex flex-col gap-1 py-3 pl-6 ${riseDelayClass(index)} ${
-              index < entries.length - 1 ? "border-l border-[#2d3440]" : "border-l border-transparent"
-            } ${entry.type === "result" ? "-ml-3 border-l-0 bg-[#22c55e]/[0.04] pl-9 pr-3" : ""}`}
+              index < entries.length - 1 ? "border-l border-border" : "border-l border-transparent"
+            } ${
+              entry.type === "result"
+                ? // A measured result is a real outcome, not automatically a
+                  // "success" — an improved result gets the reserved
+                  // success green, a worse/unchanged one gets warning
+                  // amber, matching the comparison text's own coloring
+                  // below rather than always implying "pass".
+                  `-ml-3 border-l-0 pl-9 pr-3 ${entry.comparison.improved ? "bg-success/[0.04]" : "bg-warning/[0.04]"}`
+                : ""
+            }`}
           >
             <span
               aria-hidden="true"
               className={`absolute left-0 top-3 -translate-x-1/2 text-xs leading-none ${
-                entry.type === "result" ? "text-[#22c55e]" : "text-[#6b7684]"
+                entry.type === "result"
+                  ? entry.comparison.improved
+                    ? "text-success"
+                    : "text-warning"
+                  : "text-muted-foreground"
               }`}
             >
               {entryGlyph(entry)}
@@ -152,7 +165,7 @@ export function InvestigationTimeline({ entries }: InvestigationTimelineProps) {
                 {" → "}
                 <span className={text.mono}>{entry.comparison.after.revisionLabel}</span>
                 {": "}
-                <span className={entry.comparison.improved ? "text-[#22c55e]" : "text-[#f59e0b]"}>
+                <span className={entry.comparison.improved ? "text-success" : "text-warning"}>
                   {entry.comparison.deltaDb === 0
                     ? "no change"
                     : `${entry.comparison.improved ? "improved" : "worsened"} by ${Math.abs(entry.comparison.deltaDb).toFixed(1)} dB`}

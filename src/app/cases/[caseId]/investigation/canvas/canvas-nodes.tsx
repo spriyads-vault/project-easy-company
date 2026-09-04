@@ -80,7 +80,7 @@ function MeasurementNodeContent({ measurement }: { measurement: MeasurementRow }
             <span className={`text-3xl font-semibold ${text.mono}`}>
               {peak.frequencyMhz} <span className="text-base font-normal">MHz</span>
             </span>
-            <span className={`text-sm font-medium ${text.mono} ${peak.marginDb > 0 ? "text-warning" : "text-primary"}`}>
+            <span className={`text-sm font-medium ${text.mono} ${peak.marginDb > 0 ? "text-warning" : "text-success"}`}>
               {peak.marginDb > 0 ? "+" : ""}
               {peak.marginDb} dB relative to selected limit
             </span>
@@ -120,7 +120,11 @@ function DeterministicNodeContent({ correlation }: { correlation: CorrelationFou
     <>
       <div className="flex items-center justify-between gap-2">
         <span className={text.kicker}>Deterministic</span>
-        <span className="rounded-full border border-primary/40 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+        {/* A "candidate" is explicitly not yet confirmed (see
+            correlation-card.tsx's identical Decision-view badge) —
+            neutral, not the reserved success green or the "active work"
+            cobalt. */}
+        <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
           Candidate
         </span>
       </div>
@@ -301,7 +305,7 @@ function OutcomeNodeContent({ entry }: { entry: Extract<TimelineEntry, { type: "
     <>
       <div className="flex items-baseline justify-between gap-2">
         <span className={`${text.kicker} text-primary`}>Measured outcome</span>
-        <span className={`text-lg font-semibold ${text.mono} ${improved ? "text-primary" : "text-warning"}`}>
+        <span className={`text-lg font-semibold ${text.mono} ${improved ? "text-success" : "text-warning"}`}>
           {deltaDb === 0 ? "No change" : `${improved ? "" : "-"}${Math.abs(deltaDb).toFixed(1)} dB`}
         </span>
       </div>
@@ -311,7 +315,7 @@ function OutcomeNodeContent({ entry }: { entry: Extract<TimelineEntry, { type: "
           <div className={`${text.mono} text-foreground`}>{before.frequencyMhz} MHz</div>
           <div className={text.muted}>{marginPhrase(before.marginDb)}</div>
         </div>
-        <div className={`rounded-lg border p-2 ${improved ? "border-primary/40 bg-primary/5" : "border-warning/40 bg-warning/5"}`}>
+        <div className={`rounded-lg border p-2 ${improved ? "border-success/40 bg-success/5" : "border-warning/40 bg-warning/5"}`}>
           <div className={typography.metadata}>{after.revisionLabel}</div>
           <div className={`${text.mono} text-foreground`}>{after.frequencyMhz} MHz</div>
           <div className={text.muted}>{marginPhrase(after.marginDb)}</div>

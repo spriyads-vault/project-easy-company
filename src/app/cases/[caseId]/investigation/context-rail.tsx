@@ -118,7 +118,7 @@ function MeasurementDetail({ measurement }: { measurement: MeasurementRow | null
       <RailField
         label="Margin"
         value={
-          <span className={`${text.mono} ${peak.marginDb > 0 ? "text-[#f59e0b]" : "text-[#22c55e]"}`}>
+          <span className={`${text.mono} ${peak.marginDb > 0 ? "text-warning" : "text-success"}`}>
             {peak.marginDb > 0 ? "+" : ""}
             {peak.marginDb} dB
           </span>
@@ -149,7 +149,7 @@ function HypothesisDetail({
         <span className={`${text.kicker} text-[10px]`}>Hypothesis {String(index + 1).padStart(2, "0")}</span>
         <p className="text-sm font-medium leading-snug">{hypothesis.title}</p>
         <div className="flex flex-wrap gap-1.5 pt-1">
-          <span className="rounded-full border border-[#2d3440] px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#9aa3af]">
+          <span className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
             {CONFIDENCE_LABEL[hypothesis.confidenceBand]}
           </span>
           {hypothesis.update ? (
@@ -171,7 +171,7 @@ function HypothesisDetail({
                 <button
                   type="button"
                   onClick={() => onOpenFullSource(item.citation!, item.category, index, hypothesis.title)}
-                  className={`inline-flex items-center gap-1 rounded-[7px] border border-[#22c55e]/40 bg-[#22c55e]/5 px-1.5 py-0.5 text-[11px] text-[#22c55e] transition-colors hover:border-[#22c55e]/70 hover:bg-[#22c55e]/15 ${focusRing}`}
+                  className={`inline-flex items-center gap-1 rounded-[7px] border border-primary/40 bg-primary/5 px-1.5 py-0.5 text-[11px] text-primary transition-colors hover:border-primary/70 hover:bg-primary/15 ${focusRing}`}
                 >
                   <span aria-hidden="true">⌗</span>
                   {item.citation!.filename}
@@ -224,7 +224,7 @@ function SourceDetail({
       <button
         type="button"
         onClick={() => onOpenFullSource(citation, category, hypothesisIndex, hypothesisTitle)}
-        className={`self-start rounded-[7px] border border-[#2d3440] px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-[#9aa3af] transition-colors hover:border-[#22c55e]/50 hover:text-[#22c55e] ${focusRing}`}
+        className={`self-start rounded-[7px] border border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary ${focusRing}`}
       >
         View full passage
       </button>
@@ -253,7 +253,7 @@ export function ContextRail({
         onClick={onExpand}
         title="Show case panel"
         aria-label="Show case panel"
-        className={`flex h-full w-full items-start justify-center rounded-[10px] border border-[#232933] bg-card px-2 py-3 text-xs text-[#9aa3af] hover:text-[#f5f6f7] ${focusRing}`}
+        className={`flex h-full w-full items-start justify-center rounded-[10px] border border-border bg-card px-2 py-3 text-xs text-muted-foreground hover:text-foreground ${focusRing}`}
       >
         ◂
       </button>
@@ -278,7 +278,7 @@ export function ContextRail({
             <button
               type="button"
               onClick={onClear}
-              className={`text-xs ${text.muted} hover:text-[#f5f6f7] ${focusRing}`}
+              className={`text-xs ${text.muted} hover:text-foreground ${focusRing}`}
             >
               Clear
             </button>
@@ -289,7 +289,7 @@ export function ContextRail({
               onClick={onCollapse}
               title="Collapse panel"
               aria-label="Collapse panel"
-              className={`text-xs ${text.muted} hover:text-[#f5f6f7] ${focusRing}`}
+              className={`text-xs ${text.muted} hover:text-foreground ${focusRing}`}
             >
               ▸
             </button>

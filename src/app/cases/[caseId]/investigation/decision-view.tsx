@@ -116,7 +116,7 @@ export function DecisionView({
           <button
             type="button"
             onClick={onRecordResult}
-            className={`${radius.control} mt-2 w-fit border border-[#22c55e]/50 bg-[#22c55e]/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-[#22c55e] transition-colors hover:bg-[#22c55e]/20 ${focusRing}`}
+            className={`${radius.control} mt-2 w-fit border border-primary/50 bg-primary/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-primary transition-colors hover:bg-primary/20 ${focusRing}`}
           >
             Record result
           </button>

@@ -49,7 +49,7 @@ export function AgentStatusPill({
       className={`hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide sm:inline-flex ${heroStatusStyle[tone]}`}
     >
       {tone === "active" ? (
-        <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#22c55e]" />
+        <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
       ) : null}
       Crado · {label}
     </span>
