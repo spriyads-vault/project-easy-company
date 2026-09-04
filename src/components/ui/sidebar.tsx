@@ -33,9 +33,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const SIDEBAR_COLLAPSE_STORAGE_KEY = "crado.sidebar.collapsed";
-const SIDEBAR_WIDTH = "14rem"; // 224px — matches the previous rail's expanded width
+const SIDEBAR_WIDTH = "15.5rem"; // 248px — App Redesign spec: 244-264px expanded
 const SIDEBAR_WIDTH_MOBILE = "18rem";
-const SIDEBAR_WIDTH_ICON = "3.5rem"; // 56px — matches the previous rail's collapsed width
+const SIDEBAR_WIDTH_ICON = "3.5rem"; // 56px — App Redesign spec: 56-64px collapsed
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 const SIDEBAR_MOBILE_QUERY = "(max-width: 767px)";
 

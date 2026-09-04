@@ -19,12 +19,17 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
+import type { WorkflowState } from "@/lib/investigation/derive-workflow-state";
 
 export interface PaletteInvestigation {
   id: string;
   title: string;
   productName: string;
   revisionLabel: string;
+  /** Truthful workflow state — reused by the sidebar's own "Recent"
+   * region (app-shell-chrome.tsx) so both surfaces read the exact same
+   * server-fetched slice instead of a second query. */
+  workflowState: WorkflowState;
 }
 
 export interface PaletteProduct {

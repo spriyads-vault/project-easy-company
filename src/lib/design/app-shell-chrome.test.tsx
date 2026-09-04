@@ -132,4 +132,38 @@ describe("AppShellChrome (shadcn Sidebar)", () => {
     expect(screen.getByRole("link", { name: "Sources" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "New investigation" })).toBeInTheDocument();
   });
+
+  it("renders a Recent region with real product names, truthful workflow-state labels, and working links", () => {
+    render(
+      <AppShellChrome
+        workspaceName="Acme"
+        userEmail={null}
+        recentInvestigations={[
+          {
+            id: "case-1",
+            title: "200 MHz radiated emissions",
+            productName: "Gateway X",
+            revisionLabel: "Rev17",
+            workflowState: "ready_for_next_test",
+          },
+        ]}
+      >
+        <div />
+      </AppShellChrome>,
+    );
+    expect(screen.getByText("Recent")).toBeInTheDocument();
+    expect(screen.getByText("Ready for next test")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /Gateway X/ });
+    expect(link).toHaveAttribute("href", "/cases/case-1/investigation");
+    expect(screen.getByRole("link", { name: "View all" })).toHaveAttribute("href", "/investigations");
+  });
+
+  it("omits the Recent region entirely when there are no recent investigations", () => {
+    render(
+      <AppShellChrome workspaceName="Acme" userEmail={null} recentInvestigations={[]}>
+        <div />
+      </AppShellChrome>,
+    );
+    expect(screen.queryByText("Recent")).not.toBeInTheDocument();
+  });
 });

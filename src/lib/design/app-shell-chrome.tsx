@@ -33,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme, type ThemeChoice } from "./theme-provider";
+import { WORKFLOW_STATE_LABEL, WORKFLOW_STATE_TONE } from "@/lib/investigation/derive-workflow-state";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Sidebar,
@@ -54,6 +55,17 @@ import {
 import { CommandPalette, useCommandPaletteShortcut, type PaletteInvestigation, type PaletteProduct } from "./command-palette";
 
 export type RailSection = "investigations" | "products" | "sources" | "benchmarks";
+
+// Same waiting/idle/active/complete/failed tone vocabulary as
+// investigations/new/recent-investigations.tsx — a dot, not a colored
+// row, so the sidebar's dark surface never gets a status-tinted wash.
+const RECENT_TONE_CLASS: Record<string, string> = {
+  waiting: "bg-sidebar-foreground/40",
+  idle: "bg-sidebar-foreground/40",
+  active: "bg-primary",
+  complete: "bg-success",
+  failed: "bg-destructive",
+};
 
 const THEME_OPTIONS: { value: ThemeChoice; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Light", icon: Sun },
@@ -198,6 +210,40 @@ export function AppShellChrome({
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
+
+          {recentInvestigations.length > 0 ? (
+            <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+              <div className="flex items-center justify-between gap-2 px-1.5">
+                <SidebarGroupLabel className="px-0">Recent</SidebarGroupLabel>
+                <Link href="/investigations" className="text-[11px] font-medium text-sidebar-foreground/50 hover:text-sidebar-foreground">
+                  View all
+                </Link>
+              </div>
+              <SidebarGroupContent>
+                <ul className="flex flex-col gap-0.5">
+                  {recentInvestigations.slice(0, 5).map((investigation) => {
+                    const tone = RECENT_TONE_CLASS[WORKFLOW_STATE_TONE[investigation.workflowState]];
+                    return (
+                      <li key={investigation.id}>
+                        <Link
+                          href={`/cases/${investigation.id}/investigation`}
+                          className="flex flex-col gap-0.5 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-sidebar-accent"
+                        >
+                          <span className="flex items-center gap-1.5 truncate text-sm text-sidebar-foreground">
+                            <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone}`} />
+                            <span className="truncate">{investigation.productName}</span>
+                          </span>
+                          <span className="truncate pl-3 text-xs text-sidebar-foreground/50">
+                            {WORKFLOW_STATE_LABEL[investigation.workflowState]}
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ) : null}
 
           <SidebarGroup>
             <SidebarGroupLabel>Engineering context</SidebarGroupLabel>

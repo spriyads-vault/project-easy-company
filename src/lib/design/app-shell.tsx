@@ -59,6 +59,7 @@ export async function AppShell({ children, active }: AppShellProps) {
         title: investigation.title,
         productName: investigation.productName,
         revisionLabel: investigation.revisionLabel,
+        workflowState: investigation.workflowState,
       }))}
       products={products.slice(0, 8).map((product) => ({ id: product.id, name: product.name }))}
     >

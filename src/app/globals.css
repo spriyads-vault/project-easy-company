@@ -34,7 +34,11 @@
    Never rely on color alone: pair every semantic color with an icon,
    glyph, or label (see evidence/heroStatusStyle below). */
 :root {
-  --radius: 0.625rem;
+  /* Common radius 6px / modal max 10px (App Redesign spec): rounded-lg
+     (buttons, cards, sidebar rows) resolves to --radius itself, and
+     rounded-xl (dialog.tsx's modal surface) resolves to --radius + 4px
+     = 10px, so this one token satisfies both numbers below. */
+  --radius: 0.375rem;
 
   /* APP CANVAS — warm neutral off-white (App Redesign spec), not the
      cool-grey canvas of the first revamp pass. */
