@@ -3654,3 +3654,121 @@ and does not itself claim completion of UX-05's remaining deferred
 items (Before/After screen, resolved-trajectory view, full WCAG audit)
 nor the seven items listed above. Next session should pick up in the
 order listed.
+
+---
+
+## 2026-09-04 — Application UI Revamp (Turn 2): Typography + token reconciliation (in progress)
+
+A second, larger revamp ticket landed after the first (Ontora-inspired)
+pass above was committed at `a8bfbb7`. It uses a different reference
+product (a Replit-style dark-sidebar app) and specifies numeric design
+tokens that differ from what the first pass shipped: IBM Plex Sans as
+the app font, a tighter typography scale, and a more specific
+light/dark surface ramp (warm-neutral light canvas, `#18181A`/`#1F1F21`/
+`#252527` dark ramp, opacity-based borders). This entry covers the
+first delivery-sequence step only (typography + semantic tokens);
+the rest of the ticket (shell/sidebar, homepage, three-pane
+investigation workspace, responsive/a11y audit, live QA) is not yet
+started — see "Deferred" below.
+
+### What shipped
+
+1. **IBM Plex Sans, self-hosted.** `src/app/layout.tsx` now loads
+   `IBM_Plex_Sans` via `next/font/google` (weights 400/500/600, normal
+   style, `display: "swap"`, fallback `Arial, Helvetica, sans-serif`,
+   CSS var `--font-plex-sans`) in place of `Geist`. `Geist_Mono` is kept
+   for technical values (frequencies, margins, IDs, tool names,
+   durations, timestamps) — the ticket's own instruction was to keep the
+   existing monospace unless IBM Plex Mono was "already available"; it
+   isn't, so nothing changed there. `src/app/globals.css`'s
+   `@theme inline { --font-sans: ... }` mapping was updated to point at
+   `--font-plex-sans` (it still referenced the now-removed
+   `--font-geist-sans` after the loader swap, which would have silently
+   fallen through to the system fallback stack — caught before any
+   verification, not left as a follow-up). Confirmed live via
+   `getComputedStyle(document.body).fontFamily` returning
+   `"IBM Plex Sans", ...` and by screenshot (both themes).
+
+2. **Typography scale.** `src/lib/design/tokens.ts`'s `typography` export
+   bumped to match the new spec: `pageTitle` from `text-xl`/`text-2xl`
+   (20/24px) to `text-[22px]`/`text-[26px]` (target 22–28px),
+   `sectionHeading` from `text-sm` (14px) to `text-base` (16px, target
+   16–20px). `body`/`metadata`/`technical` were already inside spec and
+   left unchanged. This is a shared token consumed by ~13 files
+   (`PageHeader`, queue/recent-investigation sections, etc.), so the
+   change cascades without per-file edits.
+
+3. **Surface/color-ramp reconciliation.** `globals.css`'s three token
+   blocks (light `:root`, OS-dark media block, explicit
+   `[data-theme="dark"]`) were updated to the new numeric spec:
+   - Light: canvas background moved from a cool `#f7f8fa` to a warm
+     `#faf9f6`; card/popover stay white; secondary/muted/accent and
+     borders retuned to warm neutrals (`#f1efe9`/`#e7e3db`) to match;
+     `--muted-foreground` deliberately left at its existing cool
+     `#667085` — the spec explicitly wants a warm canvas but a *cool
+     neutral grey* for secondary text, so those two were not made to
+     match each other.
+   - Dark: background `#0d0f12` → `#18181a`, card (main surface)
+     `#14171c` → `#1f1f21`, popover (elevated surface) `#181c22` →
+     `#252527`, sidebar set a step darker than main (`#19191b`) rather
+     than equal to it. `--border`/`--input`/`--sidebar-border` changed
+     from flat hex to `rgba(255,255,255,0.09)` (spec: white @ 8–11%).
+   - `--primary`/`--sidebar-primary` (cobalt/indigo, `#4f46e5` light /
+     `#818cf8` dark) were **not** changed. The ticket asks to "use the
+     exact accent extracted from Crado's real logo assets"; both
+     `public/brand/crado-mark-black.png` and `-white.png` were checked
+     with a pixel color-histogram (PIL `Image.getcolors()`) and are
+     provably pure monochrome (black-on-transparent / white-on-
+     transparent, zero non-grey pixels) — there is no brand hue in the
+     asset to extract. The existing, already-verified cobalt/indigo
+     accent from the prior revamp pass was kept, and this discrepancy is
+     recorded here rather than silently complied with or silently
+     dropped. A comment documenting this is now inline in `globals.css`
+     next to `--primary`.
+
+### Verification (this phase only)
+
+- `pnpm exec tsc --noEmit` — clean.
+- `pnpm run lint` — clean.
+- Targeted unit tests (`theme-provider.test.tsx`, `resizable.test.tsx`,
+  12 tests) — pass; these are the tests most likely to catch a
+  theme/token regression.
+- Live-verified in the running dev server: IBM Plex Sans confirmed via
+  computed style and visually (both themes); dark surface ramp and warm
+  light canvas confirmed by screenshot on `/investigations/new`.
+- Not yet run this phase: full test suite, production build, or any
+  breakpoint below desktop — deferred to the end of the full ticket per
+  its own "Delivery sequence," not skipped.
+
+### Deferred (remaining Turn-2 delivery-sequence steps, in order)
+
+1. Global shell/sidebar rework (Workstream A): sidebar geometry against
+   the new spec (244–264px expanded / 56–64px collapsed / 36–40px nav
+   rows / 6px radius), a real "Recent investigations" list inside the
+   sidebar itself (not just the composer page), collapse/keyboard/mobile
+   Sheet behavior audit.
+2. Homepage restructuring (Workstream B): whether the composer
+   (currently `/investigations/new`) and the queue (currently
+   `/investigations`) should become one page per the reference's
+   single-page composition, "What needs attention?" framing, and the
+   full required state set (loading/empty/first-investigation/populated/
+   filtered-empty/error/partial).
+3. Investigation workspace restructuring (Workstream C) — the largest
+   remaining item: a genuine three-pane resizable split (Trace ~320–
+   420px / Decision main / Inspector ~300–360px collapsible), full-height
+   panes, versus the current two-pane layout with Trace embedded inline
+   in the Decision scroll flow. Decision-view table/master-detail
+   restructuring, Evidence-view table, Map/mobile-fallback re-check
+   against the new compact-node spec.
+4. Full responsive tier behavior (≥1024 / 768–1023 / <768, including
+   Trace/Decision as top-level mobile tabs and no React Flow canvas on
+   mobile) and a systematic accessibility/keyboard audit — not yet
+   started this phase.
+5. Full automated + live-browser QA at 1440/1280/1024/768/390 in both
+   themes, the extensive ticket-specified checklist (sidebar modes,
+   theme persistence, composer classification/confirmation, trace
+   ordering/live-insertion/refresh-reconstruction, resizable panes, map
+   containment, mobile fallback) — not yet started.
+6. Final 14-item report per the ticket's mandated structure — withheld
+   until the above are actually done; this entry is an honest interim
+   checkpoint, not that report.

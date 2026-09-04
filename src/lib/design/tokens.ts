@@ -160,11 +160,11 @@ export const artifact: Record<ArtifactKind, { label: string; accent: string; das
   outcome: { label: "Measured outcome", accent: "border-l-primary" },
 };
 
-// Typography scale: page title 20-24px, section heading 13-15px semibold,
-// body 14-16px, metadata 12-13px, technical values mono 14-22px.
+// Typography scale (App Redesign spec): page title 22-28px, section title
+// 16-20px, nav/body 13-14px, metadata 12-13px, technical values mono.
 export const typography = {
-  pageTitle: "text-xl font-semibold tracking-tight text-foreground sm:text-2xl",
-  sectionHeading: "text-sm font-semibold text-foreground",
+  pageTitle: "text-[22px] font-semibold tracking-tight text-foreground sm:text-[26px]",
+  sectionHeading: "text-base font-semibold text-foreground",
   body: "text-sm text-foreground sm:text-[15px]",
   metadata: "text-xs text-muted-foreground",
   technical: "font-mono tabular-nums text-foreground",
