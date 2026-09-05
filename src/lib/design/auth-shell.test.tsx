@@ -14,7 +14,7 @@ describe("switchHref", () => {
 });
 
 describe("AuthShell", () => {
-  it("shows a Sign up prompt and switch button on sign-in mode, preserving next (UX-10: moved here from SignInForm)", () => {
+  it("shows a Sign up prompt and switch button on sign-in mode, preserving next", () => {
     render(
       <AuthShell mode="sign-in" next="/cases/abc-123">
         <div>form content</div>
@@ -27,7 +27,7 @@ describe("AuthShell", () => {
     );
   });
 
-  it("shows a Sign in prompt and switch button on sign-up mode, preserving next (UX-10: moved here from SignUpForm)", () => {
+  it("shows a Sign in prompt and switch button on sign-up mode, preserving next", () => {
     render(
       <AuthShell mode="sign-up" next="/cases/abc-123">
         <div>form content</div>
@@ -73,21 +73,26 @@ describe("AuthShell", () => {
     expect(container.textContent).not.toMatch(/\bENG\b/);
   });
 
-  it("shows real, already-existing product content in the right panel — not the reference's 3D render, an icon, or invented copy", () => {
+  it("shows the real marketing panel content — headline, the trace-chain nodes, and the status rows", () => {
     render(
       <AuthShell mode="sign-in" next="/investigations">
         <div>form content</div>
       </AuthShell>,
     );
-    // Each of these is a real string produced elsewhere in this app
-    // (see auth-shell.tsx's own comment for exactly where each one
-    // comes from) — asserting they render verbatim here is asserting
-    // nothing was invented for this panel.
-    expect(
-      screen.getByText("200 MHz emission is the 5th harmonic of the 40 MHz system clock"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Radiated emissions — Gateway X Rev17")).toBeInTheDocument();
-    expect(screen.getByText("Radiated emissions case opened.")).toBeInTheDocument();
     expect(screen.getByText("Regulation, inside the engineering loop.")).toBeInTheDocument();
+    expect(screen.getByText("Rev17")).toBeInTheDocument();
+    expect(screen.getByText("Logged")).toBeInTheDocument();
+    expect(screen.getByText("Linked")).toBeInTheDocument();
+    expect(screen.getByText("Recorded")).toBeInTheDocument();
+    expect(screen.getByText("Deterministic checks kept separate from AI inference")).toBeInTheDocument();
+  });
+
+  it("does not claim a compliance approval on the marketing panel (Crado records decisions, it does not certify them)", () => {
+    const { container } = render(
+      <AuthShell mode="sign-in" next="/investigations">
+        <div>form content</div>
+      </AuthShell>,
+    );
+    expect(container.textContent).not.toMatch(/approved/i);
   });
 });

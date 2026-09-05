@@ -5010,3 +5010,195 @@ dev server, exactly as listed above, against the actual new layout —
 the closest available substitute, not a claim that hosted verification
 happened. Flagged rather than silently skipped, same as UX-09's own
 disclosure.
+
+## UX-12 — auth page redesign, ported from a supplied HTML reference
+
+A follow-up ticket arrived mid-UX-11 explicitly discarding it ("Stop
+the current auth page work. Do not continue UX-11... Discard the
+in-progress layout") and supplying a complete, self-contained HTML/CSS
+mockup as the new visual source of truth. UX-11's PR (#5) was closed
+unmerged with an explanatory comment rather than merged and immediately
+superseded; this ticket branches fresh off `main` (still at UX-10).
+
+### What changed
+
+- `src/lib/design/auth-shell.tsx` — rewritten from scratch. New header
+  (logo left, "Don't have an account?"/"Sign up" — or the sign-up-mode
+  inverse — right), a centred icon badge (`User`/`UserPlus` from
+  lucide-react, already the app's icon library) above the form, and a
+  right-hand marketing panel — all matching the reference's structure
+  and proportions. `switchHref` kept as-is (same behaviour, same
+  exported signature).
+- `src/lib/design/auth-marketing-panel.tsx` (new) — the right panel:
+  headline + supporting line, a connected "trace chain" of 4 node
+  chips (an SVG dashed path + a drifting particle + gently breathing
+  chips), and 3 status rows below. See "Content constraint" and
+  "Colour mapping" below.
+- `src/lib/design/auth-tokens.ts` — resized to the reference's own
+  numbers: heading now `text-2xl font-bold`, centred; inputs/buttons
+  now `rounded-xl` (was `rounded-[8px]`); new `authIconCircle` token
+  for the badge. Every value still resolves through existing tokens.
+- `src/app/login/sign-in-form.tsx` / `src/app/signup/sign-up-form.tsx`
+  — one-line change each: the outer wrapper gained `w-full` (needed
+  because it now renders inside `AuthShell`'s `items-center` column,
+  which turns off the flex-column default stretch that previously kept
+  it full width). No text, label, role, or structural change — every
+  heading/label/button string these tests assert on is untouched.
+- `src/app/globals.css` — one new, clearly-scoped block for the trace
+  chain's decorative motion (`auth-trace-node`/`auth-trace-path`/
+  `auth-trace-path-glow` keyframes), gated behind
+  `prefers-reduced-motion: no-preference` using the exact same pattern
+  the file's existing `.crado-rise`/`.crado-fade-in` block already
+  uses. Explicitly commented as a one-off for this panel, same
+  "deliberate, not reused elsewhere" rule the file's own
+  `.crado-canvas-grid` comment already states.
+
+### Colour mapping — every value ported to a token, none literal
+
+The reference is a saturated blue-on-white/glass design
+(`#407BF6` logo badge, a blue radial-gradient panel, white/opacity
+glass chips). Mapped as follows, with no literal hex left anywhere in
+the new files:
+
+- The reference's `#407BF6` accent (logo badge, focus rings) →
+  `--primary`/`--ring` — already the documented "cobalt: navigation,
+  focus, selection, primary actions" token.
+  - The marketing panel's blue fill → `bg-primary` (flat, not a
+    gradient from white — see the code comment for why: a gradient
+    that touches `--card` would put white/dark-card text on a near-
+    white corner in light theme, breaking contrast).
+  - The panel's white text/glass-chip overlays → `text-primary-
+    foreground` and `bg-primary-foreground`/`border-primary-
+    foreground` at low opacity — the token specifically designed for
+    contrast against `--primary`, correct in both themes even though
+    dark theme's `--primary` is a light periwinkle (so the panel
+    becomes periwinkle-with-navy-text in dark mode, not indigo-with-
+    white-text — a real visual shift between themes, but every colour
+    is still the semantically-correct token pair, not an invented
+    one).
+  - The one green status dot → `bg-success` — CLAUDE.md's own
+    "verified/pass/resolved/completed ONLY" token, used only for the
+    row describing an actually-shipped, verified capability.
+- The reference's `#F8F9FA` icon-badge fill / `#9CA3AF` icon stroke →
+  `bg-secondary` / `text-muted-foreground` — no dedicated token for
+  that exact hex, but same role (a quiet neutral fill).
+- No literal colour value remains in any new/changed file.
+
+### Content constraint — every marketing-panel string checked against real code
+
+Not explicitly required by this ticket's own text, but continued from
+UX-10/UX-11's standing discipline in this same file (and CLAUDE.md's
+"product plans are not shipped capability" / no-invented-claims rule):
+- Node 1 "Revision → Rev17": the seeded Gateway X case's real revision
+  label (`scripts/seed-gateway-x.mjs`), same fixture UX-10/UX-11 used.
+- Nodes 2-4 ("Logged"/"Linked"/"Recorded"): honest generic status
+  words for real schema relationships (Measurement/EvidenceItem/
+  InvestigationEvent), not a specific live metric. Deliberately NOT
+  "Approved" (the reference's own word for its 4th node) — Crado
+  records engineering decisions, it does not issue a compliance
+  approval; a new `auth-shell.test.tsx` test asserts "approved" never
+  appears anywhere in the shell.
+- The 3 status rows: "Deterministic checks kept separate from AI
+  inference" is a real, verified-this-session architectural fact
+  (`harmonic-correlation.ts`/`compare-measurements.ts` are plain
+  deterministic TypeScript; hypothesis generation is the separate,
+  explicitly-labelled inferred step) — exactly the OBSERVED/KNOWN/
+  INFERRED/MISSING split CLAUDE.md requires. The other two describe
+  real, shipped schema relationships, not a specific live number.
+- No "trusted by", logo, testimonial, or specific unverified metric
+  anywhere in the panel.
+
+### What was removed from the reference, and why
+
+- Google/Apple sign-in buttons + the "Or" divider — no OAuth provider
+  is enabled (`supabase/config.toml`: Apple explicitly
+  `enabled = false`, Google not configured at all).
+- The "By continuing, you acknowledge [...] Privacy Policy" line — no
+  `/privacy` route exists (same reasoning UX-06/UX-10 already
+  recorded for Terms of Service).
+- The language switcher ("ENG" menu) — no i18n in this app.
+- The reference's single-field, placeholder-driven, passwordless-
+  shaped "Login with Email" form — replaced with the real Email +
+  Password form this product actually has (both fields wired to the
+  real `signIn`/`signUp` server actions), per the ticket's own
+  instruction.
+- The demo-only button spinner/success choreography and the aria-live
+  feedback caption — theatre for buttons that no longer exist (OAuth)
+  or that already have a real pending state (`useActionState`'s own
+  "Signing in…"/"Creating account…").
+- The reference's orbiting glow ring, blurred horizontal scan sweep,
+  and 3D-transformed isometric grid on the marketing panel — kept the
+  connected trace-chain (path + particle + breathing chips) as the
+  clearest visual expression of "traceability," dropped the rest as
+  embellishment beyond what "match visually" needs. The grid
+  specifically was also live-verified to make headless screenshot
+  capture hang (`backdrop-blur` + a perspective transform + a blend
+  mode is expensive enough to composite that a `Page.captureScreenshot`
+  call timed out until it was removed) — not worth keeping for a
+  purely cosmetic texture.
+- No on-page theme toggle — the reference never had one either; this
+  page is still fully theme-aware via the existing stored/system
+  preference, just with no manual switcher control on this page.
+
+### A real defect found and fixed during this ticket's own QA
+
+At exactly 768px (the reference's own show/hide breakpoint for the
+marketing panel, `md:flex`) the header's "Don't have an account?"
+prompt sentence plus the "Sign up" button left too little room for the
+CRADO wordmark, which rendered clipped to "C" — the same class of
+defect UX-10 found at its own (different) tightest breakpoint. Fixed
+by hiding the prompt sentence until `lg:` (1024px); the switch button
+itself is never hidden at any width. Re-verified via a fresh 768px
+screenshot after the fix.
+
+### Test changes
+
+- `src/lib/design/auth-shell.test.tsx` — rewritten: dropped the old
+  UX-11 investigation-chain-specific assertions (that design was
+  discarded), kept every switchHref/prompt/copyright/no-OAuth-or-
+  Privacy assertion, and added coverage for the new marketing-panel
+  content (headline, all 4 node values, the deterministic-checks
+  status line) and the "never says approved" guard.
+- `sign-in-form.test.tsx` / `sign-up-form.test.tsx` — unchanged
+  assertions; both still pass unmodified since no text/role/label the
+  tests query moved.
+
+### Verification
+
+- `pnpm exec eslint .` / `pnpm exec tsc --noEmit` / `pnpm run build` —
+  all clean.
+- Unit tests: 545/545 across 66 files.
+- Live QA (chrome-devtools MCP, real local dev server, real local
+  Supabase, no mocks) against the actual new layout:
+  - Bad credentials → non-enumerating "Could not sign in..." error,
+    email preserved, password field cleared.
+  - Duplicate email on sign up (the seeded
+    `gateway-x-demo@crado.local`) → non-enumerating "Could not create
+    an account..." error, no disclosure the account exists.
+  - `next` survives a full round trip: `/login?next=/cases/abc/
+    investigation` → Sign up link carries the same `next` → Sign in
+    link carries it straight back.
+  - `/login?error=confirmation-failed` → the real banner renders.
+  - Password toggle exercised via a real Tab + Enter sequence (not a
+    click) — focus landed on the toggle, `aria-pressed`/label flipped,
+    the field's value became visible.
+  - Two real end-to-end flows, each with a fresh throwaway account
+    created via the real form and deleted afterward via the Supabase
+    admin API (same precedent as UX-06/UX-10): (1) sign-up → real
+    session, real auto-created empty workspace, landed on
+    `/investigations`; confirmed the deleted account's session is no
+    longer recognized (revisiting `/signup` showed the form again, not
+    an already-authenticated redirect). (2) sign-up → real sign-out via
+    the app's own account-menu control → sign back in with the same
+    credentials → landed on `/investigations` again, proving the
+    sign-in path independently of the sign-up path.
+  - Screenshotted `/login` and `/signup` at 1440/1280/1024/768/390,
+    both themes.
+
+### Hosted-deployment verification — not yet applicable
+
+This PR has not merged, so `project-easy-company.vercel.app` still
+serves the pre-UX-12 (UX-10) shell — nothing of this ticket's own work
+to check there yet, same disclosure pattern as UX-09/UX-10. All
+screenshots and functional checks above are from the local dev server
+and a live local Supabase instance.

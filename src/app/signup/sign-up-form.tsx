@@ -42,7 +42,9 @@ export function SignUpForm({ next }: SignUpFormProps) {
   const [email, setEmail] = useState("");
 
   return (
-    <div className="flex flex-col gap-6">
+    // w-full: see the matching comment in sign-in-form.tsx — this
+    // renders inside AuthShell's `items-center` column.
+    <div className="flex w-full flex-col gap-6">
       <div className="flex flex-col gap-1.5">
         <h1 className={authHeading}>Create your Crado account</h1>
         <p className={authSupportingLine}>Set up secure access to your engineering workspace.</p>
