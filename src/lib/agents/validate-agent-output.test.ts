@@ -230,6 +230,28 @@ describe("validateAgentOutput", () => {
     );
   });
 
+  it("de-duplicates the KNOWN evidence line when the model's own evidenceRef cites the same fact the correlation candidate already grounds the hypothesis on (UX-07 correction — regression for a real duplicate-line bug)", () => {
+    const registry = createEmptyRegistry(0);
+    registry.productFactIds.add("fact-clock-40mhz");
+    const result = validateAgentOutput({
+      agentOutput: baseAgentOutput({
+        // Same fact as `candidate.productFactId` above — this exact
+        // combination previously rendered "Product context: 40 MHz system
+        // clock" twice in one hypothesis's KNOWN section.
+        evidenceRefs: [{ sourceType: "product_fact", productFactId: "fact-clock-40mhz" }],
+      }),
+      registry,
+      correlationCandidates: [candidate],
+      productFacts,
+      measurement,
+    });
+
+    const knownLines = result.hypotheses[0].evidence.filter(
+      (e) => e.category === "known" && e.description.includes("40 MHz system clock"),
+    );
+    expect(knownLines).toHaveLength(1);
+  });
+
   it("drops an investigation-event citation never actually retrieved this run", () => {
     const registry = createEmptyRegistry(0);
     const result = validateAgentOutput({

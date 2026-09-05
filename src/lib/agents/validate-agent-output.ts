@@ -17,6 +17,7 @@ import {
   buildObservedEvidence,
   buildKnownEvidence,
   containsProhibitedCertaintyLanguage,
+  dedupeEvidence,
   type MeasurementForHypotheses,
   type ProductFactForHypotheses,
 } from "@/lib/hypotheses/generate-hypotheses";
@@ -251,7 +252,13 @@ export function validateAgentOutput(
       title: modelHypothesis.title,
       confidenceBand: modelHypothesis.confidenceBand,
       recommendedNextStep: modelHypothesis.nextInvestigation,
-      evidence,
+      // UX-07 correction: the candidate's own grounding fact (pushed above)
+      // and a model evidenceRef citing that same fact by id both produce a
+      // "Product context: ..." KNOWN item — deduped here rather than
+      // preventing the second push, since either route is independently
+      // legitimate and a document-passage/investigation-event ref could
+      // just as easily happen to restate the same text.
+      evidence: dedupeEvidence(evidence),
       ...(update ? { update } : {}),
     });
   }

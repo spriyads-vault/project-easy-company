@@ -36,21 +36,28 @@ describe("HypothesisCard", () => {
     expect(screen.getByText("200 MHz peak, 7.4 dB above the selected limit.")).toBeInTheDocument();
     expect(screen.getByText("40 MHz system clock.")).toBeInTheDocument();
     expect(screen.getByText("Display active.")).toBeInTheDocument();
-    // Appears twice: once in the Inferred evidence list, once reused as
-    // "Why this test" below the recommended next step.
-    expect(
-      screen.getAllByText("The fifth harmonic relationship may be relevant."),
-    ).toHaveLength(2);
+    expect(screen.getByText("The fifth harmonic relationship may be relevant.")).toBeInTheDocument();
     expect(
       screen.getByText("Clock-related energy may be coupling through the display path."),
     ).toBeInTheDocument();
     expect(screen.getByText("Measurement with display disconnected.")).toBeInTheDocument();
   });
 
-  it("shows the recommended next step under its own heading, separate from the hypothesis reasoning", () => {
+  it("never renders the recommended next step or a 'Why this test' restatement of the INFERRED reasoning inside the card (UX-07 correction bugs 1b/1c)", () => {
     render(<HypothesisCard hypothesis={hypothesis} index={0} onOpenCitation={noop} />);
-    expect(screen.getByText("Next investigation")).toBeInTheDocument();
-    expect(screen.getByText("Disconnect the display path and re-measure.")).toBeInTheDocument();
+    // Both used to render here — a duplicate of the pinned next-action
+    // bar's own copy (1c), and a verbatim reprint of the INFERRED
+    // paragraph already shown above it (1b). Neither has a home in this
+    // component any more.
+    expect(screen.queryByText("Next investigation")).not.toBeInTheDocument();
+    expect(screen.queryByText("Why this test")).not.toBeInTheDocument();
+    expect(screen.queryByText("Disconnect the display path and re-measure.")).not.toBeInTheDocument();
+    // The INFERRED paragraph itself still renders — exactly once, in its
+    // own Inferred section, never printed a second time anywhere else in
+    // this card.
+    expect(
+      screen.getAllByText("The fifth harmonic relationship may be relevant."),
+    ).toHaveLength(1);
   });
 
   it("shows the confidence band and never presents inference as fact", () => {
@@ -75,13 +82,9 @@ describe("HypothesisCard", () => {
     expect(screen.queryByText("Missing")).not.toBeInTheDocument();
   });
 
-  it("numbers the hypothesis and reuses the INFERRED reasoning as a short, evidence-grounded 'why this test' line", () => {
+  it("numbers the hypothesis using its real position among this run's other hypotheses (one-based, zero-padded)", () => {
     render(<HypothesisCard hypothesis={hypothesis} index={2} onOpenCitation={noop} />);
     expect(screen.getByText("Hypothesis 03")).toBeInTheDocument();
-    expect(screen.getByText("Why this test")).toBeInTheDocument();
-    // The first INFERRED item, not fabricated new text — appears both in
-    // the Inferred evidence section and again as "Why this test".
-    expect(screen.getAllByText("The fifth harmonic relationship may be relevant.")).toHaveLength(2);
   });
 
   it("renders a clickable citation beside a document-sourced KNOWN item and opens it with the real chunk/document ids", () => {
