@@ -370,6 +370,46 @@ body {
   }
 }
 
+/* UX-12: the auth marketing panel's trace-chain visualization (see
+   src/lib/design/auth-marketing-panel.tsx) — a one-off decorative
+   texture for that panel only, not a shared pattern (same "deliberate,
+   not reused elsewhere" rule as .crado-canvas-grid above). Follows the
+   same prefers-reduced-motion gating convention as the block above:
+   nothing here animates unless the media query matches, so a reduced-
+   motion visitor simply sees the chain at rest. */
+@media (prefers-reduced-motion: no-preference) {
+  .auth-trace-node {
+    animation: auth-trace-node-breathe 4s ease-in-out infinite;
+  }
+  .auth-trace-path {
+    animation: auth-trace-dash 14s linear infinite;
+  }
+  .auth-trace-path-glow {
+    animation: auth-trace-glow 3s ease-in-out infinite;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-trace-particle {
+    display: none;
+  }
+}
+
+@keyframes auth-trace-node-breathe {
+  50% {
+    transform: translateY(-3px);
+  }
+}
+@keyframes auth-trace-dash {
+  to {
+    stroke-dashoffset: -240;
+  }
+}
+@keyframes auth-trace-glow {
+  50% {
+    opacity: 0.6;
+  }
+}
+
 /* @xyflow/react ships its own base stylesheet import in the canvas
    component; these overrides keep its chrome (attribution, controls) on
    theme instead of React Flow's default light styling. */

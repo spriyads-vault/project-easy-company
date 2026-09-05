@@ -39,7 +39,11 @@ export function SignInForm({ next, notice }: SignInFormProps) {
   const [email, setEmail] = useState("");
 
   return (
-    <div className="flex flex-col gap-6">
+    // w-full: this renders inside AuthShell's `items-center` column
+    // (needed to shrink-wrap-and-centre the icon badge above it), so it
+    // needs its own explicit full width rather than relying on the
+    // flex-column default stretch that `items-center` turns off.
+    <div className="flex w-full flex-col gap-6">
       <div className="flex flex-col gap-1.5">
         <h1 className={authHeading}>Sign in to Crado</h1>
         <p className={authSupportingLine}>Continue to your engineering workspace.</p>
