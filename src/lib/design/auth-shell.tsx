@@ -1,122 +1,144 @@
-// Auth enterprise redesign: the shared two-region shell for /login and
-// /signup — a restrained Crado context pane plus a focused authentication
-// pane, replacing the old single floating card centered on a dot-grid
-// canvas. A Server Component (no hooks needed at this level); the two
-// small pieces that do need the client — the theme control and the
-// theme-aware logo — are their own tiny client components.
+// UX-10 (Sign in / Sign up, enterprise layout): a floating two-region
+// container on a light-grey page background, replacing the previous
+// full-bleed two-pane shell (UX-06's "Auth enterprise redesign" —
+// context pane left, form right). This pass swaps the roles per the
+// reference: form on the LEFT (near-white surface), a full-height
+// product panel INSET on the RIGHT — and the container itself no
+// longer fills the viewport; it floats, centred, ~88vh tall, with a
+// visible grey margin on every side at any size.
 //
-// No Privacy Policy / Terms of Service links: neither route exists in
-// this repository (confirmed via search before writing this file), and
-// the ticket that asked for this shell is explicit — "Only include
-// links backed by real routes." The copyright line still renders as
-// plain text; only the two legal links are omitted, and that omission
-// is recorded in docs/PROGRESS.md, not silently absorbed.
+// Layout-only ticket — every existing behaviour (next-param survival,
+// expired/confirmation-failed banners, non-enumerating errors, email
+// preserved on error, already-authenticated redirect) lives entirely
+// in page.tsx/sign-in-form.tsx/sign-up-form.tsx/lib/auth/**, none of
+// which this file touches. This component only rearranges chrome
+// around <children> (the actual form).
+//
+// What the reference showed that is deliberately NOT here, and why:
+//   - Google/Apple sign-in buttons and the "Or" divider — no OAuth
+//     provider is enabled (confirmed in supabase/config.toml before
+//     writing this file: `[auth.external.apple]` is explicitly
+//     `enabled = false`, and Google has no `[auth.external.google]`
+//     section at all — not configured, not just off); rendering either
+//     button would be a fabricated capability.
+//   - A language switcher — no i18n exists in this app.
+//   - A Privacy Policy link — no /privacy route exists (same reasoning
+//     UX-06 already recorded for Terms of Service; still true here).
+//   - The reference's 3D isometric render — replaced with real product
+//     content per the ticket's own instruction; see RIGHT_PANEL_ROWS
+//     below for where each line actually comes from.
 import Link from "next/link";
 import { ThemedMark } from "./themed-mark";
 import { ThemeToggleCompact } from "./theme-toggle-compact";
+import { authOutlineButton } from "./auth-tokens";
 
-const PRINCIPLES = [
-  "Measurements remain the source of truth",
-  "Deterministic checks stay distinguishable from inference",
-  "Every decision remains tied to evidence and revision",
+// Every line below is a real string already produced by this app — not
+// written for this shell. Sourced from the seeded Gateway X case
+// (CASE-4FA53E), live-observed during this ticket's own QA pass:
+//   1. The Investigation Agent's real leading hypothesis title for that
+//      case (rendered on its Decision view).
+//   2. failure-strip.tsx's real composed sentence for that case's
+//      measurement.
+//   3. scripts/seed-gateway-x.mjs's FAILURE_CASE_TITLE constant.
+//   4. investigations/new/actions.ts's real case_opened timeline
+//      event description, written for every new case.
+const RIGHT_PANEL_ROWS: readonly string[] = [
+  "200 MHz emission is the 5th harmonic of the 40 MHz system clock",
+  "200 MHz measured 7.4 dB above the selected limit, with wifi tx + display active.",
+  "Radiated emissions — Gateway X Rev17",
+  "Radiated emissions case opened.",
 ];
 
 interface AuthShellProps {
   mode: "sign-in" | "sign-up";
   /** Sanitized post-auth destination, preserved across the Sign in <->
-   * Sign up switch links so a deep link a visitor followed while signed
+   * Sign up switch button so a deep link a visitor followed while signed
    * out ("/login?next=/cases/abc") survives choosing the wrong form
    * first. Always a same-origin path — see sanitizeRedirectTarget. */
   next: string;
   children: React.ReactNode;
 }
 
-// Exported so SignInForm/SignUpForm can render the same "below the
-// form" switch link the ticket separately requires, without a second
-// definition of the next-preservation rule.
+// Exported so tests (and, previously, the forms themselves) can assert
+// the next-preservation rule without re-deriving it.
 export function switchHref(target: "/login" | "/signup", next: string): string {
   return next === "/investigations" ? target : `${target}?next=${encodeURIComponent(next)}`;
 }
 
 export function AuthShell({ mode, next, children }: AuthShellProps) {
   const year = new Date().getFullYear();
+  const switchTarget = mode === "sign-in" ? "/signup" : "/login";
+  const switchLabel = mode === "sign-in" ? "Sign up" : "Sign in";
+  const switchPrompt = mode === "sign-in" ? "Don't have an account?" : "Already have an account?";
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background text-foreground lg:flex-row">
-      {/* Context pane — desktop/tablet only; the mobile tier keeps just
-          the compact top bar and one context sentence below. */}
-      <div className="hidden shrink-0 flex-col justify-between border-border bg-card px-10 py-10 lg:flex lg:w-[44%] lg:border-r xl:w-[42%] xl:px-14">
-        <Link href="/" className="flex w-fit items-center gap-2.5">
-          <ThemedMark width={20} height={23} className="shrink-0" />
-          <span className="text-sm font-semibold tracking-tight">CRADO</span>
-        </Link>
-
-        <div className="flex max-w-md flex-col gap-6">
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-            Regulation, inside the engineering loop.
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Connect product revisions, measurements, evidence and engineering decisions in one
-            traceable investigation record.
-          </p>
-          <ul className="flex flex-col gap-3">
-            {PRINCIPLES.map((principle) => (
-              <li key={principle} className="flex items-start gap-2.5 text-sm text-muted-foreground">
-                <span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary" />
-                {principle}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <p className="text-xs text-muted-foreground">© {year} Crado</p>
-      </div>
-
-      <div className="flex flex-1 flex-col">
-        {/* Mobile compact top bar */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3 lg:hidden">
-          <Link href="/" className="flex items-center gap-2">
-            <ThemedMark width={18} height={21} className="shrink-0" />
-            <span className="text-sm font-semibold tracking-tight">CRADO</span>
-          </Link>
-          <ThemeToggleCompact />
-        </div>
-
-        {/* Desktop top-right utility area */}
-        <div className="hidden items-center justify-end gap-4 px-8 py-5 lg:flex xl:px-12">
-          <ThemeToggleCompact />
-          {mode === "sign-in" ? (
-            <span className="text-sm text-muted-foreground">
-              New to Crado?{" "}
-              <Link href={switchHref("/signup", next)} className="font-medium text-primary hover:underline">
-                Create account
+    // One step off white (light) / off the app's own dark background —
+    // reuses --secondary, the same "quiet fill" token every other
+    // surface's raised/inactive state already reads from; no new colour.
+    <div className="flex min-h-dvh items-center justify-center bg-secondary p-3 sm:p-6 lg:p-8">
+      <div className="flex h-[88vh] min-h-[600px] w-full max-w-[1240px] overflow-hidden rounded-2xl bg-card shadow-[0_1px_2px_rgba(0,0,0,0.3),0_24px_48px_-16px_rgba(0,0,0,0.35)] lg:flex-row">
+        {/* LEFT — the form region. Full width below 1024px (the right
+            panel is hidden entirely, not just shrunk); 42% at lg+. */}
+        <div className="flex w-full flex-col lg:w-[42%]">
+          <div className="flex items-center justify-between gap-3 px-5 py-5 sm:px-8 sm:py-6">
+            <Link href="/" className="flex min-w-0 items-center gap-2.5">
+              <ThemedMark width={20} height={23} className="shrink-0" />
+              <span className="truncate text-sm font-semibold tracking-tight text-foreground">CRADO</span>
+            </Link>
+            <div className="flex shrink-0 items-center gap-2.5">
+              <ThemeToggleCompact />
+              {/* The 42%-wide left column is narrowest right at the lg
+                  breakpoint itself (1024px total, ~340px of top-bar
+                  room after padding) — live-verified this exact width
+                  clipped the CRADO wordmark to "CR…" with the prompt
+                  sentence shown. Hidden until xl (1280px container,
+                  ~450px of room), where it fits alongside the wordmark
+                  with no truncation; the switch button (the only part
+                  of this row that actually performs an action) is
+                  never hidden at any width. */}
+              <span className="hidden text-sm text-muted-foreground xl:inline">{switchPrompt}</span>
+              <Link href={switchHref(switchTarget, next)} className={authOutlineButton}>
+                {switchLabel}
               </Link>
-            </span>
-          ) : (
-            <span className="text-sm text-muted-foreground">
-              Already have an account?{" "}
-              <Link href={switchHref("/login", next)} className="font-medium text-primary hover:underline">
-                Sign in
-              </Link>
-            </span>
-          )}
-        </div>
+            </div>
+          </div>
 
-        <div className="flex flex-1 items-center justify-center px-6 py-8 sm:px-8">
-          <div className="flex w-full max-w-[420px] flex-col gap-6">
-            {/* Mobile-only short context sentence — the full principle
-                list and product statement are non-essential visual
-                motif on this tier, per the responsive spec. */}
-            <p className="text-sm text-muted-foreground lg:hidden">
-              Regulation, inside the engineering loop.
-            </p>
+          <div className="flex flex-1 items-center justify-center px-5 py-6 sm:px-8">
+            <div className="flex w-full max-w-[360px] flex-col gap-6">{children}</div>
+          </div>
 
-            {children}
+          <div className="px-5 py-5 sm:px-8 sm:py-6">
+            <p className="text-xs text-muted-foreground">© {year} Crado</p>
           </div>
         </div>
 
-        <div className="border-t border-border px-6 py-4 text-center text-xs text-muted-foreground lg:hidden">
-          © {year} Crado
+        {/* RIGHT — the product panel. Hidden below 1024px, per the
+            ticket's own responsive rule; inset from the container edge
+            (the padding below) rather than flush, so it reads as a
+            panel floating inside the card, not a second full-bleed
+            pane. */}
+        <div className="hidden shrink-0 p-3 lg:flex lg:w-[58%]">
+          <div className="relative flex w-full flex-col justify-between overflow-hidden rounded-xl bg-gradient-to-b from-card to-secondary p-8 xl:p-10">
+            <div className="flex max-w-md flex-col gap-3">
+              <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                Regulation, inside the engineering loop.
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Connect product revisions, measurements, evidence and engineering decisions in one
+                traceable investigation record.
+              </p>
+            </div>
+
+            {/* Real investigation content, not the reference's 3D
+                render — see RIGHT_PANEL_ROWS above for provenance. */}
+            <div className="flex flex-col gap-2.5">
+              {RIGHT_PANEL_ROWS.map((row) => (
+                <div key={row} className="rounded-[10px] bg-background/50 px-4 py-3">
+                  <p className="text-[13px] leading-snug text-foreground">{row}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

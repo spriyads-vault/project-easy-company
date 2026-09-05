@@ -4871,3 +4871,142 @@ recently for UX-08's merge commit).
 - Live QA (chrome-devtools MCP, real local dev server, real local
   Supabase, real seeded Gateway X case, no mocks) as detailed above for
   all three items, plus the hosted cross-check for item 1.
+
+## UX-10 — Sign in and Sign up, enterprise layout
+
+Layout, proportions, and type only, per the ticket — `signIn`/`signUp`
+(`src/lib/auth/actions.ts`), `sanitizeRedirectTarget`, `mapAuthError`,
+the expired/confirmation-failed banner logic, and both page.tsx server
+components are all untouched. This is a chrome/composition change
+around the same forms, not a new auth capability.
+
+### What changed
+
+- **`src/lib/design/auth-shell.tsx`** — rewritten. Was a full-bleed
+  two-pane shell (context pane left, form right, UX-06). Now a floating
+  container (`max-w-[1240px]`, `h-[88vh]`, `rounded-2xl`, soft shadow)
+  centred on a `bg-secondary` page background, split 42/58 at `lg:`
+  (1024px+): form on the left on `bg-card`, a 58%-wide product panel
+  on the right, inset via its own padding wrapper and `rounded-xl`
+  (12px). Below 1024px the split collapses to one column and the right
+  panel (`hidden lg:flex`) is not rendered at all, not just shrunk.
+  Owns the top bar (mark/wordmark left, theme toggle + switch button
+  right — wording swaps `Don't have an account? Sign up` /
+  `Already have an account? Sign in` by `mode`) and the bottom-left
+  copyright line, both previously split across this file and the two
+  form components.
+- **`src/lib/design/auth-tokens.ts`** (new) — the ticket's literal
+  type/control numbers in one place, the same pattern UX-07's
+  `reasoning-typography.ts` established for a route-specific scale
+  that shouldn't bend the shared `typography` object in `tokens.ts`:
+  30px/500 heading, 14px muted supporting line, 13px labels/helper
+  text, 44px/8px-radius inputs, and one primary button style
+  (`bg-foreground`/`text-background` — near-black fill/white text in
+  light theme, the automatic inverse in dark; the exact pairing the
+  pre-UX-09 placeholder page's own button already used, not a new
+  colour pairing).
+- **`src/app/login/sign-in-form.tsx`**, **`src/app/signup/sign-up-form.tsx`**
+  — switched to the new tokens; removed the trailing
+  "New to Crado? Create account" / "Already have an account? Sign in"
+  paragraph each form used to render below its button — that action
+  now lives exactly once, in the shell's top bar, per the ticket's
+  "Heading, one supporting line, email field, password field, primary
+  button. Nothing else" instruction for the form block itself.
+
+### Deliberately not built, and why (per the reference)
+
+- **Google/Apple sign-in buttons + the "Or" divider** — no OAuth
+  provider is enabled. Verified in `supabase/config.toml` before
+  writing any code: `[auth.external.apple]` is explicitly
+  `enabled = false`; Google has no `[auth.external.google]` section at
+  all (not configured, not just off). Rendering either button would be
+  a fabricated capability.
+- **Language switcher** — no i18n exists anywhere in this app.
+- **Privacy Policy link** — no `/privacy` route exists (same reasoning
+  UX-06 already recorded for Terms of Service). The copyright line
+  still renders on its own.
+- **The reference's 3D isometric render** — replaced with real product
+  content per the ticket's own instruction, not an icon/illustration/
+  gradient-mesh substitute. Four rows, each a real string this app
+  already produces (not written for this shell): the seeded Gateway X
+  case's real leading-hypothesis title and its real composed failure-
+  strip sentence (both live-observed on CASE-4FA53E during this
+  ticket's own QA), `scripts/seed-gateway-x.mjs`'s `FAILURE_CASE_TITLE`
+  constant, and `investigations/new/actions.ts`'s real `case_opened`
+  timeline description. See `auth-shell.tsx`'s own comment for exactly
+  where each line comes from — a real reader can go verify each one.
+
+### A real defect found and fixed during this ticket's own QA
+
+At exactly 1024px (the tightest point of the 42%-wide split column,
+and one of the ticket's own five required breakpoints), the top bar's
+"Don't have an account?" sentence plus the outlined switch button left
+too little room for the CRADO wordmark, which rendered clipped to
+"CR…". Not caught by unit tests (jsdom doesn't lay out real pixel
+widths) — caught only by actually screenshotting 1024px, per the
+ticket's own verification instruction. Fixed by hiding the prompt
+sentence until `xl:` (1280px, where the wider split column has real
+room for it); the switch button itself — the only part of that row
+that performs an action — is never hidden at any width. Re-verified
+via a fresh screenshot at 1024 after the fix.
+
+### Test changes
+
+- `sign-in-form.test.tsx` / `sign-up-form.test.tsx`: the two tests that
+  queried the now-relocated "Create account"/"Sign in" link were
+  rewritten to assert its absence from these components
+  (`queryByRole(...)).not.toBeInTheDocument()`), not deleted — the
+  guarantee those tests protected (the switch link exists, carries
+  `next` correctly) still needs a home, so it moved with the element.
+- `src/lib/design/auth-shell.test.tsx` (new) — the switch-link/`next`-
+  preservation coverage that left the two form test files, plus tests
+  asserting: no Google/Apple/`Or`/language-switcher/Privacy-Policy
+  text renders anywhere in the shell; the four real product-content
+  rows render verbatim. `switchHref` itself (already exported, now
+  owned by this file) gets its own direct unit tests too.
+
+### Verification
+
+- `pnpm run lint` / `pnpm exec tsc --noEmit` / `pnpm run build` — all
+  clean.
+- Unit tests: 544/544 across 66 files (new: `auth-shell.test.tsx`, 9
+  tests). Integration: 62/62 across 12 files. (One unrelated flaky
+  test, `recent-investigations.test.tsx`, failed once under the full
+  suite and passed cleanly alone and on a full-suite re-run — a
+  pre-existing timing sensitivity in a file this ticket never touched,
+  not a regression from this change.)
+- Live QA (chrome-devtools MCP, real local dev server, real local
+  Supabase, no mocks): `/login` and `/signup` screenshotted at
+  1440/1280/1024/768/390, both themes (20 screenshots) — no horizontal
+  overflow, no clipped text at any combination once the 1024px defect
+  above was fixed, split correctly collapses to one column with the
+  right panel absent (not just hidden-but-present) below 1024.
+  Functional walkthrough against the new layout, all real, no mocks:
+  bad credentials → non-enumerating "Could not sign in..." error,
+  email preserved, password field cleared; duplicate email on sign up
+  (the seeded `gateway-x-demo@crado.local`) → non-enumerating "Could
+  not create an account..." error, email preserved; `next` survives a
+  full round trip (`/login?next=/cases/…` → Sign up carries the same
+  `next` → Sign in carries it straight back); password-visibility
+  toggle exercised via a real Tab + Enter sequence, not a click (focus
+  landed on the toggle, `aria-pressed`/label flipped, the field's
+  value became visible); a real successful sign-up end-to-end
+  (`crado-ux10-qa@example.com`, real session, real auto-created empty
+  workspace, landed on the genuine empty-state `/investigations`) —
+  then **deleted via the Supabase admin API** afterward, same as
+  UX-06's own precedent, per CLAUDE.md's "clear deletion path for
+  pilot data."
+
+### Hosted-deployment verification — honest split, same as UX-09
+
+This PR has not merged, so `project-easy-company.vercel.app/login`
+currently still serves the pre-UX-10 two-pane shell (confirmed live —
+"New to Crado? Create account" appears both top and bottom, the old
+context pane is on the left) — there is nothing of this ticket's own
+work to check there yet. The ticket's own functional walkthrough (bad
+credentials, duplicate email, a real sign-up, `next` survival, the
+keyboard password toggle) was instead run in full against the local
+dev server, exactly as listed above, against the actual new layout —
+the closest available substitute, not a claim that hosted verification
+happened. Flagged rather than silently skipped, same as UX-09's own
+disclosure.
