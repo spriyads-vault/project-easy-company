@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShellChrome } from "./app-shell-chrome";
+import * as workspaceActions from "@/app/workspace/actions";
 
 // CommandPalette (rendered inside AppShellChrome) calls next/navigation's
 // useRouter() to push a route on selection — outside a real Next App
@@ -11,8 +12,18 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
+// UX-09: signOut is a real Server Action ("use server") — mocked the same
+// way every other actions.ts import in this codebase's component tests
+// is (see sign-in-form.test.tsx), so the "Sign out" menu item can be
+// asserted to actually call it, not just render.
+vi.mock("@/app/workspace/actions", () => ({
+  signOut: vi.fn(),
+}));
+const mockedSignOut = vi.mocked(workspaceActions.signOut);
+
 beforeEach(() => {
   window.localStorage.clear();
+  mockedSignOut.mockClear();
 });
 
 function renderShell(active: "investigations" | "products" | "sources" | "benchmarks" = "investigations") {
@@ -165,5 +176,27 @@ describe("AppShellChrome (shadcn Sidebar)", () => {
       </AppShellChrome>,
     );
     expect(screen.queryByText("Recent")).not.toBeInTheDocument();
+  });
+
+  // UX-09: this used to be a <form action={signOut}> wrapping a
+  // DropdownMenuItem asChild button — Radix closes (and Portal-unmounts)
+  // the menu synchronously on select, racing the native form submit the
+  // browser would otherwise dispatch. This test fails against that old
+  // markup: a synthetic click on the item never fires the form's submit
+  // handler, so `mockedSignOut` is never called. It passes against the
+  // current onSelect-calls-the-action-directly wiring because that call
+  // doesn't depend on the button still being attached to the document.
+  it("calls the real sign-out action when Sign out is selected from the account menu (UX-09)", async () => {
+    renderShell();
+    const trigger = screen.getByRole("button", { name: /Acme Hardware/ });
+    // Radix's DropdownMenuTrigger opens on pointerdown, not a bare click —
+    // a real mouse click emits both, but jsdom's fireEvent.click alone
+    // doesn't, so the trigger needs the full sequence to actually open
+    // the menu here (unrelated to the UX-09 fix itself).
+    fireEvent.pointerDown(trigger, { button: 0, pointerId: 1 });
+    fireEvent.pointerUp(trigger, { button: 0, pointerId: 1 });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByText("Sign out"));
+    await waitFor(() => expect(mockedSignOut).toHaveBeenCalledTimes(1));
   });
 });

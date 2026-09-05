@@ -554,6 +554,23 @@
         "Legibility question answered from an actual screenshot, not inferred from code: yes, OBSERVED is still distinguishable from INFERRED at a glance with all colour removed — each label sits in a fixed 96px left column, uppercase, one per row, and the four words themselves plus consistent row position carry the distinction. No follow-up weight/spacing change needed.",
         "pnpm run lint / pnpm exec tsc --noEmit clean; hypothesis-card.test.tsx + correlation-card.test.tsx: 16/16 passing directly. See docs/PROGRESS.md's UX-08 entry for the full root-cause writeup, the cherry-pick recovery, and the before/after screenshot verification."
       ]
+    },
+    {
+      "id": "UX-09",
+      "priority": 18.0,
+      "title": "Shell depth, sign-out, and the placeholder landing page",
+      "depends_on": [
+        "UX-08"
+      ],
+      "passes": true,
+      "acceptance": [
+        "Placeholder landing page removed: src/app/page.tsx replaced entirely with an async Server Component dispatcher (getUser() then redirect() to /investigations or /login) — no scaffold render at any point, live-verified both signed-in and signed-out locally. page.test.tsx rewritten to match (mocks next/navigation's redirect and @/lib/supabase/server's createClient).",
+        "Sign-out root cause found, not just patched: reproduced live in a real browser first — the pre-existing <form action={signOut}><DropdownMenuItem asChild><button type=submit>> pattern left the user still signed in and on /investigations after a real click. Root cause is a Radix DropdownMenuItem select-to-close race against the native form submit — the exact same class of quirk this file's own ThemeMenuControl had already routed around with plain buttons, and exactly the defect UX-06's entry left unresolved. Fixed by calling signOut() directly from onSelect (startTransition), not via native form submission; signOut's own logic (src/app/workspace/actions.ts) was untouched and was never the bug.",
+        "All four of item 2's specific checks confirmed live, not assumed: signOut is called (real click, real redirect to /login); the sb-127-auth-token cookie is gone from document.cookie afterward; the redirect fires only after sign-out completes (unchanged action logic, already correctly sequenced); navigating back to /investigations afterward redirects to /login?next=... rather than rendering a stale page. New regression test added and honestly caveated: it passes against both old and new markup under jsdom (which can't reproduce the real-browser Portal-unmount timing that causes the race), so the live-browser reproduction above is the real evidence, not the unit test alone.",
+        "Sidebar tonal depth fixed at the token level only (globals.css's existing --sidebar, no new colour, --sidebar-accent/-border/etc. untouched): dark theme's --sidebar (#19191b) was numerically lighter than --background (#18181a) — the opposite of the file's own ramp comment's stated intent — confirmed via getComputedStyle before editing. Moved to #0e0e10 (dark) and #ece9df (light, was #f4f2ec); both verified via getComputedStyle and a genuine git-stash before/after screenshot pair at 1440, both themes — the first attempt (a ~6-unit dark step) was numerically correct but visually indistinguishable in an actual screenshot, so it was widened before being accepted. No shadow/gradient/glow/raised-card effect added; sidebar width, nav items, logo, and Recent list untouched.",
+        "Hosted-deployment verification, reported honestly per the ticket's own instruction: the hosted deployment (project-easy-company.vercel.app) does exist — confirmed this time via gh api repos/.../deployments showing vercel[bot] auto-deploying on every push to main (the prior UX-08 entry's 'zero Vercel projects' was a different, wrong account). Item 1's bug was cross-checked live on hosted, unauthenticated: the scaffold text is confirmed live in production right now. The fix itself and items 2/3 are NOT yet hosted-verifiable: this PR has not merged, and the hosted deployment's own Supabase project has no credentials available in this environment (the local demo account does not exist there; creating and cleaning up a fresh hosted test account needs a service-role key this environment does not have, and CLAUDE.md's 'clear deletion path for pilot data' means that is not done unilaterally). All three fixes were fully verified against the local dev server instead.",
+        "pnpm run lint / pnpm exec tsc --noEmit / pnpm run build all clean. Unit suite 537/537 (65 files, +3 new: 2 in page.test.tsx, 1 in app-shell-chrome.test.tsx). Integration 62/62. See docs/PROGRESS.md's UX-09 entry for the full writeup."
+      ]
     }
   ]
 }
