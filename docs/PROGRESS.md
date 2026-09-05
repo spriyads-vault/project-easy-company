@@ -5202,3 +5202,181 @@ serves the pre-UX-12 (UX-10) shell — nothing of this ticket's own work
 to check there yet, same disclosure pattern as UX-09/UX-10. All
 screenshots and functional checks above are from the local dev server
 and a live local Supabase instance.
+
+## UX-13 — auth pages rebuilt against a supplied reference screenshot
+
+### What superseded what
+
+A UX-12-corrections ticket (right-panel colour → pale blue, restore the
+theme toggle, fix the overlapping flow diagram, re-confirm the sign-up
+helper text against `credentials.ts`) was mid-flight, uncommitted, when
+this ticket arrived with an attached reference screenshot and said the
+current build "does not match the design" — rebuild against the
+reference exactly. The corrections work was discarded via
+`git checkout -- <files>`, not merged or partially kept; this ticket
+branches fresh off `main` (still at UX-12/PR #6's merged state).
+
+### Light-only, for real this time
+
+The discarded corrections pass would have restored the on-page theme
+toggle. This ticket removes it again and goes further: "These pages
+are light only" is now an architectural property, not a default. Every
+colour `/login` and `/signup` use resolves through new `--auth-*`
+custom properties (`globals.css`), defined once in bare `:root` and
+never redefined inside the `prefers-color-scheme: dark` or
+`[data-theme="dark"]` blocks — so nothing on these two pages can follow
+a visitor's OS dark preference or a previously stored dark choice the
+way simply deleting the toggle button would have left possible. Live-
+verified by forcing the emulated OS colour scheme to dark and
+reloading both pages: identical, fully light render either way.
+`auth-shell.test.tsx` asserts no control with an accessible name
+matching `/theme/i` exists.
+
+### Left region
+
+White background, full height. Top bar: Crado mark (`ThemedMark`) +
+"CRADO" wordmark left; "Don't have an account?" / Sign up button right
+on `/login`, the sign-up-mode inverse on `/signup`. Centred form block,
+max-width 400px: a rounded icon tile (`User`/`UserPlus`, lucide-react —
+unchanged from UX-12) above a 30px/600-weight heading, one muted
+supporting line, Email then Password (existing visibility toggle,
+unchanged behaviour), a full-width black-fill white-text primary
+button. Footer: copyright only, bottom-left.
+
+### Right panel — rebuilt, not patched
+
+- **Gradient**: diagonal (135deg), mixed from the app's existing
+  `--primary` (#4f46e5) toward white via `color-mix` at three
+  increasing strengths (4% / 32% / 56%) — light at the top-left corner,
+  deeper toward the bottom-right, per the reference. Not a new hue.
+- **Grid texture**: a flat 2D pattern — two crossed
+  `repeating-linear-gradient`s, no 3D transform, no `backdrop-filter`,
+  no blend mode. UX-12's isometric attempt (a perspective transform +
+  backdrop-blur + `mix-blend-mode: overlay`) was live-verified to make
+  headless screenshot capture hang on compositing cost; this shape was
+  chosen specifically to avoid recreating that.
+- **Pill badge**: "ENGINEERING ASSURANCE · CONTINUOUS TRACEABILITY",
+  dark text on a frosted chip, top of the panel.
+- **Headline/supporting line**: dark near-black text
+  (`--auth-foreground`), positioned in the pale top-left zone where
+  dark text has good contrast — unlike UX-12's `text-primary-
+  foreground` (always light), which only worked because that panel was
+  a flat saturated fill.
+- **Node diagram**: same 4 values UX-12 already fact-checked (Rev17 /
+  Logged / Linked / Recorded — deliberately not "Approved"), now
+  **centre-anchored** via percentage `left`/`top` plus
+  `-translate-x-1/2 -translate-y-1/2`, not edge-anchored via
+  `left-0`/`right-0` the way UX-12's nodes were. A box that grows to
+  fit its own label (e.g. "MEASUREMENT") now grows symmetrically around
+  a fixed centre point instead of extending in one direction toward a
+  container edge — the actual mechanism of the clipping/overlap defect
+  the (discarded) corrections ticket had reported. The connector is a
+  single dashed SVG curve drawn *before* the node chips in DOM order,
+  so it passes visually behind them without an explicit z-index; two
+  small circles along the curve serve as decorative glow waypoints.
+- **Status rows**: the same 3 fact-checked sentences UX-12 verified,
+  each now with a right-hand "Verified" chip in addition to the left
+  dot — a uniform, honest static label, not the reference's fabricated
+  live "Tracing…/Done" status theatre, since these describe already-
+  shipped, tested capabilities rather than something computed per
+  visitor.
+
+### A real legibility defect found and fixed during this ticket's own QA
+
+The first pass's node index/label/value text used `--auth-panel-line`
+(white) at 60–75% opacity. A live 1440px screenshot showed "01
+REVISION" and "02 MEASUREMENT" nearly illegible against the paler end
+of the gradient — not a hypothetical, an actual defect visible in the
+capture. Fixed by switching node text to `--auth-foreground` (matching
+the pill badge's already-legible dark-on-frosted-chip treatment) and
+raising the chip's own background/border opacity (0.16→0.32,
+0.32→0.5). Re-verified via a fresh screenshot: all four nodes clearly
+readable.
+
+### The panel's new breakpoint
+
+The marketing panel is now hidden below **1024px** (`hidden lg:flex`),
+raised from UX-12's 768px threshold, per this ticket's explicit
+requirement that "below 1024 the panel is hidden and the form fills
+the viewport." Live-verified at 1023px (panel gone, form fills the
+full viewport width) and at 1024px (panel present, no clipping) — the
+narrowest width the diagram now has to survive is 1024px, not 768px.
+
+### Reference elements deliberately not built, and why
+
+- Google/Apple sign-in + "Or" divider — no OAuth provider is enabled
+  (`supabase/config.toml`: Apple explicitly `enabled = false`, Google
+  has no section at all).
+- The language switcher ("ENG") — no i18n exists in this app.
+- The Privacy Policy link — no `/privacy` route exists (same reasoning
+  as UX-06's Terms of Service omission).
+- The reference's single-field, passwordless-shaped form — replaced
+  with the real Email + Password form already wired to `signIn`/
+  `signUp`; this product has no magic-link flow.
+- The reference's blue "+" tile mark — replaced with the real Crado
+  mark via `ThemedMark`.
+- The on-page theme toggle — removed per this ticket's own "these pages
+  are light only" instruction (it had been restored by the now-
+  discarded corrections pass).
+
+### Password helper text vs. schema — re-confirmed, no change needed
+
+`credentialsSchema`'s password rule is still
+`z.string().min(8, "Password must be at least 8 characters.")`; the
+sign-up form's own helper text is `"At least 8 characters."` — already
+consistent, same finding UX-12-corrections had already made before
+being discarded.
+
+### Files changed
+
+- `src/app/globals.css` — new frozen `--auth-*` tokens (bg/foreground/
+  muted/border/tile-bg/primary/panel-from/via/to/grid-line/line/
+  node-bg/node-border/row-bg/row-border), registered in `@theme
+  inline`; `.auth-panel-grid` (flat 2D diagonal grid); replaced UX-12's
+  `.auth-trace-path-glow`/`.auth-trace-particle` animation classes with
+  `.auth-trace-path`/`.auth-trace-glow` (dash + pulse) matching the new
+  curve-plus-waypoints diagram.
+- `src/lib/design/auth-tokens.ts` — rewritten: every export now reads
+  the frozen `--auth-*` tokens instead of the theme-reactive ones;
+  `authIconCircle` replaced with `authIconTile`; new `authFocusRing`.
+- `src/lib/design/auth-shell.tsx` — rewritten: always-white shell, no
+  theme toggle, icon tile, 1024px panel breakpoint.
+- `src/lib/design/auth-marketing-panel.tsx` — rewritten: diagonal
+  gradient + grid, pill badge, dark headline, centre-anchored nodes
+  with a behind-nodes curve and glow waypoints, status-row chips.
+- `src/app/login/sign-in-form.tsx`, `src/app/signup/sign-up-form.tsx`,
+  `src/lib/design/password-input.tsx` — one import/classname swap each
+  (`focusRing` → `authFocusRing`, and `password-input.tsx`'s hover/
+  text colours) to the frozen equivalents; no label/role/behaviour
+  changed.
+- `src/lib/design/auth-shell.test.tsx` — kept every UX-12 assertion,
+  added 2: the pill badge text, and the absence of any theme-toggle
+  control.
+
+### Verification
+
+- `pnpm exec eslint .` / `pnpm exec tsc --noEmit` / `pnpm run build` —
+  all clean.
+- Unit tests: 547/547 across 66 files (+2 in `auth-shell.test.tsx`;
+  `sign-in-form.test.tsx`/`sign-up-form.test.tsx`/`redirect.test.ts`/
+  `map-auth-error.test.ts` all pass unmodified).
+- Live QA (chrome-devtools MCP, real local dev server) against both
+  pages:
+  - Screenshotted at 1440, 1280, 1024, 1023, 768, 390 — no clipped
+    text in any diagram node at any width, connector never crosses a
+    node, panel correctly present/absent either side of the 1024px
+    line.
+  - Forced OS `prefers-color-scheme: dark` and reloaded — both pages
+    render identically light; confirms the frozen-token approach
+    actually works, not just that the toggle is gone.
+  - `/login?error=confirmation-failed` → the real banner renders.
+  - Password toggle exercised via a real Tab + Enter sequence (not a
+    click) — focus landed on the toggle, the field's value became
+    visible, the eye icon flipped.
+
+### Hosted-deployment verification — not yet applicable
+
+This PR has not merged, so `project-easy-company.vercel.app` still
+serves the pre-UX-13 shell — nothing of this ticket's own work to
+check there yet, same disclosure pattern as UX-09 through UX-12. All
+screenshots and functional checks above are from the local dev server.

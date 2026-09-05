@@ -12,8 +12,14 @@ import { signIn, type AuthFormState } from "@/lib/auth/actions";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/lib/design/password-input";
 import { AuthBanner } from "@/lib/design/auth-banner";
-import { focusRing } from "@/lib/design/tokens";
-import { authHeading, authInput, authLabel, authPrimaryButton, authSupportingLine } from "@/lib/design/auth-tokens";
+import {
+  authFocusRing,
+  authHeading,
+  authInput,
+  authLabel,
+  authPrimaryButton,
+  authSupportingLine,
+} from "@/lib/design/auth-tokens";
 
 const initialState: AuthFormState = {};
 
@@ -91,7 +97,7 @@ export function SignInForm({ next, notice }: SignInFormProps) {
 
         {state.error ? <AuthBanner tone="error">{state.error}</AuthBanner> : null}
 
-        <button type="submit" disabled={pending} className={`mt-1 ${authPrimaryButton} ${focusRing}`}>
+        <button type="submit" disabled={pending} className={`mt-1 ${authPrimaryButton} ${authFocusRing}`}>
           {pending ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
           {pending ? "Signing in…" : "Sign in"}
         </button>

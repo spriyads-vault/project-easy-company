@@ -1,122 +1,125 @@
-// UX-12 (auth page redesign, ported from a supplied HTML reference):
-// the right-hand marketing panel. Static — identical on /login and
-// /signup, exactly like the reference file (its marketing panel never
-// varied by mode either).
+// UX-13 (auth pages rebuilt against a supplied reference screenshot):
+// replaces UX-12's panel wholesale. The reference's panel is a pale
+// blue diagonal gradient (light top-left, deeper bottom-right) with a
+// faint diagonal grid, a pill label, a dark headline, four nodes
+// connected by a soft curve that passes BEHIND them, and three
+// translucent status rows each with a state chip.
 //
-// Colour: the reference's panel is a saturated blue gradient with white
-// text/glass chips. Ported onto this app's --primary/--primary-foreground
-// pair rather than literal blue/white — that pair is already the
-// documented "primary actions/selection" accent (globals.css) and is
-// specifically designed for readable text-on-fill contrast in both
-// themes, which a literal white-on-blue pairing is not (dark theme's
-// --primary is a light periwinkle; white text on it would fail
-// contrast). Every colour in this file resolves through --primary/
-// --primary-foreground — no literal hex, no new token.
+// Colour: every fill here resolves through the frozen `--auth-panel-*`
+// tokens (globals.css) — mixed from the app's existing --primary
+// (#4f46e5) toward white at increasing strength for the gradient, not
+// a new hue. These pages are light-only (no dark variant), so unlike
+// the old bg-primary/text-primary-foreground pairing this replaces,
+// nothing here reads the theme-reactive --primary tokens.
 //
-// Simplified from the reference: kept the connected trace-chain (path +
-// drifting particle + gently breathing node chips) since it's the clear
-// visual expression of "traceability" this product is actually about.
-// Dropped the reference's orbiting glow ring, blurred horizontal scan
-// sweep, and isometric background grid — purely decorative embellishments
-// beyond what "match visually" needs, in tension with CLAUDE.md's near-
-// monochrome/no-glow guidance (which this panel otherwise departs from
-// only because it was supplied as an explicit visual source of truth),
-// and, for the 3D-transformed grid specifically, expensive enough to
-// composite (backdrop-blur + a perspective transform + a blend mode,
-// live-verified to make headless screenshot capture hang) that it
-// wasn't worth keeping for a purely cosmetic texture.
+// Layout: nodes are centre-anchored (percentage left/top plus
+// -translate-x-1/2 -translate-y-1/2), not edge-anchored like the
+// previous pass's `left-0`/`right-0` nodes were — a box that grows to
+// fit its own label grows symmetrically around a safe centre point
+// instead of extending in one direction toward a container edge, which
+// is what let "Measurement" clip past the panel's own overflow bound
+// before. The connector path is drawn first (z-order), nodes after
+// with a mostly-opaque fill, so the curve visually passes behind them
+// without needing an explicit z-index. The panel itself is hidden
+// below 1024px (AuthShell), so the narrowest width this diagram has to
+// survive is 1024px, not the previous pass's 768px.
 //
-// Content: every node value and status line below is a real, already-
-// shipped capability or a real seeded example, not invented marketing
-// copy — see the inline comment on each.
-const TRACE_NODES: ReadonlyArray<{ index: string; label: string; value: string; style: string }> = [
+// Content: every node value and status line is a real, already-shipped
+// capability or a real seeded example, not invented marketing copy —
+// see the inline comment on each. Status chips read a uniform
+// "Verified" rather than the reference's fabricated live
+// "Tracing…/Done" status theatre — these describe shipped, tested
+// behaviour, not something computed per visitor.
+const TRACE_NODES: ReadonlyArray<{ index: string; label: string; value: string; left: number; top: number }> = [
   // Rev17 is the seeded Gateway X case's real revision label (same
-  // fixture UX-10/UX-11 already verified against scripts/seed-gateway-x.mjs).
-  { index: "01", label: "Revision", value: "Rev17", style: "left-0 top-[58%]" },
+  // fixture UX-10/UX-11/UX-12 already verified against
+  // scripts/seed-gateway-x.mjs).
+  { index: "01", label: "Revision", value: "Rev17", left: 9, top: 78 },
   // "Logged" / "Linked" / "Recorded" are honest generic status words for
-  // real schema relationships (Measurement, EvidenceItem, InvestigationEvent
-  // — see docs/PROGRESS.md's core domain objects), not a specific live
-  // metric or a compliance verdict — deliberately not "Approved": Crado
-  // records engineering decisions, it does not issue compliance sign-off.
-  { index: "02", label: "Measurement", value: "Logged", style: "left-[27%] top-[8%]" },
-  { index: "03", label: "Evidence", value: "Linked", style: "left-[58%] top-[64%]" },
-  { index: "04", label: "Decision", value: "Recorded", style: "right-0 top-[16%]" },
+  // real schema relationships (Measurement, EvidenceItem,
+  // InvestigationEvent — see docs/PROGRESS.md's core domain objects),
+  // not a specific live metric or a compliance verdict — deliberately
+  // not "Approved": Crado records engineering decisions, it does not
+  // issue compliance sign-off.
+  { index: "02", label: "Measurement", value: "Logged", left: 38, top: 22 },
+  { index: "03", label: "Evidence", value: "Linked", left: 68, top: 78 },
+  { index: "04", label: "Decision", value: "Recorded", left: 91, top: 22 },
 ];
 
-const STATUS_ROWS: ReadonlyArray<{ text: string; dot: "success" | "neutral" }> = [
+// Two small glow markers along the connector, roughly at the curve's
+// midpoints between node pairs — purely decorative, same convention as
+// the old particle/glow-path pair this replaces.
+const GLOW_WAYPOINTS: ReadonlyArray<{ cx: number; cy: number }> = [
+  { cx: 190, cy: 130 },
+  { cx: 618, cy: 130 },
+];
+
+const STATUS_ROWS: ReadonlyArray<{ text: string }> = [
   // True, shipped, verified this session: harmonic-correlation.ts and
   // compare-measurements.ts are plain deterministic TypeScript, no model
   // call; hypothesis generation is the separate, explicitly-labelled
   // inferred step — exactly the OBSERVED/KNOWN/INFERRED/MISSING split
-  // CLAUDE.md requires. --success is used here because this is a
-  // completed, shipped capability, not a live per-visitor status.
-  { text: "Deterministic checks kept separate from AI inference", dot: "success" },
-  { text: "Measurement evidence linked to the product revision it was taken against", dot: "neutral" },
-  { text: "Investigation decisions recorded against the evidence that supported them", dot: "neutral" },
+  // CLAUDE.md requires.
+  { text: "Deterministic checks kept separate from AI inference" },
+  { text: "Measurement evidence linked to the product revision it was taken against" },
+  { text: "Investigation decisions recorded against the evidence that supported them" },
 ];
 
 export function AuthMarketingPanel() {
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden bg-primary">
-      {/* Two soft radial highlights — the reference's glow, ported as
-          low-opacity --primary-foreground layers over the flat
-          --primary fill so text-primary-foreground stays legible
-          everywhere in the panel, in both themes. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_70%_18%,color-mix(in_srgb,var(--primary-foreground)_16%,transparent),transparent_45%),radial-gradient(circle_at_10%_85%,color-mix(in_srgb,var(--primary-foreground)_10%,transparent),transparent_50%)]"
-      />
+    <div
+      className="relative flex h-full w-full flex-col overflow-hidden bg-[linear-gradient(135deg,var(--auth-panel-from)_0%,var(--auth-panel-via)_45%,var(--auth-panel-to)_100%)]"
+    >
+      <div aria-hidden="true" className="auth-panel-grid pointer-events-none absolute inset-0" />
+
       <div className="relative z-10 flex h-full w-full flex-col p-10 lg:p-14 xl:p-16">
-        <div className="flex max-w-[560px] flex-col gap-4">
-          <h2 className="text-[32px] font-semibold leading-[1.05] tracking-tight text-primary-foreground lg:text-[40px]">
+        <span className="inline-flex w-fit items-center rounded-full border border-auth-panel-node-border bg-auth-panel-node-bg px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-auth-foreground">
+          Engineering assurance · Continuous traceability
+        </span>
+
+        <div className="mt-5 flex max-w-[520px] flex-col gap-3">
+          <h2 className="text-[32px] font-semibold leading-[1.1] tracking-tight text-auth-foreground lg:text-[38px]">
             Regulation, inside the engineering loop.
           </h2>
-          <p className="max-w-[460px] text-sm leading-relaxed text-primary-foreground/75">
+          <p className="max-w-[440px] text-sm leading-relaxed text-auth-foreground/70">
             Connect product revisions, measurements, evidence and engineering decisions in one
             traceable investigation record.
           </p>
         </div>
 
-        {/* The trace chain — an SVG connecting path plus 4 absolutely
-            positioned node chips, laid out over a fixed-aspect box so
-            both scale together. */}
-        <div className="relative mt-16 h-[190px] w-full max-w-[640px]" aria-hidden="true">
-          <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 700 220" fill="none">
+        {/* The trace diagram — a curved connector drawn behind 4
+            centre-anchored node chips. */}
+        <div className="relative mt-14 h-[220px] w-full max-w-[720px]" aria-hidden="true">
+          <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 800 260" fill="none">
             <path
-              d="M40 128 C140 128 140 40 240 40 S340 132 440 132 S560 48 650 48"
-              stroke="var(--primary-foreground)"
-              strokeOpacity="0.9"
+              d="M72 203 C160 203 216 57 304 57 S456 203 544 203 S656 57 728 57"
+              stroke="var(--auth-panel-line)"
+              strokeOpacity="0.85"
               strokeWidth="2"
               strokeDasharray="7 8"
               className="auth-trace-path"
             />
-            <path
-              d="M40 128 C140 128 140 40 240 40 S340 132 440 132 S560 48 650 48"
-              stroke="var(--primary-foreground)"
-              strokeOpacity="0.3"
-              strokeWidth="8"
-              className="auth-trace-path-glow"
-            />
-            <circle r="5" fill="var(--primary-foreground)" className="auth-trace-particle">
-              <animateMotion
-                dur="7s"
-                repeatCount="indefinite"
-                path="M40 128 C140 128 140 40 240 40 S340 132 440 132 S560 48 650 48"
+            {GLOW_WAYPOINTS.map((point) => (
+              <circle
+                key={`${point.cx}-${point.cy}`}
+                cx={point.cx}
+                cy={point.cy}
+                r="4"
+                fill="var(--auth-panel-line)"
+                className="auth-trace-glow"
               />
-            </circle>
+            ))}
           </svg>
 
-          {TRACE_NODES.map((node, i) => (
+          {TRACE_NODES.map((node) => (
             <div
               key={node.label}
-              className={`auth-trace-node absolute flex min-w-[108px] flex-col gap-0.5 rounded-2xl border border-primary-foreground/25 bg-primary-foreground/10 px-3.5 py-2.5 ${node.style}`}
-              style={{ animationDelay: `${-i * 0.8}s` }}
+              className="absolute flex min-w-[112px] -translate-x-1/2 -translate-y-1/2 flex-col gap-0.5 rounded-2xl border border-auth-panel-node-border bg-auth-panel-node-bg px-3.5 py-2.5 backdrop-blur-[2px]"
+              style={{ left: `${node.left}%`, top: `${node.top}%` }}
             >
-              <span className="text-[10px] font-medium text-primary-foreground/50">{node.index}</span>
-              <span className="text-[10px] uppercase tracking-[0.12em] text-primary-foreground/60">
-                {node.label}
-              </span>
-              <span className="text-[13px] font-semibold text-primary-foreground">{node.value}</span>
+              <span className="text-[10px] font-medium text-auth-foreground/55">{node.index}</span>
+              <span className="text-[10px] uppercase tracking-[0.12em] text-auth-foreground/70">{node.label}</span>
+              <span className="text-[13px] font-semibold text-auth-foreground">{node.value}</span>
             </div>
           ))}
         </div>
@@ -127,13 +130,13 @@ export function AuthMarketingPanel() {
           {STATUS_ROWS.map((row) => (
             <div
               key={row.text}
-              className="flex items-center gap-3 rounded-xl border border-primary-foreground/15 bg-primary-foreground/10 px-4 py-3"
+              className="flex items-center gap-3 rounded-xl border border-auth-panel-row-border bg-auth-panel-row-bg px-4 py-3"
             >
-              <span
-                className={`h-2 w-2 shrink-0 rounded-full ${row.dot === "success" ? "bg-success" : "bg-primary-foreground/40"}`}
-                aria-hidden="true"
-              />
-              <span className="text-[13px] font-medium text-primary-foreground/90">{row.text}</span>
+              <span className="h-2 w-2 shrink-0 rounded-full bg-success" aria-hidden="true" />
+              <span className="flex-1 text-[13px] font-medium text-auth-panel-line/90">{row.text}</span>
+              <span className="shrink-0 rounded-full border border-auth-panel-row-border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-auth-panel-line/80">
+                Verified
+              </span>
             </div>
           ))}
         </div>

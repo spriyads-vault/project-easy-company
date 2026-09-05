@@ -95,4 +95,23 @@ describe("AuthShell", () => {
     );
     expect(container.textContent).not.toMatch(/approved/i);
   });
+
+  it("shows the marketing panel's pill badge", () => {
+    render(
+      <AuthShell mode="sign-in" next="/investigations">
+        <div>form content</div>
+      </AuthShell>,
+    );
+    expect(screen.getByText(/engineering assurance/i)).toBeInTheDocument();
+    expect(screen.getByText(/continuous traceability/i)).toBeInTheDocument();
+  });
+
+  it("renders no theme toggle — these pages are light only (UX-13)", () => {
+    render(
+      <AuthShell mode="sign-in" next="/investigations">
+        <div>form content</div>
+      </AuthShell>,
+    );
+    expect(screen.queryByRole("button", { name: /theme/i })).not.toBeInTheDocument();
+  });
 });

@@ -261,6 +261,25 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
+  /* UX-13: /login and /signup's frozen light-only colours — see the
+     :root comment near .auth-panel-grid. Registering these as Tailwind
+     colors gets the usual bg/text/border/from/via/to utilities for
+     free, same as every other token here. */
+  --color-auth-bg: var(--auth-bg);
+  --color-auth-foreground: var(--auth-foreground);
+  --color-auth-muted: var(--auth-muted);
+  --color-auth-border: var(--auth-border);
+  --color-auth-tile-bg: var(--auth-tile-bg);
+  --color-auth-primary: var(--auth-primary);
+  --color-auth-panel-from: var(--auth-panel-from);
+  --color-auth-panel-via: var(--auth-panel-via);
+  --color-auth-panel-to: var(--auth-panel-to);
+  --color-auth-panel-line: var(--auth-panel-line);
+  --color-auth-panel-node-bg: var(--auth-panel-node-bg);
+  --color-auth-panel-node-border: var(--auth-panel-node-border);
+  --color-auth-panel-row-bg: var(--auth-panel-row-bg);
+  --color-auth-panel-row-border: var(--auth-panel-row-border);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -370,44 +389,77 @@ body {
   }
 }
 
-/* UX-12: the auth marketing panel's trace-chain visualization (see
-   src/lib/design/auth-marketing-panel.tsx) — a one-off decorative
-   texture for that panel only, not a shared pattern (same "deliberate,
-   not reused elsewhere" rule as .crado-canvas-grid above). Follows the
-   same prefers-reduced-motion gating convention as the block above:
-   nothing here animates unless the media query matches, so a reduced-
-   motion visitor simply sees the chain at rest. */
+/* UX-13: the auth marketing panel's connector curve — a dashed path
+   plus two small glow waypoints, all decorative (see auth-marketing-
+   panel.tsx). Same prefers-reduced-motion gating convention as the
+   block above: nothing here animates unless the media query matches. */
 @media (prefers-reduced-motion: no-preference) {
-  .auth-trace-node {
-    animation: auth-trace-node-breathe 4s ease-in-out infinite;
-  }
   .auth-trace-path {
-    animation: auth-trace-dash 14s linear infinite;
+    animation: auth-trace-dash 16s linear infinite;
   }
-  .auth-trace-path-glow {
-    animation: auth-trace-glow 3s ease-in-out infinite;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .auth-trace-particle {
-    display: none;
+  .auth-trace-glow {
+    animation: auth-trace-pulse 3s ease-in-out infinite;
   }
 }
 
-@keyframes auth-trace-node-breathe {
-  50% {
-    transform: translateY(-3px);
-  }
-}
 @keyframes auth-trace-dash {
   to {
-    stroke-dashoffset: -240;
+    stroke-dashoffset: -280;
   }
 }
-@keyframes auth-trace-glow {
+@keyframes auth-trace-pulse {
   50% {
-    opacity: 0.6;
+    opacity: 0.4;
   }
+}
+
+/* UX-13: /login and /signup are light-only by explicit product
+   decision — not "light by default", genuinely unaffected by the
+   visitor's OS preference or a stored dark-mode choice, unlike every
+   other page in this app. So every colour these two pages use is
+   frozen here (defined once, in bare :root, never redefined in the
+   dark blocks above) instead of read from the theme-reactive
+   --background/--foreground/--primary/etc. — referencing those would
+   re-introduce the dark variant these pages are deliberately not
+   getting. Values are light theme's own numbers, not a new palette:
+   #ffffff/#101828/#667085/#e7e3db/#f1efe9/#4f46e5 above are exactly
+   --card/--foreground/--muted-foreground/--border/--secondary/
+   --primary's own light-theme values.
+   The panel gradient/node/row tokens are new surfaces the light theme
+   itself has no equivalent for (there's no "pale-blue marketing panel"
+   token elsewhere in the app) — mixed from that same #4f46e5 toward
+   white at increasing strength for the diagonal light-to-deep gradient,
+   not a new hue. */
+:root {
+  --auth-bg: #ffffff;
+  --auth-foreground: #101828;
+  --auth-muted: #667085;
+  --auth-border: #e7e3db;
+  --auth-tile-bg: #f1efe9;
+  --auth-primary: #4f46e5;
+
+  --auth-panel-from: color-mix(in srgb, #4f46e5 4%, white);
+  --auth-panel-via: color-mix(in srgb, #4f46e5 32%, white);
+  --auth-panel-to: color-mix(in srgb, #4f46e5 56%, white);
+  --auth-panel-grid-line: rgba(255, 255, 255, 0.35);
+  --auth-panel-line: #ffffff;
+  --auth-panel-node-bg: rgba(255, 255, 255, 0.32);
+  --auth-panel-node-border: rgba(255, 255, 255, 0.5);
+  --auth-panel-row-bg: rgba(255, 255, 255, 0.14);
+  --auth-panel-row-border: rgba(255, 255, 255, 0.24);
+}
+
+/* The panel's diagonal grid texture — a flat 2D pattern (no 3D
+   transform, no backdrop-filter): an earlier isometric attempt
+   combined a perspective transform with backdrop-blur and a blend
+   mode, and live-verified made headless screenshot capture hang on
+   compositing cost. This is cheap: two crossed repeating-linear-
+   gradients, nothing else. One-off for this panel, same "deliberate,
+   not reused elsewhere" rule as .crado-canvas-grid above. */
+.auth-panel-grid {
+  background-image:
+    repeating-linear-gradient(45deg, var(--auth-panel-grid-line) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(-45deg, var(--auth-panel-grid-line) 0 1px, transparent 1px 32px);
 }
 
 /* @xyflow/react ships its own base stylesheet import in the canvas
