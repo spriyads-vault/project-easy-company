@@ -1,15 +1,22 @@
-// FAILURE HEADER STRIP (App Redesign, Workstream C correction): replaces
-// measurement-panel.tsx's large rounded card in the Decision workbench —
-// a compact ~96px row of real stored measurement fields plus a small
-// fixed-size spectrum plot, not a card with a lot of empty space around
-// one number. Every value here is exactly what's in Postgres for this
-// case's current measurement (see MeasurementRow) — nothing derived from
-// the analysis run, and nothing shown here is invented (no fabricated
-// "selected limit" absolute dB value the schema doesn't store; "Limit"
-// shows the real limit-line name, same field measurement-panel.tsx used).
+// FAILURE SUMMARY (UX-07, answer-first Decision layout): one prose
+// sentence, not a stat grid — "200 MHz measured 7.4 dB above the
+// selected limit, with Wi-Fi and display active." plus a second line
+// carrying test type, revision, and when it was measured. Every value
+// here is exactly what's in Postgres for this case's current measurement
+// (see MeasurementRow) — nothing derived from the analysis run, nothing
+// invented (no fabricated absolute-dB "selected limit" value the schema
+// doesn't store; the limit line shown is the real stored name).
+//
+// UX-07 removed the spectrum plot that used to live here: only a single
+// peak and a limit-line name are stored — there is no real trace to
+// draw, and at a legible size the plot would occupy prime space to
+// restate two numbers this sentence already gives. The same
+// SpectrumChart component now renders, full size, inside the Inspector's
+// measurement detail (context-rail.tsx) instead — the one place a reader
+// asked to see it, not the one every page load shows an illegible
+// thumbnail of it.
 import Link from "next/link";
 import type { MeasurementRow } from "@/lib/cases/queries";
-import { SpectrumChart } from "./spectrum-chart";
 import { focusRing, text } from "./theme";
 
 interface FailureStripProps {
@@ -18,29 +25,11 @@ interface FailureStripProps {
   onSelect?: () => void;
 }
 
-function StatCell({
-  label,
-  value,
-  mono = false,
-  tone,
-}: {
-  label: string;
-  value: React.ReactNode;
-  mono?: boolean;
-  tone?: "warning" | "success";
-}) {
-  return (
-    <div className="flex min-w-0 flex-col justify-center gap-0.5 border-r border-border px-4 py-2 first:pl-0">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span
-        className={`truncate text-sm font-medium ${mono ? text.mono : ""} ${
-          tone === "warning" ? "text-warning" : tone === "success" ? "text-success" : "text-foreground"
-        }`}
-      >
-        {value}
-      </span>
-    </div>
-  );
+function formatMeasuredAt(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 export function FailureStrip({ caseId, measurement, onSelect }: FailureStripProps) {
@@ -57,37 +46,38 @@ export function FailureStrip({ caseId, measurement, onSelect }: FailureStripProp
     );
   }
 
+  const marginPhrase =
+    peak.marginDb > 0
+      ? `${peak.marginDb} dB above the selected limit`
+      : peak.marginDb < 0
+        ? `${Math.abs(peak.marginDb)} dB below the selected limit`
+        : "at the selected limit";
+
   return (
-    <div className="flex items-stretch justify-between gap-4 border-b border-border px-4 py-2.5">
-      <div className="flex min-w-0 flex-1 flex-wrap items-stretch">
-        <StatCell label="Peak frequency" value={`${peak.frequencyMhz} MHz`} mono />
-        <StatCell
-          label="Margin"
-          value={`${peak.marginDb > 0 ? "+" : ""}${peak.marginDb} dB`}
-          mono
-          tone={peak.marginDb > 0 ? "warning" : "success"}
-        />
-        {peak.limitLine ? <StatCell label="Limit" value={peak.limitLine} mono /> : null}
-        {measurement.operatingMode ? <StatCell label="Operating mode" value={measurement.operatingMode} /> : null}
-        <StatCell label="Revision" value={measurement.revisionLabel} mono />
+    <div className="flex flex-col gap-1 border-b border-border px-4 py-3.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <p className="text-base leading-snug text-foreground">
+          <span className={`${text.mono} font-semibold`}>{peak.frequencyMhz} MHz</span> measured {marginPhrase}
+          {measurement.operatingMode ? `, with ${measurement.operatingMode.toLowerCase()}` : ""}.
+        </p>
+        {onSelect ? (
+          <button
+            type="button"
+            onClick={onSelect}
+            className={`shrink-0 text-xs ${text.muted} hover:text-foreground ${focusRing}`}
+          >
+            Details
+          </button>
+        ) : null}
       </div>
-      <div className="flex shrink-0 items-center gap-3">
-        <SpectrumChart frequencyMhz={peak.frequencyMhz} marginDb={peak.marginDb} className="h-12 w-36" />
-        <div className="flex flex-col items-end gap-1 self-center">
-          {onSelect ? (
-            <button
-              type="button"
-              onClick={onSelect}
-              className={`text-xs ${text.muted} hover:text-foreground ${focusRing}`}
-            >
-              Details
-            </button>
-          ) : null}
-          <Link href={`/cases/${caseId}`} className={`text-xs ${text.muted} hover:text-foreground hover:underline`}>
-            Add measurement
-          </Link>
-        </div>
-      </div>
+      <p className={`text-xs ${text.muted}`}>
+        Radiated emissions · {measurement.revisionLabel}
+        {peak.limitLine ? ` · ${peak.limitLine}` : ""} · measured {formatMeasuredAt(measurement.createdAt)}
+        {" · "}
+        <Link href={`/cases/${caseId}`} className="hover:text-foreground hover:underline">
+          Add measurement
+        </Link>
+      </p>
     </div>
   );
 }

@@ -25,6 +25,7 @@ import type { EvidenceCategory } from "@/lib/domain/schema";
 import type { EvidenceCitation } from "@/lib/hypotheses/schema";
 import { describeDocumentType } from "@/lib/documents/describe-document-type";
 import { HYPOTHESIS_UPDATE_LABEL, HYPOTHESIS_UPDATE_STYLE } from "./describe-hypothesis-update";
+import { SpectrumChart } from "./spectrum-chart";
 import { evidence, focusRing, text } from "./theme";
 
 export type RailSelection =
@@ -111,6 +112,12 @@ function MeasurementDetail({ measurement }: { measurement: MeasurementRow | null
   }
   return (
     <div className="flex flex-col gap-4">
+      {/* UX-07: the spectrum plot's one real home — retired from the
+       * Decision view's failure summary (failure-strip.tsx), which only
+       * has room for an illegible thumbnail restating numbers the prose
+       * sentence already gives. Full width here, where a reader
+       * deliberately asked to see it. */}
+      <SpectrumChart frequencyMhz={peak.frequencyMhz} marginDb={peak.marginDb} className="h-24 w-full" />
       <RailField label="Revision" value={measurement.revisionLabel} />
       <RailField
         label="Frequency"
