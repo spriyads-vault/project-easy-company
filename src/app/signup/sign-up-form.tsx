@@ -14,8 +14,8 @@ import { signUp, type AuthFormState } from "@/lib/auth/actions";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/lib/design/password-input";
 import { AuthBanner } from "@/lib/design/auth-banner";
-import { focusRing } from "@/lib/design/tokens";
 import {
+  authFocusRing,
   authHeading,
   authHelperText,
   authInput,
@@ -93,7 +93,7 @@ export function SignUpForm({ next }: SignUpFormProps) {
 
           {state.error ? <AuthBanner tone="error">{state.error}</AuthBanner> : null}
 
-          <button type="submit" disabled={pending} className={`mt-1 ${authPrimaryButton} ${focusRing}`}>
+          <button type="submit" disabled={pending} className={`mt-1 ${authPrimaryButton} ${authFocusRing}`}>
             {pending ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {pending ? "Creating account…" : "Create account"}
           </button>
