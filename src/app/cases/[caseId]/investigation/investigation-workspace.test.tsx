@@ -199,7 +199,7 @@ describe("InvestigationWorkspace — streaming", () => {
     // UX-05: Decision is the default tab now — switch to Map so this
     // test's assertions still exercise the React Flow canvas's own
     // (compact) node rendering, unchanged from before.
-    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    fireEvent.click(screen.getByRole("button", { name: "View as map" }));
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
     // Immediately after the click, before the stream has delivered
@@ -234,7 +234,7 @@ describe("InvestigationWorkspace — streaming", () => {
     render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
     // UX-05: Decision is the default tab now — switch to Map for this
     // canvas-node-rendering-specific assertion.
-    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    fireEvent.click(screen.getByRole("button", { name: "View as map" }));
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
     await waitFor(() => {
@@ -255,25 +255,25 @@ describe("InvestigationWorkspace — streaming", () => {
     // appears must have come from the live SSE event, not the initial prop.
     render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} timelineEntries={[]} />);
 
-    // Timeline is its own tab (UX-02); an empty timeline renders nothing at
-    // all (see InvestigationTimeline's own empty-state guard).
-    fireEvent.click(screen.getByRole("button", { name: "Timeline" }));
-    expect(screen.queryByText("Investigation timeline")).not.toBeInTheDocument();
+    // UX-07: History is a closed-by-default disclosure on the Decision
+    // page, not its own tab — and product truth means it doesn't render
+    // at all when there's genuinely nothing on the timeline yet (see
+    // decision-view.tsx's `timeline.length > 0` gate), a stronger honest
+    // guarantee than the old "tab exists but shows nothing inside" state.
+    expect(screen.queryByText("History")).not.toBeInTheDocument();
 
-    // The run button also lives on the Decision tab (UX-05) — this test
-    // deliberately exercises it via Map to keep covering that tab's own
-    // InvestigationControls instance.
-    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    // The run button lives in the header, reachable regardless of which
+    // view is showing — Decision is already the default, so no tab
+    // switch is needed to reach it.
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /run again/i })).toBeInTheDocument();
     });
 
-    // The live-updated timeline state is already there without a refresh —
-    // switching to the Timeline tab just reveals it.
-    fireEvent.click(screen.getByRole("button", { name: "Timeline" }));
-    expect(screen.getByText("Investigation timeline")).toBeInTheDocument();
+    // The live-updated timeline state is already there without a refresh
+    // — opening History just reveals it.
+    fireEvent.click(screen.getByText("History"));
     const timelineSection = screen.getByText("Investigation timeline").closest("section")!;
     expect(within(timelineSection).getByText("Hypothesis")).toBeInTheDocument();
     expect(
@@ -300,7 +300,7 @@ describe("InvestigationWorkspace — streaming", () => {
     render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
     // UX-05: Decision is the default tab now — switch to Map for this
     // canvas-node-rendering-specific assertion.
-    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    fireEvent.click(screen.getByRole("button", { name: "View as map" }));
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
     await waitFor(() => {
@@ -381,7 +381,7 @@ describe("InvestigationWorkspace — streaming", () => {
     render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
     // UX-05: Decision is the default tab now — switch to Map so the React
     // Flow canvas is actually mounted for this test.
-    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    fireEvent.click(screen.getByRole("button", { name: "View as map" }));
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
     // The Measurement node comes from the `measurement` prop, not the
@@ -436,7 +436,7 @@ describe("InvestigationWorkspace — refresh reconstruction", () => {
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
     // UX-05: Decision is the default tab now — switch to Map for this
     // canvas-node-rendering-specific assertion.
-    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    fireEvent.click(screen.getByRole("button", { name: "View as map" }));
 
     expect(screen.getByText("40 × 5 = 200")).toBeInTheDocument();
     expect(screen.getByText("5th harmonic of 40 MHz system clock")).toBeInTheDocument();
@@ -497,17 +497,27 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
     render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
     fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
 
+    // While the run is active, the live Trace pane (a dedicated resizable
+    // pane, not part of Decision's own content) shows progress directly.
     await waitFor(() => {
-      expect(screen.getByText("Investigation trace")).toBeInTheDocument();
+      expect(screen.getByText(/Searched engineering documents/)).toBeInTheDocument();
     });
-    await waitFor(() => {
-      expect(screen.getByText("What Crado handled")).toBeInTheDocument();
-    });
-    expect(screen.getByText(/Searched engineering documents/)).toBeInTheDocument();
 
-    // Sources are their own tab (UX-02) — not shown on the default
-    // Investigation tab.
-    fireEvent.click(screen.getByRole("button", { name: "Sources" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /run again/i })).toBeInTheDocument();
+    });
+
+    // UX-07: once the run finishes, the Trace pane folds into the "What
+    // Crado checked" disclosure on the Decision page (closed by default)
+    // — its content (including the truthful agent.completed metrics) is
+    // present, not shown up front.
+    expect(screen.getByText("What Crado handled")).not.toBeVisible();
+    fireEvent.click(screen.getByText(/What Crado checked/));
+    expect(screen.getByText("What Crado handled")).toBeVisible();
+
+    // Sources is its own closed-by-default disclosure (UX-07) — not shown
+    // on first paint either.
+    fireEvent.click(screen.getByText("Sources"));
     expect(screen.getByText("Sources used")).toBeInTheDocument();
   });
 
@@ -528,12 +538,18 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
 
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
 
-    expect(screen.getByText("Investigation trace")).toBeInTheDocument();
-    expect(screen.getByText("What Crado handled")).toBeInTheDocument();
+    // UX-07: this run is already complete on first render (reconstructed
+    // from persisted events, not streamed) — the trace and its metrics
+    // are real and present, folded into the closed-by-default "What
+    // Crado checked" disclosure rather than an always-visible pane.
+    expect(screen.getByText("Investigation trace")).not.toBeVisible();
+    expect(screen.getByText("What Crado handled")).not.toBeVisible();
+    fireEvent.click(screen.getByText(/What Crado checked/));
+    expect(screen.getByText("Investigation trace")).toBeVisible();
+    expect(screen.getByText("What Crado handled")).toBeVisible();
 
-    // Sources are their own tab (UX-02) — not shown on the default
-    // Investigation tab.
-    fireEvent.click(screen.getByRole("button", { name: "Sources" }));
+    // Sources is its own closed-by-default disclosure (UX-07).
+    fireEvent.click(screen.getByText("Sources"));
     expect(screen.getByText("EMC-Test-04.md")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -553,7 +569,7 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
     // UX-05: Decision is the default tab now — switch to Map, where the
     // hypothesis node's own click-to-select behavior (not just its
     // "Details" button) lives.
-    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    fireEvent.click(screen.getByRole("button", { name: "View as map" }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     // UX-04: the hypothesis node itself only shows a compact summary —
@@ -585,7 +601,7 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
     ]);
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Sources" }));
+    fireEvent.click(screen.getByText("Sources"));
     expect(
       screen.getByText("No document passages were used as evidence in this investigation."),
     ).toBeInTheDocument();
@@ -604,7 +620,7 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
     expect(screen.queryByText("Sources used")).not.toBeInTheDocument();
   });
 
-  it("keeps the Investigation trace pane visible and unduplicated across every tab (App Redesign: persistent left pane, not buried in Decision's scroll)", () => {
+  it("never duplicates the trace across the Map toggle or the Evidence/History/Sources disclosures (UX-07: same guarantee as the old persistent-across-every-tab pane, different presentation)", () => {
     const persistedState = reconstructFromPersistedEvents([
       runStarted(),
       measurementLoaded(),
@@ -617,20 +633,81 @@ describe("InvestigationWorkspace — Investigation Agent (MVP-10C)", () => {
     ]);
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
 
-    // Default tab (Decision): present, exactly once.
+    // The run is already complete — the trace lives inside "What Crado
+    // checked", present exactly once (not visible until opened).
+    expect(screen.getAllByText("Investigation trace")).toHaveLength(1);
+    expect(screen.getByText("Investigation trace")).not.toBeVisible();
+
+    // Toggling to Map replaces Decision's own content (including its
+    // disclosures) with the graph — the trace isn't duplicated there
+    // (Map shows the same reasoning as a graph, not a second trace copy)
+    // — and toggling back brings the exact same single copy back,
+    // undisturbed, never a second one appearing alongside it.
+    fireEvent.click(screen.getByRole("button", { name: "View as map" }));
+    expect(screen.queryByText("Investigation trace")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "← Back to decision" }));
     expect(screen.getAllByText("Investigation trace")).toHaveLength(1);
 
-    for (const tabName of ["Map", "Evidence", "Timeline", "Sources"]) {
-      fireEvent.click(screen.getByRole("button", { name: tabName }));
-      expect(screen.getAllByText("Investigation trace")).toHaveLength(1);
-    }
+    // Opening the other disclosures (Evidence, then Sources) doesn't
+    // duplicate or hide the trace either.
+    fireEvent.click(screen.getByText("Evidence", { selector: "summary" }));
+    fireEvent.click(screen.getByText("Sources", { selector: "summary" }));
+    expect(screen.getAllByText("Investigation trace")).toHaveLength(1);
+
+    // Opening "What Crado checked" itself reveals the same single copy,
+    // now visible.
+    fireEvent.click(screen.getByText(/What Crado checked/));
+    expect(screen.getAllByText("Investigation trace")).toHaveLength(1);
+    expect(screen.getByText("Investigation trace")).toBeVisible();
   });
 
-  it("shows a truthful empty state in the trace pane before any run has started, never a blank pane", () => {
+  it("shows the trace live in its own pane only while a run is active, then folds it into 'What Crado checked' once it finishes — never both, never a leftover live pane", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        buildSseResponse(
+          [runStarted(), measurementLoaded(), correlationFound(), agentStarted(), agentToolCompleted(), agentCompleted(), runCompleted()],
+          10,
+        ),
+      ),
+    );
     render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
+
+    // Idle: no trace pane, nothing to check yet — checked synchronously,
+    // before any SSE event can possibly have arrived (buildSseResponse
+    // delays even its first enqueue), the same non-racy pattern the
+    // "updates panels progressively" test above already relies on for
+    // its own immediately-after-click assertions.
+    expect(screen.queryByText("Investigation trace")).not.toBeInTheDocument();
+    expect(screen.queryByText(/What Crado checked/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /run again/i })).toBeInTheDocument();
+    });
+
+    // Complete: exactly one copy, now folded into the closed-by-default
+    // disclosure — never a leftover live pane still mounted alongside it.
+    // (Real-timer event delays make a reliable "still mid-run" checkpoint
+    // impractical here without flaking — that half of the guarantee is
+    // covered instead by "shows agent activity progressively..." above,
+    // which already waits on live Trace-pane content appearing while a
+    // run streams in.)
+    expect(screen.getAllByText("Investigation trace")).toHaveLength(1);
+    expect(screen.getByText("Investigation trace")).not.toBeVisible();
+    expect(screen.getByText(/What Crado checked/)).toBeInTheDocument();
+  });
+
+  it("renders no trace-related pane or section at all before any run has started (UX-07: stronger than the old placeholder-text pane — the 2-pane idle layout has nothing to show, so it shows nothing, rather than an empty pane implying there's something to look at)", () => {
+    render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
+    expect(screen.queryByText("Investigation trace")).not.toBeInTheDocument();
+    expect(screen.queryByText(/What Crado checked/)).not.toBeInTheDocument();
+    // The old placeholder copy is retired along with the always-rendered
+    // Trace pane it lived in — there's no pane left for it to sit in.
     expect(
-      screen.getByText("No trace yet. Run an investigation to see Crado’s live agent activity here."),
-    ).toBeInTheDocument();
+      screen.queryByText("No trace yet. Run an investigation to see Crado’s live agent activity here."),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -674,7 +751,7 @@ describe("InvestigationWorkspace — responsive breakpoints (UX-04 visual correc
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
     // UX-05: Decision is the default tab now — switch to Map, where the
     // mobile stack (this breakpoint's canvas substitute) lives.
-    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    fireEvent.click(screen.getByRole("button", { name: "View as map" }));
 
     expect(screen.getByRole("list", { name: "Investigation, in order" })).toBeInTheDocument();
     expect(screen.getByText("5th harmonic of 40 MHz system clock")).toBeInTheDocument();
@@ -694,7 +771,7 @@ describe("InvestigationWorkspace — responsive breakpoints (UX-04 visual correc
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
     // UX-05: Decision is the default tab now — switch to Map, where the
     // mobile stack (this breakpoint's canvas substitute) lives.
-    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    fireEvent.click(screen.getByRole("button", { name: "View as map" }));
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("5th harmonic of 40 MHz system clock"));
@@ -722,7 +799,7 @@ describe("InvestigationWorkspace — responsive breakpoints (UX-04 visual correc
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
     // UX-05: Decision is the default tab now — switch to Map, where the
     // canvas lives at this breakpoint.
-    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    fireEvent.click(screen.getByRole("button", { name: "View as map" }));
 
     // The canvas, identified by React Flow's own application role — not
     // the mobile stack's plain <ol>.
@@ -748,7 +825,7 @@ describe("InvestigationWorkspace — responsive breakpoints (UX-04 visual correc
     render(<InvestigationWorkspace {...baseProps} initialState={persistedState} />);
     // UX-05: Decision is the default tab now — switch to Map, where the
     // canvas + persistent Inspector live at this breakpoint.
-    fireEvent.click(screen.getByRole("button", { name: "Map" }));
+    fireEvent.click(screen.getByRole("button", { name: "View as map" }));
 
     expect(screen.getByRole("application")).toBeInTheDocument();
     // App Redesign: the Inspector starts collapsed to a narrow rail, not a

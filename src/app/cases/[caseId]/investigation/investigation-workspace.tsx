@@ -1,19 +1,23 @@
 "use client";
 
-// CLIENT ORCHESTRATOR for the investigation result page (App Redesign,
-// Workstream C correction): a full-height operational workbench — a
-// persistent Trace pane, a flat Decision workbench, and a contextual
-// Inspector, framed by a compact case header — not a connected artifact
-// canvas with a floating composer and stacked cards. Still owns the one
-// piece of client state (WorkspaceState) and the SSE consumption; every
-// child below is presentational. Not a chat UI — there is no message
-// list, no typing indicator, no chat bubble; POST /api/analysis-runs
-// returns a typed event stream and this folds each event into the same
-// state a page refresh would reconstruct from Postgres (see
-// src/lib/investigation/reconstruct.ts). Tab switching and artifact
-// selection are both local state only — never a navigation/fetch — so
-// the live run stays connected regardless of which view is showing or
-// what's selected in the inspector.
+// CLIENT ORCHESTRATOR for the investigation result page (UX-07:
+// answer-first Decision layout): Decision is the page — no five-tab
+// switcher any more (see docs/PROGRESS.md's UX-07 entry for why the tab
+// count dropped to one page plus a Map toggle). A conditionally-3-or-2-
+// pane resizable workbench: the Trace pane exists only while a run is
+// genuinely active (it folds into Decision's own "What Crado checked"
+// disclosure once idle — see decision-view.tsx), the Main column (Decision
+// content or the Map canvas, toggled locally) always carries the docked
+// composer at its own bottom, and the Inspector stays a contextual rail.
+// Still owns the one piece of client state (WorkspaceState) and the SSE
+// consumption; every child below is presentational. Not a chat UI — there
+// is no message list, no typing indicator, no chat bubble; POST
+// /api/analysis-runs returns a typed event stream and this folds each
+// event into the same state a page refresh would reconstruct from
+// Postgres (see src/lib/investigation/reconstruct.ts). View toggling and
+// artifact selection are both local state only — never a
+// navigation/fetch — so the live run stays connected regardless of what's
+// showing or selected.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
 import type { MeasurementRow } from "@/lib/cases/queries";
@@ -33,21 +37,14 @@ import type { MeasurementComparison } from "@/lib/measurements/compare-measureme
 import { InvestigationCanvas } from "./canvas/investigation-canvas";
 import { MobileInvestigationStack } from "./canvas/investigation-stack";
 import { DecisionView } from "./decision-view";
-import { NextActionBar } from "./next-action-bar";
-import { InvestigationTimeline } from "./investigation-timeline";
 import { InvestigationTracePanel } from "./investigation-trace-panel";
-import { AgentMetricsPanel } from "./agent-metrics-panel";
-import { SourcesPanel } from "./sources-panel";
 import { SourceDrawer } from "./source-drawer";
 import { TopBar } from "./top-bar";
 import { AgentStatusPill } from "./agent-status-pill";
 import { RunInvestigationButton } from "./run-investigation-button";
-import { ViewSwitcher, type InvestigationTab } from "./view-switcher";
 import { ContextRail, type RailSelection } from "./context-rail";
-import { EvidenceView } from "./evidence-view";
 import { CASE_COMPOSER_INPUT_ID, CaseComposer } from "./case-composer";
-import { deriveSourcesUsed } from "./derive-sources-used";
-import { canvasBackground, surface, text } from "./theme";
+import { surface, text } from "./theme";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
@@ -59,7 +56,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 //     Sheet substitutes for the Inspector and Trace renders inline.
 //     Between 768 and 1024 ("laptop/tablet"), the canvas renders
 //     full-width with pan/zoom; at 1024+ ("large desktop") the workbench
-//     sits inside the real three-pane resizable split.
+//     sits inside the real three-or-two-pane resizable split.
 const CANVAS_QUERY = "(max-width: 767px)";
 const RAIL_QUERY = "(max-width: 1023px)";
 
@@ -127,6 +124,9 @@ interface OpenCitationState {
   hypothesisTitle: string;
 }
 
+/** UX-07: Decision is the page; Map is a local toggle, not a peer tab. */
+type MainView = "decision" | "map";
+
 interface InvestigationWorkspaceProps {
   caseId: string;
   productId: string;
@@ -176,8 +176,8 @@ export function InvestigationWorkspace({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [openCitation, setOpenCitation] = useState<OpenCitationState | null>(null);
   const [selection, setSelection] = useState<RailSelection>(null);
-  // UX-05: Decision is the default landing tab — see view-switcher.tsx.
-  const [activeTab, setActiveTab] = useState<InvestigationTab>("decision");
+  // UX-07: Decision/Map, not a five-way tab — see MainView above.
+  const [mainView, setMainView] = useState<MainView>("decision");
   // MVP-11 timeline live-update fix: local state seeded from the
   // server-fetched timeline, appended to directly inside the SSE loop below
   // as hypothesis.created events arrive — never via a useEffect watching
@@ -194,21 +194,21 @@ export function InvestigationWorkspace({
   // Desktop Inspector: react-resizable-panels drives the panel's actual
   // collapsed/expanded size; `railCollapsed` mirrors that (via the panel's
   // own onCollapse/onExpand callbacks) so ContextRail's button renders the
-  // right state whichever side triggered the change. App Redesign
-  // correction: the Inspector now starts COLLAPSED (a narrow rail, not a
-  // large empty "nothing selected" panel) and expands only when a real
-  // selection happens — see the selection handlers below, each of which
-  // calls railPanelRef.current?.expand().
+  // right state whichever side triggered the change. The Inspector starts
+  // COLLAPSED (a narrow rail, not a large empty "nothing selected" panel)
+  // and expands only when a real selection happens — see the selection
+  // handlers below, each of which calls railPanelRef.current?.expand().
   const railPanelRef = useRef<ImperativePanelHandle>(null);
   const [railCollapsed, setRailCollapsed] = useState(true);
   const belowCanvasBreakpoint = useMediaQuery(CANVAS_QUERY);
   const belowRailBreakpoint = useMediaQuery(RAIL_QUERY);
 
-  // App Redesign: a trace step, clicked, focuses the real category of
-  // table row it produced — see investigation-item-table.tsx's own
-  // comment on why this is a category-level, not a precise 1:1, link.
-  // Cleared automatically after a brief emphasis window, never a
-  // continuous pulse.
+  // UX-07: a trace step, clicked (only reachable while the live Trace pane
+  // is mounted, i.e. only during an active run), briefly highlights the
+  // real category of reasoning object it produced — see
+  // reasoning-section.tsx's own comment on why this is a category-level,
+  // not a precise 1:1, link. Cleared automatically after a brief emphasis
+  // window, never a continuous pulse.
   const [focusedCategory, setFocusedCategory] = useState<"deterministic" | "hypothesis" | null>(null);
   const focusClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(focusClearTimeoutRef.current), []);
@@ -256,10 +256,10 @@ export function InvestigationWorkspace({
   }
 
   /** Real, limited "selecting a trace step focuses the affected item"
-   * support (App Redesign) — routes on the step's own already-safe
-   * display label text, since the wire schema carries no structured link
-   * from a tool call to the specific hypothesis/correlation it produced.
-   * An honest category-level connection, not a fabricated precise one. */
+   * support — routes on the step's own already-safe display label text,
+   * since the wire schema carries no structured link from a tool call to
+   * the specific hypothesis/correlation it produced. An honest
+   * category-level connection, not a fabricated precise one. */
   function handleTraceStepSelect(label: string) {
     const lower = label.toLowerCase();
     if (lower.includes("measurement")) {
@@ -314,7 +314,7 @@ export function InvestigationWorkspace({
       ? "This measurement has no recorded peak yet."
       : null;
 
-  // UX-04: fire the run exactly once when the intake flow lands here with
+  // Fire the run exactly once when the intake flow lands here with
   // ?autorun=1 — and only for a genuinely fresh investigation
   // (state.status === "idle"). canRunAnalysis alone isn't a safe guard: it
   // is also true for a COMPLETED or FAILED run that's simply eligible for
@@ -344,10 +344,6 @@ export function InvestigationWorkspace({
     }
     runInFlightRef.current = true;
     setIsSubmitting(true);
-    // UX-05: no forced tab switch here any more — both Decision and Map
-    // now render live from the same WorkspaceState, so starting a run no
-    // longer needs to yank the engineer to a specific tab. Whichever tab
-    // they're already on (Decision by default) keeps updating in place.
 
     try {
       const response = await fetch("/api/analysis-runs", {
@@ -423,135 +419,98 @@ export function InvestigationWorkspace({
     }
   }
 
-  const sourcesUsedCount = deriveSourcesUsed(state.hypotheses).length;
   const busy = isSubmitting || state.status === "running";
+  const running = isRunActive(state.status);
   const leadingHypothesis = rankHypotheses(state.hypotheses)[0] ?? null;
   const lastEventTime = latestTimelineTimestamp(timeline);
 
   function handleRecordResult() {
-    setActiveTab("decision");
+    setMainView("decision");
     document.getElementById(CASE_COMPOSER_INPUT_ID)?.focus();
   }
 
-  // Shared by every responsive tier so the Evidence, Timeline, Sources and
-  // Decision bodies are written once — only the Investigation tab's canvas
-  // artifact (`canvas` param: the real React Flow canvas on desktop, the
-  // plain vertical stack on mobile) and whether the trace panel renders
-  // inline differ between callers. `includeTracePanel` is true for the
-  // mobile stack and tablet (no-persistent-rail) tiers, where Trace has
-  // nowhere else to live. It's false for the ≥1024px desktop tier, where
-  // Trace is hoisted into its own persistent pane instead of scrolling
-  // away inside the Decision content.
-  function renderTabContent(canvas: ReactNode, includeTracePanel: boolean): ReactNode {
-    return (
-      <div
-        className={`min-h-0 flex-1 overflow-y-auto ${activeTab === "decision" ? "" : "px-4 pb-8 pt-5 sm:px-6"} ${
-          activeTab === "investigation" ? canvasBackground : ""
-        }`}
-      >
-        {activeTab === "decision" ? (
-          <>
-            {includeTracePanel ? (
-              <div className="px-4 pt-4">
-                <InvestigationTracePanel
-                  activeTools={state.activeTools}
-                  completedActivity={state.agentActivity}
-                  active={state.agentActive}
-                  durationMs={state.agentMetrics?.totalDurationMs}
-                  defaultCollapsed={!state.agentActive && state.hypotheses.length > 0}
-                />
-              </div>
-            ) : null}
-            <DecisionView
-              caseId={caseId}
-              measurement={measurement}
-              state={state}
-              timeline={timeline}
-              selection={selection}
-              onSelectMeasurement={handleSelectMeasurement}
-              onSelectCorrelation={handleSelectCorrelation}
-              onSelectHypothesis={handleSelectHypothesis}
-              focusedCategory={focusedCategory}
-            />
-            {state.agentMetrics ? (
-              <AgentMetricsPanel
-                metrics={state.agentMetrics}
-                toolCallCount={state.agentActivity.length}
-                sourcesUsedCount={sourcesUsedCount}
-              />
-            ) : null}
-          </>
-        ) : null}
+  function handleToggleMap() {
+    setMainView((prev) => (prev === "decision" ? "map" : "decision"));
+  }
 
-        {activeTab === "investigation" ? (
-          <div className="mx-auto flex w-full max-w-[900px] flex-col gap-4">
-            {includeTracePanel ? (
+  // The one content region every breakpoint shares: Decision (the answer-
+  // first layout) or Map (the same underlying data as a graph) — a local
+  // toggle, never a navigation/fetch, so the live SSE connection above
+  // stays mounted and connected regardless of which is showing.
+  function renderMainView(canvas: ReactNode): ReactNode {
+    if (mainView === "map") {
+      return (
+        <div className="mx-auto flex w-full max-w-[900px] flex-col gap-3 p-4">
+          <button
+            type="button"
+            onClick={handleToggleMap}
+            className="self-start rounded-[7px] border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            ← Back to decision
+          </button>
+          {canvas}
+        </div>
+      );
+    }
+    return (
+      <DecisionView
+        caseId={caseId}
+        productId={productId}
+        revisionId={revisionId}
+        currentRevisionLabel={currentRevisionLabel}
+        measurement={measurement}
+        state={state}
+        timeline={timeline}
+        selection={selection}
+        leadingHypothesis={leadingHypothesis}
+        onSelectMeasurement={handleSelectMeasurement}
+        onSelectCorrelation={handleSelectCorrelation}
+        onSelectHypothesis={handleSelectHypothesis}
+        onOpenCitation={handleOpenCitation}
+        onToggleMap={handleToggleMap}
+        onRecordResult={handleRecordResult}
+        focusedCategory={focusedCategory}
+      />
+    );
+  }
+
+  /** The Main column: scrollable content (Decision or Map) plus the
+   * composer docked at the bottom of THIS column — never inside the Trace
+   * pane, so its position never moves whether or not a run is active
+   * (Trace mounts/unmounts independently of this column entirely). */
+  function renderMainColumn(canvas: ReactNode, includeInlineTrace: boolean): ReactNode {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <div className={`min-h-0 flex-1 overflow-y-auto ${mainView === "map" ? "" : ""}`}>
+          {includeInlineTrace && running ? (
+            <div className="px-4 pt-4">
               <InvestigationTracePanel
                 activeTools={state.activeTools}
                 completedActivity={state.agentActivity}
                 active={state.agentActive}
                 durationMs={state.agentMetrics?.totalDurationMs}
-                defaultCollapsed={!state.agentActive && state.hypotheses.length > 0}
+                defaultCollapsed={false}
               />
-            ) : null}
-            {canvas}
-            {state.agentMetrics ? (
-              <div className="mt-2">
-                <AgentMetricsPanel
-                  metrics={state.agentMetrics}
-                  toolCallCount={state.agentActivity.length}
-                  sourcesUsedCount={sourcesUsedCount}
-                />
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {activeTab === "evidence" ? (
-          <div className="mx-auto w-full max-w-[900px]">
-            <EvidenceView
-              hypotheses={state.hypotheses}
-              revisionLabel={currentRevisionLabel}
-              onOpenCitation={handleOpenCitation}
-              onSelectHypothesis={handleSelectHypothesis}
-            />
-          </div>
-        ) : null}
-
-        {activeTab === "timeline" ? (
-          <div className="mx-auto w-full max-w-[760px]">
-            <InvestigationTimeline entries={timeline} />
-          </div>
-        ) : null}
-
-        {activeTab === "sources" ? (
-          <div className="mx-auto w-full max-w-[900px]">
-            <SourcesPanel hypotheses={state.hypotheses} metrics={state.agentMetrics} />
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
-  // Wraps renderTabContent with the pinned next-action bar as a sibling
-  // OUTSIDE the scrollable region — App Redesign: "must remain visible
-  // while the item table scrolls." Only the Decision tab has one; every
-  // other tab's content fills the pane exactly as before.
-  function renderMainPane(canvas: ReactNode, includeTracePanel: boolean): ReactNode {
-    return (
-      <div className="flex h-full min-h-0 flex-col">
-        {renderTabContent(canvas, includeTracePanel)}
-        {activeTab === "decision" ? (
-          <NextActionBar
+            </div>
+          ) : null}
+          {renderMainView(canvas)}
+        </div>
+        <div className="shrink-0 border-t border-border bg-card p-3">
+          <CaseComposer
             caseId={caseId}
             productId={productId}
             revisionId={revisionId}
             currentRevisionLabel={currentRevisionLabel}
-            leading={leadingHypothesis}
-            showEngineeringChange={state.status !== "running" && state.hypotheses.length > 0}
-            onRecordResult={handleRecordResult}
+            measurement={measurement}
+            onMeasurementRecorded={handleMeasurementRecorded}
+            onObservationRecorded={handleObservationRecorded}
           />
-        ) : null}
+          {busy ? (
+            <p className={`mt-1.5 text-xs ${text.muted}`} role="status" aria-live="polite">
+              Crado is investigating — you can still add an observation while it works.
+            </p>
+          ) : null}
+        </div>
       </div>
     );
   }
@@ -562,7 +521,7 @@ export function InvestigationWorkspace({
         <TopBar
           caseId={caseId}
           backHref={`/cases/${caseId}`}
-          backLabel={`Radiated emissions — ${productName} ${currentRevisionLabel}`.trim()}
+          backLabel="Back to case"
           productName={productName}
           revisionLabel={currentRevisionLabel}
           caseTitle="Radiated emissions"
@@ -595,13 +554,6 @@ export function InvestigationWorkspace({
           }
         />
 
-        {/* Compact workspace toolbar (App Redesign: 40-44px, not a
-            floating segmented pill) — Decision/Map/Evidence/Timeline/
-            Sources, directly below the case header. */}
-        <div className="flex h-11 shrink-0 items-center border-b border-border bg-card px-4">
-          <ViewSwitcher activeTab={activeTab} onSelectTab={setActiveTab} />
-        </div>
-
         {/* Three responsive tiers, not one binary split reflowed by CSS
             alone: below `md` (768) the canvas itself stops being usable —
             the mobile stack takes over (no split, no React Flow). At
@@ -610,101 +562,66 @@ export function InvestigationWorkspace({
             persistent Trace pane + Inspector — the canvas renders
             full-width and a Sheet substitutes for the Inspector. At
             1024+ ("large desktop") the workbench sits inside the real
-            three-pane resizable split. Exactly one branch ever mounts per
-            render (never two behind `hidden`/`lg:hidden`) — the canvas is
-            only ever initialized inside a container with real bounds
-            (react-flow sizes itself from those bounds at mount), and the
-            test environment, which doesn't evaluate CSS media queries,
-            never sees more than one branch's content at once. */}
+            resizable split (3 panes while a run is active, 2 once it
+            isn't — see the ResizablePanelGroup below). Exactly one branch
+            ever mounts per render (never two behind `hidden`/`lg:hidden`)
+            — the canvas is only ever initialized inside a container with
+            real bounds (react-flow sizes itself from those bounds at
+            mount), and the test environment, which doesn't evaluate CSS
+            media queries, never sees more than one branch's content at
+            once. */}
         {belowCanvasBreakpoint ? (
-          <div className="flex min-h-0 flex-1 flex-col">
-            {renderMainPane(
-              <MobileInvestigationStack
-                measurement={measurement}
-                state={state}
-                timeline={timeline}
-                onSelectMeasurement={handleSelectMeasurement}
-                onSelectHypothesis={handleSelectHypothesis}
-                onRecordResult={handleRecordResult}
-              />,
-              true,
-            )}
-            {/* No persistent Trace pane below 1024px — the composer stays
-                a reachable, full-width dock at the bottom of the page,
-                exactly as it worked before this pass (unchanged; the
-                responsive-tier rebuild is a separate, later delivery-
-                sequence step). */}
-            <div className="pointer-events-none sticky bottom-0 flex flex-col items-center gap-1.5 border-t border-border bg-card/95 px-4 pb-4 pt-2 backdrop-blur-sm">
-              <div className="pointer-events-auto w-full">
-                <CaseComposer
-                  caseId={caseId}
-                  productId={productId}
-                  revisionId={revisionId}
-                  currentRevisionLabel={currentRevisionLabel}
-                  measurement={measurement}
-                  onMeasurementRecorded={handleMeasurementRecorded}
-                  onObservationRecorded={handleObservationRecorded}
-                />
-              </div>
-              {busy ? (
-                <p className={`text-xs ${text.muted}`} role="status" aria-live="polite">
-                  Crado is investigating — you can still add an observation while it works.
-                </p>
-              ) : null}
-            </div>
-          </div>
+          renderMainColumn(
+            <MobileInvestigationStack
+              measurement={measurement}
+              state={state}
+              timeline={timeline}
+              onSelectMeasurement={handleSelectMeasurement}
+              onSelectHypothesis={handleSelectHypothesis}
+              onRecordResult={handleRecordResult}
+            />,
+            true,
+          )
         ) : belowRailBreakpoint ? (
-          <div className="flex min-h-0 flex-1 flex-col">
-            {renderMainPane(
-              <InvestigationCanvas
-                measurement={measurement}
-                state={state}
-                timeline={timeline}
-                onSelectMeasurement={handleSelectMeasurement}
-                onSelectHypothesis={handleSelectHypothesis}
-                onRecordResult={handleRecordResult}
-              />,
-              true,
-            )}
-            <div className="pointer-events-none sticky bottom-0 flex flex-col items-center gap-1.5 border-t border-border bg-card/95 px-4 pb-4 pt-2 backdrop-blur-sm sm:px-6">
-              <div className="pointer-events-auto w-full">
-                <CaseComposer
-                  caseId={caseId}
-                  productId={productId}
-                  revisionId={revisionId}
-                  currentRevisionLabel={currentRevisionLabel}
-                  measurement={measurement}
-                  onMeasurementRecorded={handleMeasurementRecorded}
-                  onObservationRecorded={handleObservationRecorded}
-                />
-              </div>
-              {busy ? (
-                <p className={`text-xs ${text.muted}`} role="status" aria-live="polite">
-                  Crado is investigating — you can still add an observation while it works.
-                </p>
-              ) : null}
-            </div>
-          </div>
+          renderMainColumn(
+            <InvestigationCanvas
+              measurement={measurement}
+              state={state}
+              timeline={timeline}
+              onSelectMeasurement={handleSelectMeasurement}
+              onSelectHypothesis={handleSelectHypothesis}
+              onRecordResult={handleRecordResult}
+            />,
+            true,
+          )
         ) : (
           <div className="flex min-h-0 flex-1">
-            {/* Desktop three-pane split (App Redesign Workstream C): Trace
-                (persistent, left, with the case composer docked at its
-                bottom) / Decision-or-active-tab (main, flat workbench) /
-                Inspector (right, collapsed by default). All three are
-                siblings in the same resizable panel group — not cards
-                placed inside another page. Percentage sizes approximate
-                the spec's px bands (Trace 320-420px, Inspector 300-360px)
-                against a typical ≥1024px content width after the
-                sidebar; each pane still resizes independently within its
-                min/max. */}
+            {/* Desktop resizable split: Trace (persistent left pane, only
+                while a run is genuinely active — see isRunActive above) /
+                Main (Decision-or-Map, with the composer docked at its own
+                bottom) / Inspector (right, collapsed by default). ONE
+                ResizablePanelGroup, never remounted (no key change) — the
+                Trace panel and its handle are the only pieces that come
+                and go; Main and Inspector each keep a stable `key` so
+                React reuses those component instances across the
+                transition. This deliberately does NOT key the whole group
+                on `running`: an earlier draft did, and keying the group
+                remounted the Main panel (and the live React Flow canvas
+                inside it) the instant a run started or finished — losing
+                pan/zoom state and the "Follow-agent" viewport right when
+                the engineer least wants the canvas to jump. Caught and
+                fixed before this ticket's live QA pass; see
+                docs/PROGRESS.md's UX-07 entry. */}
             <ResizablePanelGroup direction="horizontal">
-              <ResizablePanel defaultSize={27} minSize={20} maxSize={35} className="border-r border-border">
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-                  {state.agentActivity.length === 0 && state.activeTools.length === 0 && !state.agentActive ? (
-                    <p className={`text-sm ${text.muted}`}>
-                      No trace yet. Run an investigation to see Crado&rsquo;s live agent activity here.
-                    </p>
-                  ) : (
+              {running ? (
+                <ResizablePanel
+                  key="trace"
+                  defaultSize={27}
+                  minSize={20}
+                  maxSize={35}
+                  className="border-r border-border"
+                >
+                  <div className="h-full overflow-y-auto px-4 py-4">
                     <InvestigationTracePanel
                       activeTools={state.activeTools}
                       completedActivity={state.agentActivity}
@@ -713,34 +630,12 @@ export function InvestigationWorkspace({
                       defaultCollapsed={false}
                       onSelectStep={handleTraceStepSelect}
                     />
-                  )}
-                </div>
-                {/* Trace-pane composer (App Redesign): docked here, not
-                    floating across the whole viewport. */}
-                <div className="shrink-0 border-t border-border p-3">
-                  <CaseComposer
-                    caseId={caseId}
-                    productId={productId}
-                    revisionId={revisionId}
-                    currentRevisionLabel={currentRevisionLabel}
-                    measurement={measurement}
-                    onMeasurementRecorded={handleMeasurementRecorded}
-                    onObservationRecorded={handleObservationRecorded}
-                  />
-                  {busy ? (
-                    <p className={`mt-1.5 text-xs ${text.muted}`} role="status" aria-live="polite">
-                      Crado is investigating — you can still add an observation while it works.
-                    </p>
-                  ) : null}
-                </div>
-              </ResizablePanel>
-              <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={69} minSize={30}>
-                {/* One canvas, four views — switching tabs never unmounts
-                    the SSE connection above; only what's rendered here
-                    changes. The dot grid is the canvas's one deliberate
-                    texture (Investigation view only). */}
-                {renderMainPane(
+                  </div>
+                </ResizablePanel>
+              ) : null}
+              {running ? <ResizableHandle key="trace-handle" withHandle /> : null}
+              <ResizablePanel key="main" defaultSize={running ? 49 : 76} minSize={30}>
+                {renderMainColumn(
                   <InvestigationCanvas
                     measurement={measurement}
                     state={state}
@@ -752,8 +647,9 @@ export function InvestigationWorkspace({
                   false,
                 )}
               </ResizablePanel>
-              <ResizableHandle withHandle />
+              <ResizableHandle key="main-handle" withHandle />
               <ResizablePanel
+                key="inspector"
                 ref={railPanelRef}
                 defaultSize={4}
                 minSize={18}

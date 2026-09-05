@@ -58,6 +58,14 @@ interface InvestigationTracePanelProps {
    * keeps every pre-existing call site's steps non-interactive, exactly
    * as before. */
   onSelectStep?: (label: string) => void;
+  /** UX-07: suppresses this panel's own "View trace"/"Hide trace" toggle —
+   * for the "What Crado checked" disclosure (decision-view.tsx), which
+   * already provides an outer collapse/expand control; without this, a
+   * reader would see two redundant collapse affordances stacked on top of
+   * each other. Optional/false keeps every pre-UX-07 call site (the
+   * persistent Trace pane, which has no other collapse control) rendering
+   * its own toggle exactly as before. */
+  hideOwnToggle?: boolean;
 }
 
 /** Splits "Searched engineering documents / 3 passages retrieved" into a
@@ -117,6 +125,7 @@ export function InvestigationTracePanel({
   durationMs,
   defaultCollapsed = false,
   onSelectStep,
+  hideOwnToggle = false,
 }: InvestigationTracePanelProps) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   // Adjusting state during render in response to a prop change (React's
@@ -199,7 +208,7 @@ export function InvestigationTracePanel({
             </>
           ) : null}
         </div>
-        {!active ? (
+        {!active && !hideOwnToggle ? (
           <button
             type="button"
             onClick={() => setCollapsed((prev) => !prev)}

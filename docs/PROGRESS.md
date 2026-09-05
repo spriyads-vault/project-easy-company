@@ -4197,3 +4197,213 @@ visual completeness.
   was not modified and is outside this ticket's scope (sidebar/global
   shell, not the auth pages) — noted here as a possible real UI defect
   worth a future look, not confirmed as one.
+
+## UX-07 — Decision view, answer-first layout
+
+A layout/information-hierarchy-only rework of the Decision surface —
+no change to the Investigation Agent, the deterministic correlation
+engine, the OBSERVED/KNOWN/INFERRED/MISSING evidence model, the DB
+schema or any server action, the SSE transport/event types, or the
+Map/Evidence/Timeline/Sources views' underlying data. Every surface
+here still consumes the existing `WorkspaceState`/`TimelineEntry[]`
+unmodified. Built per an approved Decision Sheet
+(`docs/UX-07-DECISION-SHEET.md`) after its three open questions were
+resolved by the requester.
+
+### Why the tab count dropped from five to one page plus a Map toggle
+
+The prior five-tab switcher (Decision/Map/Evidence/Timeline/Sources)
+forced an engineer to click across surfaces to answer one question:
+what should I do next? Evidence, History (Timeline) and Sources were
+never destinations in their own right — they're support for the
+Decision — so they became closed-by-default disclosures *inside*
+Decision instead of peer tabs. Map is different: it's an alternate
+*rendering* of the same reasoning objects Decision already shows (the
+same correlation/hypothesis data as a graph), so it stays reachable
+but as a local toggle next to what it renders, not a tab that competes
+with Decision for being "the page." `view-switcher.tsx` was deleted
+outright once nothing imported it.
+
+### Why `investigation-item-table.tsx` was retired
+
+It was built deliberately in a prior pass (see "Workstream C
+correction — flat Decision workbench" above) in direct response to a
+rejection of the old card-based dashboard. Without a stated reason a
+future session would be tempted to rebuild the same table. The reason,
+recorded here so that doesn't happen: **arithmetic and machine guesses
+must not be rendered as siblings in one table.** A deterministic
+frequency relationship (`40 MHz × 5 = 200 MHz`, checked by code) and a
+model-generated hypothesis (labeled INFERRED, carrying its own
+confidence band) are epistemically different kinds of statement — the
+product's core distinction. Flattening both into rows of one table
+with shared columns (Classification/Investigation item/Evidence
+summary/State/Updated by/Updated) erased that distinction visually,
+even though the underlying data already tagged them correctly. The
+table is gone; the two kinds of object now render as two visually
+distinct card types side by side (`reasoning-section.tsx`, new),
+verified live in the browser (not just inferred from "it's not a
+table anymore") — see the Condition B verification below.
+
+Two columns the table carried had to be decided deliberately rather
+than silently dropped:
+- **State** (Verified / Leading-Plausible-Weakened-Unresolved) — kept,
+  now rendered directly on each card (`CorrelationCard`'s new `State`
+  row; `HypothesisCard`'s new `strength` badge, sourced from the
+  existing `rankHypotheses`/`HypothesisStrength`, not a new
+  calculation).
+- **Updated by** (Deterministic check / Agent) — dropped deliberately.
+  Once the two objects are their own visually distinct kind (different
+  accent color, different typography, different iconography — see
+  below), restating which mechanism produced the row is redundant with
+  the whole point of the two-column split.
+
+### What shipped
+
+- **`reasoning-section.tsx`** (new): the two reasoning objects, side by
+  side (`grid gap-4 lg:grid-cols-2`), with a "Reasoning" heading and
+  the "View as map" toggle in the same row. Threads `focusedCategory`
+  (set briefly by a trace-step click) into a highlight wrapper on
+  whichever side it names.
+- **`decision-view.tsx`** (rewritten): the whole page, top to bottom —
+  `InvestigationControls` → `FailureStrip` (prose failure summary,
+  moved here from a stat-cell grid) → `NextActionBar` (now rendered
+  *inside* Decision, not by the parent) → `ReasoningSection` →
+  `RevisionComparisonCard` (only when a real result exists) → a
+  `border-t` block of `AdvancedDisclosure` rows: Evidence, History,
+  Sources, and a new "What Crado checked" row that only exists once a
+  run has actually finished (`!running && (agentActivity.length>0 ||
+  agentMetrics!==null)`) — while a run is active the live Trace pane
+  already covers the same ground, so showing both would risk drifting
+  out of sync mid-run.
+- **`failure-strip.tsx`** (rewritten): one prose sentence — `"{freq}
+  MHz measured {margin} dB above/below the selected limit, with {mode}
+  active."` — plus a second line (test type · revision · measured-when
+  · Add measurement). The stored spectrum plot (a single peak + limit
+  line, no real trace to draw) was removed from this surface per the
+  approved Decision Sheet: at legible size it would occupy prime space
+  restating two numbers the sentence already gives; at thumbnail size
+  it would be illegible, which the ticket forbids anywhere. It moved,
+  not vanished — `SpectrumChart` now renders inside `ContextRail`'s
+  `MeasurementDetail`.
+- **`next-action-bar.tsx`** (restyled, not restructured): promoted from
+  a thin bottom bar with `truncate` classes to a large bordered/
+  accented card, `text-xl`/`text-2xl` recommendation text, no
+  `truncate` anywhere in its render path. Button order: Record result,
+  then Record engineering change.
+- **`advanced-disclosure.tsx`**: gained an optional `meta` prop
+  (rendered after the label, e.g. "· 7 checks · 16.6s") — backward
+  compatible, its own 4 existing tests untouched.
+- **`correlation-card.tsx` / `hypothesis-card.tsx`**: gained
+  `onSelect`/`isSelected` (whole card becomes the click target,
+  replacing `HypothesisCard`'s old small "Details" text-link) and a
+  `State`/`strength` field respectively, per the Condition C decisions
+  above.
+- **`investigation-trace-panel.tsx`**: gained `hideOwnToggle` so the
+  copy nested inside "What Crado checked" doesn't render a second,
+  redundant "View trace" button.
+- **`investigation-workspace.tsx`** (rewritten): the five-way
+  `InvestigationTab` type/state and its 40-44px toolbar row are gone,
+  replaced by `MainView = "decision" | "map"`. The desktop branch keeps
+  **one** `ResizablePanelGroup`, never re-keyed on `running` — the
+  Trace panel/handle are the only pieces conditionally included as
+  siblings; Main and Inspector keep stable `key`s so neither remounts
+  (an earlier draft re-keyed the whole group on `running`, which would
+  have remounted the live React Flow canvas — and its pan/zoom/
+  Follow-agent viewport — every time a run started or ended; caught
+  and fixed before this ticket's live QA pass, not after). `top-bar.tsx`'s
+  `backLabel` changed from a duplicated `"Radiated emissions —
+  {product} {revision}"` to the plain literal `"Back to case"`
+  (criterion 1 — product/revision/case-ref/status each now appear
+  exactly once, in the header itself).
+- **Composer relocation — a real architectural change, not a layout
+  tweak.** The composer used to live docked to the bottom of the Trace
+  pane. Once the Trace pane became conditionally unmountable (present
+  only while `isRunActive`), anything docked inside it would have
+  disappeared and reappeared — and shifted position — every time a run
+  started or ended. The composer was pulled out into a new
+  `renderMainColumn()` footer shared by all three responsive branches
+  (desktop/tablet/mobile), so it now lives at the bottom of the *Main*
+  column, a sibling of Decision/Map content, never inside Trace. This
+  was forced by Trace's new lifecycle, not chosen for its own sake.
+- **Deleted**: `investigation-item-table.tsx`, `view-switcher.tsx` —
+  both confirmed via `grep` to have no remaining real importers before
+  deletion.
+
+### Condition B — visual distinguishability, checked, not assumed
+
+Live-verified in the browser, both themes, at 1440px on the seeded
+Gateway X case: the deterministic card is a plain monospace equation
+(`40 MHz × 5 = 200 MHz`) with a neutral/indigo left accent bar and no
+color-coded sub-sections. The hypothesis card carries an orange left
+accent bar, an orange "⚠ HYPOTHESIS 01 · INFERRED" label, and orange
+section markers on its OBSERVED/KNOWN/INFERRED/MISSING bullets.
+**Honest answer: yes** — with the text labels covered, a reader could
+still tell the arithmetic from the machine guess by accent color,
+typography (monospace numerals vs. prose) and iconography alone, not
+just a different heading string.
+
+### Condition A — real test impact, counted before editing
+
+The Decision Sheet's own estimate ("two test rewrites") was flagged in
+advance as almost certainly low, and it was: `decision-view.test.tsx`
+went from 6 to 11 tests (full rewrite), and 16 existing cases in
+`investigation-workspace.test.tsx` needed edits — 10 mechanical
+(`{name:"Map"}` → `{name:"View as map"}`), 6 substantively rewritten
+for the new disclosure/Trace-lifecycle behavior, plus 2 new tests
+added. Every rewritten assertion was checked against the standard: it
+must still fail if the underlying guarantee breaks. E.g. "never
+duplicates the trace across the Map toggle or the disclosures" asserts
+the trace is either exactly-one-present or fully-absent depending on
+state (`queryByText(...).not.toBeInTheDocument()`), not merely
+"present somewhere"; the not-truncated test asserts the `className`
+itself doesn't match `/truncate/`, not just that the visible text
+looks right in one snapshot.
+
+### Verification
+
+- `pnpm run lint` / `pnpm exec tsc --noEmit` / `pnpm run build` — all
+  clean.
+- Unit tests: 527/527 across 65 files. Integration tests: 62/62 across
+  12 files.
+- Live QA (chrome-devtools MCP, real running dev server, real seeded
+  Gateway X case CASE-4FA53E, no mocks):
+  - **1440/1280/1024/768/390, both themes** on the completed case:
+    header deduplicated to one line; failure summary as prose with no
+    spectrum thumbnail; the full 4-line recommended-next-test text
+    rendered with no scroll/ellipsis at 1440 and remained fully
+    visible (reflowing, never truncating) down to 390; "View as map"
+    positioned beside "Reasoning", not in the header; both reasoning
+    cards render correctly in light theme with the same visual
+    distinction described above; all four disclosures (Evidence,
+    History, Sources, "What Crado checked") start closed and, opened,
+    render their real content (Sources correctly showed "0 documents
+    available · 0 searches performed · 0 passages retrieved" rather
+    than fabricating a count).
+  - **"View as map"** toggle click-tested both directions: renders the
+    existing `InvestigationCanvas` full-width with a working "Back to
+    decision" return; the composer's docked position was identical
+    before and after the toggle (screenshot-compared, not inferred).
+  - **One live run** started against the real seeded case: the Trace
+    pane rendered as a genuine separate left `ResizablePanel` (live
+    checkmarked steps, "Working…" status) beside the Main column — not
+    stacked inline — confirming the 3-pane desktop split is real. Once
+    the run completed, the Trace panel unmounted and its content
+    reappeared inside "What Crado checked" (verified fully expanded:
+    itemized trace list + `AgentMetricsPanel`'s "What Crado handled"
+    grid, both matching the completed run's real numbers). **The
+    composer's `<form>` never moved** — same docked position, bottom
+    of the Main column, confirmed present and unchanged before the run
+    started, mid-run beside the Trace pane, and after completion once
+    Trace unmounted.
+  - Zero console errors observed across the pass.
+
+### Not met / deliberately out of scope
+
+- The composer's placeholder text visually clips against the SEND
+  button at 768px and 390px. This is a pre-existing
+  `case-composer.tsx` behavior — that file was never touched by this
+  ticket (its scope boundary explicitly excludes the composer's own
+  internals) — left as-is rather than fixed under a layout-only
+  ticket.
+- No other acceptance criterion from the ticket was found unmet during
+  this live QA pass.
