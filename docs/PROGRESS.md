@@ -5010,3 +5010,122 @@ dev server, exactly as listed above, against the actual new layout —
 the closest available substitute, not a claim that hosted verification
 happened. Flagged rather than silently skipped, same as UX-09's own
 disclosure.
+
+## UX-11 — auth page, full bleed and right panel composition
+
+Two corrections to UX-10's shell, both confined to
+`src/lib/design/auth-shell.tsx` (plus its test file). No auth logic,
+no other component, touched.
+
+### What changed
+
+- **Full bleed.** Removed the outer floating container entirely: the
+  `bg-secondary p-3 sm:p-6 lg:p-8` page wrapper and the inner
+  `max-w-[1240px] rounded-2xl ... shadow-[...]` card are gone. The
+  split now fills the viewport edge to edge — root is
+  `flex min-h-dvh w-full lg:h-dvh lg:overflow-hidden`. The two regions
+  are told apart by surface tone, not a box on a darker page: left is
+  `bg-background` (the app's own base tone), right is `bg-card` —
+  `--card` is already documented in globals.css as "PRIMARY SURFACE"
+  and is one step lighter than `--background` in both themes, so this
+  reuses an existing token pairing rather than inventing a new one.
+  The single divider the ticket asked for is `lg:border-r
+  lg:border-border` on the left region.
+- **Right panel composition.** The old layout was
+  `justify-between` — headline block pinned top, four content rows
+  pinned bottom — which is exactly what produced the ~600px void on
+  any tall viewport. Replaced with one `justify-center` column:
+  headline block, a fixed `gap-12` (48px), then a 5-row
+  "investigation chain" list, nothing after it. Each row is a fixed
+  `h-14` (56px), so the row list itself introduces no gap at all
+  (verified via `getBoundingClientRect` — row-to-row gap is exactly
+  0px, headline-to-rows gap is exactly 48px, at every breakpoint,
+  since neither is viewport-relative). A single `absolute` 1px
+  `bg-border` div runs from the first row's vertical centre
+  (`top-7` = 28px = half a row) to the last row's vertical centre
+  (`bottom-7`) — the "thin connecting line" the ticket asked for,
+  reduced to a static rule since there's no node graph here to
+  animate.
+- Rows are flat (no card, border, icon, badge or status dot per row —
+  just two `<span>`s: a fixed `w-24` label, then the value). Numeric/
+  equation/revision-id values (Measurement, Calculated, Result) render
+  `font-mono tabular-nums` — the same convention `tokens.ts`'s
+  `text.technical`/`text.mono` already use elsewhere in the app, not a
+  new face. Prose values (Hypothesis, Next test) render in the body
+  face. Only the Result row's value carries `text-success` — the
+  ticket's one allowed accent, and it lines up with globals.css's own
+  "`--success` (green) verified/pass/resolved/completed ONLY" rule,
+  since a completed before/after comparison is exactly that.
+
+### Content constraint — provenance of the 5 rows
+
+The ticket's own row text was verified against the actual deterministic
+domain code before being used verbatim, not assumed correct because it
+was written into the ticket:
+
+| Row | Value | Source (verified this session) |
+|---|---|---|
+| Measurement | `200 MHz · +7.4 dB · Rev17` | `scripts/seed-gateway-x.mjs` — `REVISION_LABEL = "Rev17"`, `frequencyMhz: 200`, `marginDb: 7.4`. |
+| Calculated | `40 MHz × 5 = 200 MHz` | `src/lib/correlation/harmonic-correlation.ts:178-181` — the deterministic (non-model) description template, `` `${measuredFrequencyMhz} MHz is consistent with the ${ordinal} of "${source.label}" (${source.frequencyMhz} MHz x ${harmonicNumber} = ${expectedFrequencyMhz.toFixed(3)} MHz).` ``, which for this case renders "200 MHz is consistent with the 5th harmonic of "system clock" (40 MHz x 5 = 200.000 MHz)." — confirmed against `src/lib/hypotheses/generate-hypotheses.test.ts:24`, which asserts that exact sentence. |
+| Hypothesis | `Consistent with 5th harmonic of system clock` | The same deterministic sentence above, compressed to fit a 56px row — not a separate invented claim. |
+| Next test | `Disconnect display path, re-measure` | Compressed from `"Disconnect the display path and re-measure."` — the canonical `recommendedNextStep` fixture for this exact case, used identically across ~15 test files (`hypothesis-card.test.tsx`, `investigation-workspace.test.tsx`, `rank-hypotheses.test.ts`, etc.). |
+| Result | `Rev18 · 3.6 dB below limit · 11 dB better` | `src/lib/measurements/compare-measurements.test.ts`'s own "computes the Gateway X 11 dB improvement" fixture: Rev17 `marginDb: 7.4` → Rev18 `marginDb: -3.6` (negative = under the limit, per `compare-measurements.ts`'s own doc comment) → `deltaDb: 11`. |
+
+No metric, customer name, percentage or claim was invented; nothing
+resembling "trusted by" or a testimonial was added.
+
+### A QA-methodology pitfall, not a product bug
+
+Early screenshots (before the ones attached to this ticket) showed the
+CRADO wordmark's logo mark invisible on the light-theme left panel —
+white-on-white. Traced it to how the QA itself was driving the theme:
+`ThemedMark` reads `useTheme()`, which is `useSyncExternalStore`-backed
+and only re-syncs on a real `storage` event or a fresh mount reading
+`localStorage`; directly poking `localStorage.setItem` and the
+`data-theme` DOM attribute from `evaluate_script` on an already-loaded
+page changes the CSS (which is keyed off the DOM attribute) but leaves
+`useTheme()`'s React state stale, so the mark picked the wrong asset
+for one screenshot. Not a real defect — confirmed by setting
+`localStorage` and then doing a real navigation (which re-reads it on
+mount, the same as a returning user would experience) instead of
+mutating the live page; the mark rendered correctly (black mark on
+light, white mark on dark) at every breakpoint after that. Recorded
+here so a future QA pass doesn't re-diagnose this as a bug in
+`themed-mark.tsx` or `theme-provider.tsx` (neither was touched).
+
+### Test changes
+
+- `src/lib/design/auth-shell.test.tsx`: replaced the old test that
+  asserted the 4 old `RIGHT_PANEL_ROWS` strings with one asserting all
+  5 new label/value pairs render verbatim, plus three new tests: only
+  the Result row's value carries `text-success`; numeric/equation/
+  revision-id values carry `font-mono` and prose values don't; the
+  root element carries no `rounded`/`shadow` class and no
+  `max-w-[1240px]` (full-bleed, no floating container). The existing
+  switch-link/`next`-preservation/no-Google-Apple-Or/copyright tests
+  were untouched — none of that surface changed.
+
+### Verification
+
+- `pnpm exec eslint .` / `pnpm exec tsc --noEmit` / `pnpm run build` —
+  all clean.
+- Unit tests: 547/547 across 66 files (auth-shell.test.tsx now 12
+  tests, up from 9). No integration tests touch this file.
+- Live QA (chrome-devtools MCP, real local dev server): `/login` and
+  `/signup` screenshotted at 1440/1280/1024/768/390, both themes (20
+  screenshots). Programmatic checks via `getBoundingClientRect` at
+  1440/1280/1024 (the widths where the split is visible): row-to-row
+  gap is 0px, headline-to-rows gap is exactly 48px, and
+  `document.documentElement.scrollHeight === window.innerHeight` (no
+  scrollbar) at all three. Below 1024 (768, 390) the right panel is
+  confirmed absent from the DOM layout (`hidden lg:flex`, not merely
+  visually covered) and the form fills the full viewport width, still
+  full bleed (no page margin).
+
+### Hosted-deployment verification — not yet applicable
+
+This PR has not merged at the time of writing, so
+`project-easy-company.vercel.app` still serves the pre-UX-11 floating-
+container shell — there's nothing of this ticket's own work to check
+there yet, same disclosure pattern as UX-09 and UX-10. All screenshots
+and measurements above are from the local dev server.

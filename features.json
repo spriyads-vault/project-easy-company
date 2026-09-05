@@ -590,6 +590,25 @@
         "Hosted-deployment verification, reported honestly per the ticket's own instruction and consistent with UX-09's disclosure: this PR has not merged, so project-easy-company.vercel.app/login still serves the pre-UX-10 shell (confirmed live). The ticket's full functional walkthrough (bad credentials/duplicate email/real sign-up/next survival/keyboard password toggle) was run instead against the local dev server, against the actual new layout — the closest available substitute, not a claim hosted verification happened.",
         "pnpm run lint / pnpm exec tsc --noEmit / pnpm run build all clean. Unit suite 544/544 (66 files, +9 new in auth-shell.test.tsx). Integration 62/62. Screenshotted at 1440/1280/1024/768/390, both themes, both pages (20 screenshots) — no horizontal overflow, no clipped text anywhere once the 1024px defect was fixed. See docs/PROGRESS.md's UX-10 entry for the full writeup."
       ]
+    },
+    {
+      "id": "UX-11",
+      "priority": 18.2,
+      "title": "Auth page, full bleed and right panel composition",
+      "depends_on": [
+        "UX-10"
+      ],
+      "passes": true,
+      "acceptance": [
+        "Outer floating container removed from auth-shell.tsx: the bg-secondary page wrapper and the max-w-[1240px]/rounded-2xl/shadow card are gone. Root is flex min-h-dvh w-full lg:h-dvh lg:overflow-hidden — the split fills the viewport edge to edge at every verified width, confirmed via getBoundingClientRect (document.documentElement.scrollHeight === window.innerHeight, no scrollbar) at 1440/1280/1024.",
+        "Regions told apart by tone, not a box on a darker page: left bg-background, right bg-card (--card is already the documented 'PRIMARY SURFACE' token, one step lighter than --background in both themes — no new colour), plus a single lg:border-r lg:border-border divider.",
+        "Right panel restructured from justify-between (headline top, 4 rows bottom, ~600px void) to one justify-center composition: headline block, a fixed 48px gap (gap-12), then a 5-row investigation-chain list with nothing after it. Verified programmatically: row-to-row gap 0px (each row a fixed h-14/56px), headline-to-rows gap exactly 48px, at every breakpoint the panel is visible.",
+        "Rows are flat — no card/border/icon/badge/status dot per row, just a fixed-width label (w-24) and a value. A single absolute 1px bg-border line runs from the first row's vertical centre to the last row's (top-7/bottom-7 = 28px = half a row). Numeric/equation/revision-id values (Measurement, Calculated, Result) render font-mono tabular-nums (same convention as tokens.ts's text.mono/text.technical); Hypothesis and Next test render in the body face. Only the Result row's value carries text-success — the one accent colour, consistent with globals.css's 'verified/pass/resolved/completed ONLY' rule for --success.",
+        "All 5 row strings verified against real deterministic domain code before use, not assumed correct from the ticket text: Measurement from scripts/seed-gateway-x.mjs (Rev17, 200 MHz, marginDb 7.4); Calculated/Hypothesis from harmonic-correlation.ts's own deterministic description template (confirmed against generate-hypotheses.test.ts's exact expected sentence); Next test from the recommendedNextStep fixture used identically across ~15 test files; Result from compare-measurements.test.ts's own 'Gateway X 11 dB improvement' fixture (Rev18, marginDb -3.6, deltaDb 11). No metric, name, percentage or claim invented.",
+        "A QA-methodology pitfall recorded, not a product bug: directly mutating localStorage/data-theme via evaluate_script on an already-loaded page left ThemedMark's useSyncExternalStore-backed useTheme() stale (one screenshot showed a white-on-white logo mark). Fixed the QA method (set localStorage, then a real navigation) rather than touching themed-mark.tsx/theme-provider.tsx, neither of which has a defect.",
+        "auth-shell.test.tsx updated: the old 4-row RIGHT_PANEL_ROWS assertion replaced with all 5 new label/value pairs; new tests for text-success on the Result row only, font-mono on the 3 numeric/equation/id rows and not on the 2 prose rows, and no rounded/shadow/max-w-[1240px] class on the root (full bleed, no floating container). Existing switch-link/next/no-Google-Apple-Or/copyright tests untouched.",
+        "pnpm exec eslint . / pnpm exec tsc --noEmit / pnpm run build all clean. Unit suite 547/547 across 66 files (auth-shell.test.tsx now 12 tests). Screenshotted at 1440/1280/1024/768/390, both themes, both pages (20 screenshots); below 1024 the right panel is confirmed absent from layout (hidden lg:flex) and the form fills the viewport, still full bleed. Hosted deployment not yet applicable — PR unmerged at write time, same disclosure as UX-09/UX-10. See docs/PROGRESS.md's UX-11 entry for the full writeup."
+      ]
     }
   ]
 }

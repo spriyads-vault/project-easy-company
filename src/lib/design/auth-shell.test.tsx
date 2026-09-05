@@ -73,21 +73,62 @@ describe("AuthShell", () => {
     expect(container.textContent).not.toMatch(/\bENG\b/);
   });
 
-  it("shows real, already-existing product content in the right panel — not the reference's 3D render, an icon, or invented copy", () => {
+  it("shows the headline and the 5-row investigation chain in the right panel — not the reference's 3D render, an icon, or invented copy (UX-11)", () => {
     render(
       <AuthShell mode="sign-in" next="/investigations">
         <div>form content</div>
       </AuthShell>,
     );
-    // Each of these is a real string produced elsewhere in this app
-    // (see auth-shell.tsx's own comment for exactly where each one
-    // comes from) — asserting they render verbatim here is asserting
-    // nothing was invented for this panel.
-    expect(
-      screen.getByText("200 MHz emission is the 5th harmonic of the 40 MHz system clock"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Radiated emissions — Gateway X Rev17")).toBeInTheDocument();
-    expect(screen.getByText("Radiated emissions case opened.")).toBeInTheDocument();
     expect(screen.getByText("Regulation, inside the engineering loop.")).toBeInTheDocument();
+    // Each label/value pair is real product/domain output — see
+    // auth-shell.tsx's own comment for exactly where each one comes
+    // from (seed data, the deterministic harmonic-correlation utility,
+    // and the deterministic compare-measurements utility).
+    expect(screen.getByText("Measurement")).toBeInTheDocument();
+    expect(screen.getByText("200 MHz · +7.4 dB · Rev17")).toBeInTheDocument();
+    expect(screen.getByText("Calculated")).toBeInTheDocument();
+    expect(screen.getByText("40 MHz × 5 = 200 MHz")).toBeInTheDocument();
+    expect(screen.getByText("Hypothesis")).toBeInTheDocument();
+    expect(screen.getByText("Consistent with 5th harmonic of system clock")).toBeInTheDocument();
+    expect(screen.getByText("Next test")).toBeInTheDocument();
+    expect(screen.getByText("Disconnect display path, re-measure")).toBeInTheDocument();
+    expect(screen.getByText("Result")).toBeInTheDocument();
+    expect(screen.getByText("Rev18 · 3.6 dB below limit · 11 dB better")).toBeInTheDocument();
+  });
+
+  it("gives only the Result row the accent (success) colour — the one accent colour the panel is allowed (UX-11)", () => {
+    render(
+      <AuthShell mode="sign-in" next="/investigations">
+        <div>form content</div>
+      </AuthShell>,
+    );
+    expect(screen.getByText("Rev18 · 3.6 dB below limit · 11 dB better")).toHaveClass("text-success");
+    expect(screen.getByText("200 MHz · +7.4 dB · Rev17")).not.toHaveClass("text-success");
+    expect(screen.getByText("Consistent with 5th harmonic of system clock")).not.toHaveClass("text-success");
+  });
+
+  it("sets numeric/equation/revision values in the monospace face and prose values in the body face (UX-11)", () => {
+    render(
+      <AuthShell mode="sign-in" next="/investigations">
+        <div>form content</div>
+      </AuthShell>,
+    );
+    expect(screen.getByText("200 MHz · +7.4 dB · Rev17")).toHaveClass("font-mono");
+    expect(screen.getByText("40 MHz × 5 = 200 MHz")).toHaveClass("font-mono");
+    expect(screen.getByText("Rev18 · 3.6 dB below limit · 11 dB better")).toHaveClass("font-mono");
+    expect(screen.getByText("Consistent with 5th harmonic of system clock")).not.toHaveClass("font-mono");
+    expect(screen.getByText("Disconnect display path, re-measure")).not.toHaveClass("font-mono");
+  });
+
+  it("renders full bleed — no outer floating container, radius or shadow (UX-11)", () => {
+    const { container } = render(
+      <AuthShell mode="sign-in" next="/investigations">
+        <div>form content</div>
+      </AuthShell>,
+    );
+    const root = container.firstChild as HTMLElement;
+    expect(root.className).not.toMatch(/rounded/);
+    expect(root.className).not.toMatch(/shadow/);
+    expect(root.className).not.toMatch(/max-w-\[1240px\]/);
   });
 });
