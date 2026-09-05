@@ -220,7 +220,7 @@ describe("DecisionView — answer-first layout (UX-07)", () => {
     expect(screen.queryByText("Before / after comparison")).not.toBeInTheDocument();
   });
 
-  it("renders the recommended next test as the largest, most prominent block — full text, never truncated", () => {
+  it("renders the recommended next test as the largest, most prominent block — full text, never truncated, and never duplicated inside the hypothesis card (UX-07 correction bug 1c)", () => {
     const hypothesis = {
       productFactId: "fact-clock-40mhz",
       title: "5th harmonic of 40 MHz system clock",
@@ -230,16 +230,21 @@ describe("DecisionView — answer-first layout (UX-07)", () => {
     };
     const state: WorkspaceState = { ...initialWorkspaceState, hypotheses: [hypothesis] };
     renderView(state);
-    // The same real recommendation also appears embedded inside the
-    // hypothesis's own "Next investigation" field in the reasoning
-    // object below — scope to the promoted block specifically, found via
-    // its own "Recommended next test" kicker.
     const promotedBlock = screen.getByText("Recommended next test").closest("div")!.parentElement!;
     const recommendation = within(promotedBlock).getByText(
       "Disconnect the display path and re-measure with the display fully powered down, not just idle.",
     );
     expect(recommendation).toBeInTheDocument();
     expect(recommendation.className).not.toMatch(/truncate/);
+    // UX-07 correction bug 1c: this same string used to also render
+    // inside the hypothesis card's own "Next investigation" field — the
+    // pinned bar above is now its only home on the page.
+    expect(
+      screen.getAllByText(
+        "Disconnect the display path and re-measure with the display fully powered down, not just idle.",
+      ),
+    ).toHaveLength(1);
+    expect(screen.queryByText("Next investigation")).not.toBeInTheDocument();
   });
 
   it("offers a 'View as map' toggle beside the reasoning objects, never in the header", () => {

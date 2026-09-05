@@ -6,6 +6,7 @@ import {
   buildKnownEvidence,
   buildObservedEvidence,
   containsProhibitedCertaintyLanguage,
+  dedupeEvidence,
   generateHypothesesForMeasurement,
   type GenerateHypothesesInput,
 } from "./generate-hypotheses";
@@ -117,6 +118,35 @@ describe("buildObservedEvidence / buildKnownEvidence", () => {
       summary: "40 MHz system clock",
     });
     expect(evidence.category).toBe("known");
+  });
+});
+
+describe("dedupeEvidence (UX-07 correction: duplicate KNOWN evidence lines)", () => {
+  it("collapses two identical evidence items into one", () => {
+    const known = buildKnownEvidence({
+      id: "fact-1",
+      category: "clock",
+      label: "system clock",
+      summary: "40 MHz system clock",
+    });
+    const deduped = dedupeEvidence([known, known]);
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0]).toEqual(known);
+  });
+
+  it("keeps items with the same category but different text (not a false-positive collapse)", () => {
+    const deduped = dedupeEvidence([
+      { category: "known", description: "Product context: 40 MHz system clock" },
+      { category: "known", description: "Product context: display flex cable" },
+    ]);
+    expect(deduped).toHaveLength(2);
+  });
+
+  it("preserves original order", () => {
+    const a = { category: "observed", description: "Measured 200 MHz." } as const;
+    const b = { category: "known", description: "Product context: 40 MHz system clock" } as const;
+    const deduped = dedupeEvidence([a, b, a]);
+    expect(deduped).toEqual([a, b]);
   });
 });
 

@@ -14,6 +14,7 @@ import {
 } from "./actions";
 import { suggestNextRevisionLabel } from "@/lib/products/suggest-next-revision-label";
 import { accent, focusRing, surface, text } from "./theme";
+import { secondaryButton } from "./reasoning-typography";
 
 const initialState: RecordEngineeringChangeFormState = {};
 
@@ -50,11 +51,16 @@ export function RecordEngineeringChangeForm({
   }
 
   if (!isOpen) {
+    // UX-07 correction (section 6): this used to render sentence-case
+    // text through an `uppercase` CSS transform — which made it look
+    // like a different button system from "Record result" right next to
+    // it, even though the source text was already sentence case. Now the
+    // same one-primary/one-secondary treatment as its sibling.
     return (
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className={`self-start border border-border px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary ${focusRing}`}
+        className={`self-start ${secondaryButton} ${focusRing}`}
       >
         Record engineering change
       </button>
