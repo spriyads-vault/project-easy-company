@@ -143,4 +143,17 @@ describe("HypothesisCard", () => {
     expect(screen.queryByText(/supported by new evidence/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/weakened by new evidence/i)).not.toBeInTheDocument();
   });
+
+  it("carries no coloured accent border — a plain neutral border-border only (UX-08 correction)", () => {
+    render(<HypothesisCard hypothesis={hypothesis} index={0} onOpenCitation={noop} />);
+    const card = screen.getByText(hypothesis.title).closest("article")!;
+    expect(card.className).not.toMatch(/border-l-2|border-l-warning|border-l-\S/);
+  });
+
+  it("uses no amber/warning colour class, no hardcoded hex, and no glyph character anywhere on the card (UX-08 correction)", () => {
+    const { container } = render(<HypothesisCard hypothesis={hypothesis} index={0} onOpenCitation={noop} />);
+    expect(container.innerHTML).not.toMatch(/warning|amber/i);
+    expect(container.innerHTML).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+    expect(container.textContent).not.toMatch(/[●◆△○]/);
+  });
 });

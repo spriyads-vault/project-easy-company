@@ -20,6 +20,18 @@
 // confidence/strength) directly on the object, replacing the retired
 // InvestigationItemTable's "State" column — see decision-view.tsx and
 // docs/PROGRESS.md's UX-07 entry for why that table was retired.
+//
+// UX-08 correction: hypothesis-card.tsx dropped its own border-l-2
+// accent (amber) for the same reason CLAUDE.md's palette rule and the
+// UX-08 ticket give — colour on a card border reads as a semantic
+// state the data doesn't have, on top of the eyebrow label already
+// naming what this is. This card's own accent was never amber (just
+// `border-l-muted-foreground`, `artifact.deterministic.accent`) but
+// kept it anyway would leave the two reasoning cards using two
+// different border treatments for no remaining reason — flattened to
+// the same plain `surface.card` border-border both cards now share;
+// they're told apart by their eyebrow text and internal structure
+// (equation vs. h3 + evidence list), never by border colour.
 import type { CorrelationFoundPayload } from "@/lib/analysis/events";
 import { artifact, focusRing, motion, surface } from "./theme";
 import { bodyText, sectionLabel, technicalValue } from "./reasoning-typography";
@@ -70,7 +82,7 @@ export function CorrelationCard({ correlation, onSelect, isSelected = false }: C
     </>
   );
 
-  const containerClass = `flex flex-col gap-3 border-l-2 p-4 ${style.accent} ${motion.rise} ${surface.card} ${
+  const containerClass = `flex flex-col gap-3 p-4 ${motion.rise} ${surface.card} ${
     isSelected ? "ring-1 ring-primary/50" : ""
   }`;
 

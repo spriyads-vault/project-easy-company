@@ -4566,3 +4566,147 @@ looks right in one snapshot.
   ticket.
 - No other acceptance criterion from the ticket was found unmet during
   this live QA pass.
+
+## UX-08 — hypothesis card, remaining corrections
+
+Baseline assumption stated by the ticket was that PR #1
+(`ux-07-decision-answer-first-layout`, containing the UX-07 correction
+commit) was already merged into `main`. **It was not** — this was the
+first real finding of the ticket, not a coincidence to route around
+silently.
+
+### Root cause: a merge-timing gap, not a dedupe bug
+
+The ticket's item 1 speculated the shipped `dedupeEvidence()` fix was
+"keying on the wrong field." It wasn't. `gh pr view 1` showed PR #1
+merged at `05:09:55Z`; the UX-07 correction commit (`a5b8fda`,
+containing `dedupeEvidence` and every other UX-07-correction change)
+was authored and pushed at `06:41:03Z` — **after** the merge, onto a
+branch whose PR had already closed. Confirmed directly:
+`git log origin/main..origin/ux-07-decision-answer-first-layout` still
+listed `a5b8fda` as absent from `main`, and
+`git show origin/main:.../generate-hypotheses.ts` had no
+`dedupeEvidence` at all. The fix was real, tested, and correct; it
+simply never reached `main`. Recovered cleanly: cut a fresh branch
+`ux-08-hypothesis-card-corrections` off a freshly-pulled `origin/main`,
+then `git cherry-pick a5b8fda` (clean, no conflicts) — commit
+`945b7bf`. Re-verified live against a **freshly triggered run** on the
+seeded case (the stale persisted hypothesis still shows the old
+duplicate, expected, since assembly-code fixes don't retroactively
+rewrite already-stored rows): the KNOWN section now shows "Product
+context: system clock — 40 MHz" exactly once.
+
+### This ticket's own delta: full border-colour removal
+
+The UX-07 correction had already removed the glyphs, pills, and italic
+(items 3/4/6 of this ticket) and already rendered the four evidence
+categories as a single ordered list (item 7) — verified present in the
+cherry-picked code by direct grep before writing any new code, so no
+changes were needed there. The one thing UX-07 correction had
+deliberately kept — "one 2px accent bar on the outer card" (amber for
+the hypothesis card, `border-l-warning`) — is exactly what this
+ticket's item 2 says to remove, on the reasoning that colour on a card
+border reads as a warning state the data doesn't carry, on top of a
+glyph-free label and an eyebrow that already say what the card is.
+
+- `hypothesis-card.tsx`: dropped `border-l-2 ${style.accent}` from the
+  container class entirely. The card now takes only `surface.card`'s
+  own uniform `border-border` on all four sides — identical treatment
+  to the deterministic card. `artifact.hypothesis.accent` is no longer
+  read anywhere in this component (kept as a doc-comment note, not
+  deleted from the token file — `context-rail.tsx` still uses the
+  broader `evidence`/`artifact` token set for other purposes, out of
+  this ticket's scope).
+- `correlation-card.tsx`: same removal (`border-l-2 ${style.accent}`,
+  which was `border-l-muted-foreground`, never amber). Not literally
+  named by the ticket text, but left in would have meant the two
+  reasoning cards used two different border treatments for no
+  remaining reason — a hypothesis card with a flat border sitting next
+  to a correlation card that still had one colored edge reads as an
+  inconsistency, not a deliberate distinction. Flattened for
+  consistency; the two cards are told apart by their eyebrow text and
+  internal structure (equation vs. evidence list), never by border
+  colour, matching the ticket's own stated principle.
+
+Items 3, 5, and the palette sweep were re-verified directly on this
+pass, not merely assumed carried over: `grep -i` for `warning|amber`
+and for hex literals (`#[0-9a-fA-F]{3,8}`) across both components
+returns nothing live (only doc-comment prose mentioning "amber" as a
+description of what was removed).
+
+### New regression tests
+
+Two tests added to each of `hypothesis-card.test.tsx` and
+`correlation-card.test.tsx`: one asserts the rendered card's
+`className` contains no `border-l-*` utility at all (not just "not
+amber" — any single-sided accent border), the other asserts the full
+rendered HTML contains no `warning`/`amber` class-name fragment, no
+hardcoded hex colour, and no `●◆△○` glyph character, plus (on the
+correlation card) that "Candidate relationship" carries no
+`rounded-full` pill class. Sanity-checked as real regression coverage,
+not tautological: `git stash push --keep-index` reverted only the two
+component files back to their pre-UX-08 state while leaving the new
+tests in place, ran the two test files, confirmed exactly the 4 new
+assertions failed (border-l-warning / border-l-muted-foreground
+present, "warning" string present in the amber-accent class), then
+`git stash pop` to restore the fix and re-ran to confirm all 16 tests
+in the two files pass again.
+
+### No hosted deployment exists
+
+The ticket's verification step asks for screenshots "on the hosted
+deployment." Checked directly via the Vercel MCP tools before
+asserting anything: `list_teams` found one team, `list_projects` for
+that team returned zero projects; no `.vercel/project.json` or
+`vercel.json` exists in the repo either. This matches `features.json`'s
+MVP-16 ("Production deployment") already being `passes: false`. No
+hosted deployment has been created for this pilot yet — verification
+below was done against the real local dev server instead (chrome-
+devtools MCP, no mocks, real seeded Gateway X case), which is the
+closest available substitute, not a claim that a hosted check happened.
+
+### Verification
+
+- `pnpm run lint` / `pnpm exec tsc --noEmit` — clean.
+- `hypothesis-card.test.tsx` + `correlation-card.test.tsx` run
+  directly: 16/16 passing. (A full-suite run in the same pass showed
+  one unrelated failure, `case-composer.test.tsx`'s observation-
+  confirmation test, under `vitest run` with an unusual arg-passing
+  invocation; re-run alone it passed 14/14 — a timing-sensitive test
+  behaving differently under a different run mode, not a UX-08
+  regression. That file was never touched by this ticket.)
+- Live QA (chrome-devtools MCP, real dev server, seeded case
+  CASE-4FA53E, no mocks), **1440 and 1280, both themes, before/after**:
+  a genuine before pair was captured by stashing only the UX-08 delta
+  (component files, not the cherry-picked UX-07-correction code),
+  reloading, screenshotting the still-live amber-accented card, then
+  popping the stash and reloading again for the after pair — both
+  against the same freshly-generated hypothesis, not the case's older
+  stale one. Confirmed visually at all four before/after pairs: the
+  amber left border is present in every "before" shot and absent in
+  every "after" shot; nothing else on the card changed (no glyphs,
+  pills, or italics were present in either, confirming those were
+  already fixed by the cherry-picked UX-07 correction rather than by
+  this pass). The pinned "RECOMMENDED NEXT TEST" bar's own left accent
+  is untouched — it belongs to `next-action-bar.tsx`, a different
+  component outside both this ticket's named scope ("the hypothesis
+  card... the NEXT INVESTIGATION block") and its correlation-card
+  extension.
+
+**Can a reader still tell OBSERVED from INFERRED at a glance with all
+colour removed?** Yes, verified by looking at the actual screenshots,
+not inferred from the code: each label sits alone in a fixed 96px left
+column, uppercase, at a consistent row position, immediately followed
+by its value in the same row — position and the word itself (four
+short, distinct words: Observed/Known/Inferred/Missing) carry the
+distinction, and every row reads as clearly at-a-glance in both themes
+as it did with the amber border present. No follow-up weight/spacing
+change is needed.
+
+### Not met / deliberately out of scope
+
+- No hosted-deployment screenshot exists, for the reason stated above
+  (MVP-16 is not yet built). Local dev server verification was
+  substituted and disclosed rather than left unstated.
+- Every other acceptance criterion in the ticket was checked directly
+  against the current code and found met.

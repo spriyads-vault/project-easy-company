@@ -1,17 +1,15 @@
 // INVESTIGATION HYPOTHESIS artifact (UX-03, promoted to the Decision
-// view's reasoning object in UX-07, restyled by the UX-07 correction):
-// agent-generated, clearly labeled INFERRED, never made to look
-// equivalent to the deterministic relationship artifact beside it. The
-// only structural distinction between the two cards is the outer card's
-// own 2px accent bar (see `artifact.hypothesis.accent`) — everything
-// inside is plain, uniform, record-style typography: no per-section
-// glyph, no colored left border per evidence category, no confidence/
-// strength pill. Evidence is strictly separated into OBSERVED / KNOWN /
-// INFERRED / MISSING — a direct rendering of FinalHypothesis (MVP-07);
-// the categories are the trust boundary, not a styling choice. The
-// model can never populate observed/known (see
-// src/lib/hypotheses/schema.ts), so INFERRED is the only place model
-// reasoning appears, and it's always labeled as such, never as fact.
+// view's reasoning object in UX-07, restyled by the UX-07 correction,
+// de-colored by the UX-08 correction): agent-generated, clearly
+// labeled INFERRED, never made to look equivalent to the deterministic
+// relationship artifact beside it — but the distinction is the eyebrow
+// text and the h3/dl structure, never colour. Evidence is strictly
+// separated into OBSERVED / KNOWN / INFERRED / MISSING — a direct
+// rendering of FinalHypothesis (MVP-07); the categories are the trust
+// boundary, not a styling choice. The model can never populate
+// observed/known (see src/lib/hypotheses/schema.ts), so INFERRED is
+// the only place model reasoning appears, and it's always labeled as
+// such, never as fact.
 //
 // UX-07 correction (rejected-on-review pass): three content-assembly
 // bugs fixed here, not evidence-model changes —
@@ -28,6 +26,15 @@
 // "State" (this hypothesis's real leading/plausible/weakened/unresolved
 // rank) still lives on the object per UX-07's own Condition C — now as
 // plain eyebrow text rather than a badge.
+//
+// UX-08 correction: the UX-07 pass kept one 2px amber accent bar
+// (`artifact.hypothesis.accent`, border-l-warning) as the card's only
+// remaining structural distinction from the deterministic card. Amber
+// reads as a warning state the data doesn't have, and colour is a
+// third encoding on top of the glyph-free label text and the h3 —
+// removed. The card now takes only `surface.card`'s own uniform
+// `border-border` on all four sides, same as the deterministic card;
+// the two are distinguished by their content and typography alone.
 import type { HypothesisCreatedPayload } from "@/lib/analysis/events";
 import type { EvidenceCategory } from "@/lib/domain/schema";
 import type { EvidenceCitation } from "@/lib/hypotheses/schema";
@@ -83,6 +90,9 @@ export function HypothesisCard({
   isSelected = false,
   strength,
 }: HypothesisCardProps) {
+  // Still the source of the eyebrow's kind label ("Inferred") — its
+  // `.accent` (a colour) is deliberately not used any more; see the
+  // UX-08 note above.
   const style = artifact.hypothesis;
 
   // UX-07 correction: one plain-text eyebrow line, not a row of pills —
@@ -178,7 +188,12 @@ export function HypothesisCard({
   // absorbs the rest and scrolls internally if real content is long
   // enough to need it. The card never grows past this to accommodate
   // more content.
-  const containerClass = `flex max-h-[320px] flex-col gap-3 border-l-2 p-4 ${style.accent} ${motion.rise} ${surface.card} ${
+  // UX-08 correction: no `border-l-2 ${style.accent}` any more — just
+  // `surface.card`'s own uniform border-border, same as the
+  // deterministic card. `ring-primary/50` for isSelected is a
+  // selection state, not a category color, and stays (cobalt is the
+  // sanctioned palette color for selection/action).
+  const containerClass = `flex max-h-[320px] flex-col gap-3 p-4 ${motion.rise} ${surface.card} ${
     isSelected ? "ring-1 ring-primary/50" : ""
   }`;
 
