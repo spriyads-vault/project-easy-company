@@ -10,6 +10,7 @@
 // app's existing localStorage key rather than inventing a new mechanism.
 import Image from "next/image";
 import Link from "next/link";
+import { useTransition } from "react";
 import {
   Beaker,
   CheckCircle2,
@@ -132,6 +133,20 @@ export function AppShellChrome({
 }: AppShellChromeProps) {
   const { open: paletteOpen, setOpen: setPaletteOpen } = useCommandPaletteShortcut();
   const initial = workspaceName.trim().charAt(0).toUpperCase() || "C";
+  // UX-09: this used to be `<form action={signOut}><DropdownMenuItem
+  // asChild><button type="submit">`. Radix's DropdownMenuItem closes the
+  // menu (and, being Portal-rendered, unmounts the item) synchronously
+  // on select, in the same tick as the click that would otherwise let
+  // the browser dispatch the form's native "submit" — the same
+  // select-to-close race ThemeMenuControl above already routes around
+  // by using plain buttons instead of DropdownMenuItem. A real click
+  // sometimes wins that race and sometimes doesn't (this is exactly why
+  // it "did not reliably submit during QA" per docs/PROGRESS.md's UX-06
+  // entry, not a CDP-only artifact). Calling the server action directly
+  // from onSelect sidesteps the race entirely: it's a plain JS function
+  // call, not a native form submission that depends on the button still
+  // being attached to the document.
+  const [signingOut, startSignOut] = useTransition();
 
   return (
     <SidebarProvider>
@@ -302,14 +317,18 @@ export function AppShellChrome({
                   <DropdownMenuSeparator />
                   <ThemeMenuControl />
                   <DropdownMenuSeparator />
-                  <form action={signOut}>
-                    <DropdownMenuItem asChild>
-                      <button type="submit" className="w-full">
-                        <LogOut className="h-4 w-4" />
-                        Sign out
-                      </button>
-                    </DropdownMenuItem>
-                  </form>
+                  <DropdownMenuItem
+                    disabled={signingOut}
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      startSignOut(() => {
+                        void signOut();
+                      });
+                    }}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    {signingOut ? "Signing out…" : "Sign out"}
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </SidebarMenuItem>

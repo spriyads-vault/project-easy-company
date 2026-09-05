@@ -97,8 +97,15 @@
 
   /* SIDEBAR — the shadcn Sidebar's own token subset (UX-05 Workstream A).
      A step quieter than the primary white content surface, with its own
-     accent/border names per the shadcn contract. */
-  --sidebar: #f4f2ec;
+     accent/border names per the shadcn contract.
+     UX-09: --sidebar was only ~6 units darker than --background (#faf9f6)
+     — too close to read as its own surface at a glance, which is exactly
+     the defect this ticket reports. Darkened relative to white/canvas so
+     the frame/canvas split is legible by tone alone, no shadow or
+     border needed to do the work; --sidebar-accent/-border/etc. are
+     untouched, per the ticket's own "do not introduce a new colour"
+     scope (only this one token moves). */
+  --sidebar: #ece9df;
   --sidebar-foreground: #101828;
   --sidebar-primary: #4f46e5;
   --sidebar-primary-foreground: #ffffff;
@@ -153,7 +160,11 @@
     --input: rgba(255, 255, 255, 0.09);
     --ring: #818cf8;
 
-    --sidebar: #19191b;
+    /* UX-09: was #19191b — one unit *lighter* than --background (#18181a),
+       the opposite of "a step darker than main" this file's own ramp
+       comment above already promised. Sidebar and canvas read as one
+       surface because, numerically, they were. Now genuinely darker. */
+    --sidebar: #0e0e10;
     --sidebar-foreground: #f5f7fa;
     --sidebar-primary: #818cf8;
     --sidebar-primary-foreground: #0b0f2e;
@@ -203,7 +214,8 @@
   --input: rgba(255, 255, 255, 0.09);
   --ring: #818cf8;
 
-  --sidebar: #19191b;
+  /* UX-09: kept identical to the @media block above, same fix/reason. */
+  --sidebar: #0e0e10;
   --sidebar-foreground: #f5f7fa;
   --sidebar-primary: #818cf8;
   --sidebar-primary-foreground: #0b0f2e;

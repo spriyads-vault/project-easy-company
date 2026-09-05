@@ -1,27 +1,21 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 
-export default function Home() {
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center bg-background px-6 py-24 text-foreground">
-      <div className="flex max-w-lg flex-col items-center gap-3 text-center">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-foreground/50">
-          Crado
-        </p>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Regulation, inside the engineering loop.
-        </h1>
-        <p className="text-sm leading-6 text-foreground/70">
-          The investigation workspace is under construction. This scaffold
-          exists so the vertical slice — auth, product context, failure
-          state, hypotheses, and evidence — can be built ticket by ticket.
-        </p>
-        <Link
-          href="/login"
-          className="mt-2 rounded-md bg-foreground px-4 py-2 text-sm font-medium text-background"
-        >
-          Sign in
-        </Link>
-      </div>
-    </div>
-  );
+// UX-09: the root route is not a page — it's a dispatcher. It used to
+// render an MVP-01 scaffold ("under construction…") with a manual Sign
+// in link; that scaffold had no reason to exist once the real
+// sign-in/investigations flow shipped, and middleware.ts's own
+// PUBLIC_PATHS list keeps "/" reachable for an unauthenticated visitor
+// (it must stay reachable so this component gets a chance to run), so
+// nothing upstream already does this redirect. A signed-in visitor goes
+// straight to their workspace; a signed-out one goes straight to
+// /login, the same "already authenticated → redirect" check login/page.tsx
+// and signup/page.tsx do, just in the opposite direction.
+export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  redirect(user ? "/investigations" : "/login");
 }

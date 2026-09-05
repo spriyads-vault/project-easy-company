@@ -4710,3 +4710,164 @@ change is needed.
   substituted and disclosed rather than left unstated.
 - Every other acceptance criterion in the ticket was checked directly
   against the current code and found met.
+
+## UX-09 — shell depth, sign-out, and the placeholder landing page
+
+Three independent fixes, rendering/dispatch/token-only per the ticket's
+own scope — no agent, engine, evidence model, schema, server action
+body, SSE, or persistence change (the one server action touched,
+`signOut`, keeps its exact original logic; only how it's invoked from
+the client changed).
+
+### 1. Placeholder landing page removed
+
+`src/app/page.tsx` was an MVP-01 scaffold — "under construction…" prose
+plus a manual "Sign in" link. Replaced its entire body with a pure
+dispatcher: an async Server Component that calls `supabase.auth.getUser()`
+and `redirect()`s to `/investigations` (signed in) or `/login` (signed
+out). Nothing upstream already does this — `middleware.ts`'s own
+`PUBLIC_PATHS` list keeps `/` reachable for a signed-out visitor
+specifically so this component gets a chance to run, so the redirect
+had to live here. `src/app/page.test.tsx` rewritten to match (mocks
+`next/navigation`'s `redirect` and `@/lib/supabase/server`'s
+`createClient`, asserts the right target per auth state) — the old
+test asserted the scaffold heading, which no longer exists.
+
+### 2. Sign-out did not complete — root cause found, not just patched
+
+Confirmed live (chrome-devtools MCP, real local Supabase) before
+touching anything: clicking "Sign out" with the pre-existing markup
+left the user still on `/investigations`, still signed in — the menu
+just closed. Root cause: `app-shell-chrome.tsx`'s account menu wrapped
+the sign-out `<form action={signOut}>` around a `DropdownMenuItem
+asChild><button type="submit">`. Radix's `DropdownMenuItem` closes the
+menu (a Portal-rendered subtree) synchronously on select, in the same
+tick a real click would otherwise let the browser use to dispatch the
+form's native `submit` — a race the button sometimes loses. This
+codebase had already independently identified and routed around the
+same Radix quirk once before: `ThemeMenuControl` in the same file uses
+plain `<button>`s instead of `DropdownMenuItem` specifically "so
+Radix's select-to-close behavior doesn't fire" (pre-existing comment).
+This is exactly the defect docs/PROGRESS.md's UX-06 entry left
+unresolved ("did not reliably submit... a pre-existing UI quirk...
+not investigated further").
+
+Fix: `DropdownMenuItem`'s `onSelect` now calls the `signOut` server
+action directly (`startTransition(() => void signOut())`), not via a
+native form submission — a plain JS function call that doesn't depend
+on the button still being attached to the document when it runs. No
+`<form>` any more. `signOut` itself (`src/app/workspace/actions.ts`)
+is unchanged: it already awaited `supabase.auth.signOut()` before
+`redirect("/login")`, so cookie-clearing and the redirect were already
+correctly sequenced — the defect was entirely in how the client
+triggered it, never in the action's own logic.
+
+Live-verified both ways, same seeded case, real browser clicks (not
+just the unit test): reverted to the old `<form>` markup via `git
+stash`, clicked Sign out — stayed on `/investigations`, still signed
+in, confirming the bug reproduces exactly as reported. Restored the
+fix, clicked Sign out — landed on `/login`; `document.cookie` no
+longer contained `sb-127-auth-token`; navigating back to
+`/investigations` afterward redirected to `/login?next=%2Finvestigations`
+rather than rendering a stale page. All four of the ticket's item-2
+checks confirmed this way, not assumed from reading the code.
+
+New regression test (`app-shell-chrome.test.tsx`): opens the account
+menu (Radix's trigger needs a real `pointerdown`+`pointerup`+`click`
+sequence in jsdom, not a bare `fireEvent.click`, to actually open —
+unrelated quirk, noted inline), clicks "Sign out", asserts the mocked
+`signOut` was called. Sanity-checked honestly: this test passes
+against BOTH the old and new markup under jsdom — jsdom's synchronous,
+non-animated DOM updates don't reproduce the real-browser Portal-unmount
+timing that causes the actual race, so it cannot serve as the sole
+proof the fix works. The live browser reproduction above is the real
+evidence; the unit test guards against a future regression back to the
+`<form>` pattern, which is still worth having even though it can't by
+itself demonstrate the race.
+
+### 3. Sidebar tonal depth
+
+`globals.css`'s own ramp comment already promised "sidebar a step
+darker than main" — but the shipped dark-theme `--sidebar` (`#19191b`)
+was numerically *lighter* than `--background` (`#18181a`), the exact
+opposite of its own stated intent, and light theme's gap (`#f4f2ec` vs
+`#faf9f6`, ~6 units) was too subtle to read as a separate surface.
+Confirmed via `getComputedStyle` on `[data-slot="sidebar-inner"]`
+(the element that actually carries `bg-sidebar`, not the outer
+`[data-slot="sidebar"]` wrapper, which is transparent) vs.
+`[data-slot="sidebar-inset"]` (`bg-background`) before touching
+anything.
+
+Only `--sidebar` moved, in all three places it's declared (bare
+`:root`, the `prefers-color-scheme: dark` block, and the explicit
+`[data-theme="dark"]` block) — `--sidebar-accent`/`-border`/etc. are
+untouched, per the ticket's "use the existing --sidebar token, do not
+introduce a new colour" instruction:
+- Light: `#f4f2ec` → `#ece9df` (14/16/23 units darker than
+  `--background`, up from ~6).
+- Dark: `#19191b` → `#0e0e10` (10 units darker than `--background`,
+  up from being 1 unit *lighter*).
+
+No shadow, gradient, glow, or raised-card effect added — the existing
+`border-sidebar-border` stays exactly as it was; tone alone now does
+the separation the ticket asked for. Sidebar width, nav items, logo,
+and the Recent list are untouched.
+
+Verified with a genuine before/after screenshot pair (git-stash
+technique, same as prior tickets) at 1440, both themes, on the real
+`/investigations` page — the first attempt used a ~6-unit dark-theme
+step, which held up numerically but read as visually indistinguishable
+in an actual screenshot; widened to the values above before accepting
+the fix as done, since "reads as a separate surface at a glance" was
+the ticket's own bar, not just a nonzero delta.
+
+### Root-route redirect logic (item 1) also live-verified locally
+
+Signed out, visited `/` → landed on `/login` directly, no scaffold
+render at any point. Signed in, visited `/` → landed on
+`/investigations` directly.
+
+### Hosted-deployment verification — honest split
+
+The ticket asked for hosted verification specifically. The hosted
+deployment does exist (`project-easy-company.vercel.app` — the prior
+UX-08 entry's "zero Vercel projects" finding was checking a different
+account than the one that owns this project; confirmed this time via
+`gh api repos/.../deployments`, which shows `vercel[bot]` auto-deploying
+Production on every push to `main` and Preview on every PR, most
+recently for UX-08's merge commit).
+
+- **Item 1's bug, confirmed live on hosted, unauthenticated**: visited
+  `project-easy-company.vercel.app/` — the exact scaffold text ("The
+  investigation workspace is under construction…") is live in
+  production right now. This is the real target the ticket describes,
+  not a stale local assumption.
+- **Item 1's fix, item 2, and item 3 — NOT yet verifiable on hosted**:
+  this PR has not merged, so the hosted deployment is still running
+  UX-08's code; there is nothing there yet to verify. The signed-in
+  checks (root route while authenticated, sign-out, sidebar depth)
+  additionally need a real hosted session — the demo credentials
+  (`gateway-x-demo@crado.local`) that work against local dev's Supabase
+  instance (`127.0.0.1:54321`) do not exist in whatever Supabase
+  project backs the hosted deployment (confirmed: "Could not sign in"),
+  and no `.vercel/project.json` or other credential for that project is
+  configured in this environment. Creating a fresh throwaway account
+  against a real hosted Supabase project isn't done unilaterally per
+  CLAUDE.md's "clear deletion path for pilot data" — deleting it after
+  needs a service-role key this environment doesn't have.
+- All three fixes were instead fully verified against the local dev
+  server per the sections above, and item 1's specific bug was
+  additionally cross-checked live against production itself. Once this
+  PR merges (auto-deploys per the GitHub integration confirmed above),
+  the hosted "after" checks the ticket asks for are straightforward to
+  run — flagged to the user rather than skipped silently.
+
+### Verification
+
+- `pnpm run lint` / `pnpm exec tsc --noEmit` / `pnpm run build` — all
+  clean.
+- Unit tests: 537/537 across 65 files (new: 2 in `page.test.tsx`, 1 in
+  `app-shell-chrome.test.tsx`). Integration: 62/62 across 12 files.
+- Live QA (chrome-devtools MCP, real local dev server, real local
+  Supabase, real seeded Gateway X case, no mocks) as detailed above for
+  all three items, plus the hosted cross-check for item 1.
