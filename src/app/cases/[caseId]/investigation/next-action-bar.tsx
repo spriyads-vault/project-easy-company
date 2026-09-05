@@ -12,9 +12,19 @@
 // recommendedNextStep/title, never a synthesized field the domain
 // doesn't produce. Also hosts the "Record engineering change" entry
 // point — unchanged from where it already lived.
+//
+// UX-07 correction: the recommendation used to render as a text-xl/2xl
+// headline — big enough that it (and the button row beside it) clipped
+// at some breakpoints. It's an instruction, not a headline: capped at
+// 14px per the correction ticket's fixed type scale, which removes the
+// size pressure that caused the clipping in the first place. The two
+// actions below are now one primary style / one secondary style, both
+// sentence case (see reasoning-typography.ts's buttonBase comment for
+// why the previous pair looked like two different button systems).
 import type { RankedHypothesis } from "@/lib/investigation/rank-hypotheses";
 import { RecordEngineeringChangeForm } from "./record-engineering-change-form";
-import { focusRing, motion, radius, surface, text } from "./theme";
+import { focusRing, motion, surface } from "./theme";
+import { bodyText, nextTestText, primaryButton, sectionLabel } from "./reasoning-typography";
 
 interface NextActionBarProps {
   caseId: string;
@@ -41,25 +51,21 @@ export function NextActionBar({
   if (!leading && !showEngineeringChange) return null;
 
   return (
-    <div className={`mx-4 flex flex-col gap-4 border-l-2 border-l-primary p-5 ${motion.rise} ${surface.card}`}>
+    <div className={`mx-4 flex min-w-0 flex-col gap-4 border-l-2 border-l-primary p-5 ${motion.rise} ${surface.card}`}>
       {leading ? (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Recommended next test
-          </span>
-          <p className="text-xl font-medium leading-snug text-foreground sm:text-2xl">
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className={sectionLabel}>Recommended next test</span>
+          <p className={`min-w-0 break-words text-foreground ${nextTestText}`}>
             {leading.hypothesis.recommendedNextStep}
           </p>
-          <p className={`text-sm ${text.muted}`}>Would confirm or rule out: {leading.hypothesis.title}</p>
+          <p className={`min-w-0 break-words ${bodyText} text-muted-foreground`}>
+            Would confirm or rule out: {leading.hypothesis.title}
+          </p>
         </div>
       ) : null}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         {leading ? (
-          <button
-            type="button"
-            onClick={onRecordResult}
-            className={`${radius.control} border border-primary/50 bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20 ${focusRing}`}
-          >
+          <button type="button" onClick={onRecordResult} className={`${primaryButton} ${focusRing}`}>
             Record result
           </button>
         ) : null}

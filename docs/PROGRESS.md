@@ -4342,6 +4342,165 @@ still tell the arithmetic from the machine guess by accent color,
 typography (monospace numerals vs. prose) and iconography alone, not
 just a different heading string.
 
+## UX-07 correction — hypothesis and next-test rendering
+
+Rejected on review: the layout order from the first UX-07 pass was
+right, but the *rendering* read as a consumer AI product — glyphs,
+colored pill badges, an oversized equation, italic prose, and (found
+independently while reading the code before touching it) three real
+content-assembly bugs. Rendering and content-assembly only, same
+scope boundary as the original ticket; the Investigation Agent,
+correlation engine, evidence model, schema, and SSE transport were not
+touched.
+
+### Content bugs fixed (not evidence-model changes)
+
+1. **Duplicate KNOWN evidence line** — `validateAgentOutput`
+   (`src/lib/agents/validate-agent-output.ts`) pushed a hypothesis's
+   grounding fact into evidence once via its own correlation candidate,
+   then again whenever the model's own `evidenceRefs` cited that same
+   fact by id — both pushes were legitimate on their own, but together
+   they produced "Product context: 40 MHz system clock" twice in one
+   card. Fixed with a new `dedupeEvidence` helper
+   (`src/lib/hypotheses/generate-hypotheses.ts`, by `category` +
+   `description`), applied at the end of assembly in both
+   `validateAgentOutput` and `generateHypothesesForMeasurement`
+   (defensive there — no double-push exists in that path today, but the
+   same rule should hold everywhere evidence is assembled). This is the
+   exact issue MVP-10C's entry above deferred as "a note for a future
+   prompt-tuning pass" — it was actually an assembly bug, not a model
+   output quality issue. Live-verified: the case's pre-existing
+   persisted hypothesis (created before this fix) still shows the old
+   duplicate — fixing assembly code doesn't retroactively rewrite
+   already-stored rows, which is correct — but a **freshly triggered
+   run** on the same case produced a KNOWN section with the fact
+   exactly once.
+2. **"Why this test" removed entirely** (`hypothesis-card.tsx`) — it
+   always reprinted the hypothesis's own INFERRED reasoning verbatim, a
+   second copy of the same paragraph already shown above it in the
+   Inferred section. The INFERRED section already says it; there is no
+   separate "why" to state.
+3. **Recommended next test no longer renders inside the hypothesis
+   card** — it duplicated `next-action-bar.tsx`'s own pinned copy of
+   `recommendedNextStep`. The pinned bar is now the single home for the
+   recommended action anywhere on the page; asserted directly in
+   `decision-view.test.tsx`'s promoted-recommendation test
+   (`getAllByText(...).toHaveLength(1)`).
+
+### Rendering changes
+
+- **New fixed type scale**
+  (`src/app/cases/[caseId]/investigation/reasoning-typography.ts`):
+  card title 15px/500/1.4, body/evidence text 13px/400/1.55, section
+  labels and the eyebrow 11px/500/uppercase/0.06em, technical values
+  (frequencies, dB, equations) 13px monospace, next-test text 14px/400
+  — applied literally, per the correction ticket's own "apply exactly,
+  do not interpret" instruction. This is a deliberate step down from
+  the first UX-07 pass's oversized equation (`text-2xl`/`text-3xl`)
+  and headline-sized recommendation (`text-xl`/`text-2xl`,
+  `next-action-bar.tsx`) — an engineering record reads its numbers,
+  it doesn't shout them. The one named exception, left untouched as
+  instructed: the failure-strip's peak-frequency/margin sentence
+  (`failure-strip.tsx`) was not reduced — it's one flowing clause, so
+  splitting it into two different sizes mid-sentence would have looked
+  broken rather than restrained; the ticket's own exemption clause
+  reads as "leave this line alone," not "shrink everything except two
+  numbers inside one sentence."
+- **Decoration removed**: the `●◆△○` per-category glyphs, the colored
+  left border per evidence section, and the PLAUSIBLE/MEDIUM CONFIDENCE/
+  candidate-relationship pill badges are gone from
+  `hypothesis-card.tsx` and `correlation-card.tsx`. Each card keeps
+  exactly one border — its own 2px outer accent (indigo-neutral for the
+  deterministic card, amber for the hypothesis card) — nothing nested
+  inside it is its own bordered/background box any more (the old
+  NEXT INVESTIGATION block, a bordered box inside a bordered card
+  inside a bordered pane, is simply gone along with bug 3 above).
+  Confidence/strength/update-status and "Candidate relationship" are
+  now plain uppercase text folded into each card's eyebrow line
+  (`Hypothesis 01 · Inferred · Leading · High confidence · Unchanged` /
+  `Deterministic relationship · Candidate relationship`) — a pill
+  implied a precision the confidence band doesn't carry. Italic is gone
+  from the INFERRED paragraph.
+- **Evidence restructured as a two-column definition list**
+  (`hypothesis-card.tsx`): fixed 96px label column, value column to the
+  right, 8px row spacing within a section, 16px between sections, 16px
+  card padding — all literal, per the ticket. Each value clamps via a
+  new `ClampedText` component
+  (`src/app/cases/[caseId]/investigation/clamped-text.tsx`, 2 lines for
+  OBSERVED/KNOWN/INFERRED, 1 line for MISSING) with a "Show more"
+  control that appears only when the text is long enough to plausibly
+  need it — a character-length heuristic deliberately chosen over a
+  ResizeObserver-based real layout measurement, since jsdom (the unit
+  test environment) never performs real layout and a heuristic keeps
+  the expand/collapse behavior genuinely unit-testable without an
+  environment-detection hack. The hypothesis card's own container caps
+  at `max-h-[320px]` (verified live via `getBoundingClientRect()` —
+  exactly 320px on a card with enough evidence to need it, at both
+  1440 and 1024); the header/title stay always visible above the cap,
+  and the evidence list scrolls internally for any real overflow rather
+  than clipping content with no way to reach it, or growing the card
+  past its cap.
+- **Buttons — one primary style, one secondary, both sentence case**,
+  13px text, 32px height (`primaryButton`/`secondaryButton` in
+  reasoning-typography.ts). The engineering-change trigger button
+  (`record-engineering-change-form.tsx`) previously rendered its own
+  already-sentence-case source text ("Record engineering change")
+  through an `uppercase` CSS transform, which is what made it look like
+  a different button system from "Record result" right beside it —
+  removing the transform, not the text, fixed it. That file's own
+  fields/flow were not touched (still explicitly out of scope);
+  restyling its trigger button is a rendering-only change explicitly
+  named as a defect in this correction ticket.
+- **Overflow/clipping (acceptance criterion 2, explicitly called out as
+  failing)**: shrinking the recommendation text from a headline size to
+  14px removed the size pressure that caused it; `min-w-0`/`break-words`
+  was also added defensively to the recommendation paragraph, its
+  caption, and the button row so no container can clip a long label
+  regardless of exact cause. Live-verified at 1440/1280/1024/768/390,
+  dark and light: no truncated text anywhere, both buttons fully
+  legible.
+
+### Verification
+
+- `pnpm run lint` / `pnpm exec tsc --noEmit` / `pnpm run build` — all
+  clean. `pnpm test` 531/531 (four new: `dedupeEvidence` collapses two
+  identical items into one, keeps two same-category-different-text
+  items, preserves order; plus a `validateAgentOutput` regression
+  reproducing bug 1 exactly). `pnpm test:integration` 62/62.
+- Tests rewritten to the same standard as the original UX-07 ticket's
+  own condition A: an assertion whose target moved must still fail if
+  the guarantee breaks. `hypothesis-card.test.tsx`'s old "Hypothesis 03
+  ... reuses the INFERRED reasoning as ... 'why this test'" test
+  asserted the exact behavior this ticket removed — replaced with a
+  test asserting the opposite (neither "Next investigation" nor "Why
+  this test" render, and the INFERRED paragraph appears exactly once,
+  not twice). `decision-view.test.tsx`'s promoted-recommendation test
+  gained a `getAllByText(...).toHaveLength(1)` assertion it didn't
+  need before (there was always exactly one *other* copy to worry
+  about; now there's none).
+- Live QA (chrome-devtools MCP, real running dev server, real seeded
+  Gateway X case, no mocks): a genuine before/after pair captured by
+  `git stash`-ing this ticket's changes, reloading, screenshotting the
+  real pre-fix render, then popping the stash and confirming the
+  working tree matched the post-fix screenshots already taken — sent to
+  the user as files rather than only described. 1440 (dark + light),
+  1280, 1024, 768, 390 all swept; a **fresh live run** (not the case's
+  pre-existing persisted hypothesis) was triggered specifically to
+  confirm bug 1's fix applies to newly-generated evidence, not just the
+  unit test.
+- **Human gate, answered honestly**: on the fresh run's rendering, yes
+  — the failing frequency (200 MHz / 7.4 dB), the calculated
+  relationship (40 MHz × 5 = 200 MHz), the leading hypothesis title, and
+  the full recommended-next-test text are all visible together at
+  1440px with no scrolling and nothing expanded. The clamped "Show
+  more" controls only ever hide supporting detail (the INFERRED
+  paragraph's later sentences, secondary MISSING items) — never the
+  four facts the gate asks about.
+- Not fixed, out of scope, noted plainly: the composer's placeholder
+  still clips against SEND at 768px/390px (`case-composer.tsx`, a file
+  this ticket did not touch, same as the original UX-07 entry already
+  recorded).
+
 ### Condition A — real test impact, counted before editing
 
 The Decision Sheet's own estimate ("two test rewrites") was flagged in
@@ -4407,3 +4566,147 @@ looks right in one snapshot.
   ticket.
 - No other acceptance criterion from the ticket was found unmet during
   this live QA pass.
+
+## UX-08 — hypothesis card, remaining corrections
+
+Baseline assumption stated by the ticket was that PR #1
+(`ux-07-decision-answer-first-layout`, containing the UX-07 correction
+commit) was already merged into `main`. **It was not** — this was the
+first real finding of the ticket, not a coincidence to route around
+silently.
+
+### Root cause: a merge-timing gap, not a dedupe bug
+
+The ticket's item 1 speculated the shipped `dedupeEvidence()` fix was
+"keying on the wrong field." It wasn't. `gh pr view 1` showed PR #1
+merged at `05:09:55Z`; the UX-07 correction commit (`a5b8fda`,
+containing `dedupeEvidence` and every other UX-07-correction change)
+was authored and pushed at `06:41:03Z` — **after** the merge, onto a
+branch whose PR had already closed. Confirmed directly:
+`git log origin/main..origin/ux-07-decision-answer-first-layout` still
+listed `a5b8fda` as absent from `main`, and
+`git show origin/main:.../generate-hypotheses.ts` had no
+`dedupeEvidence` at all. The fix was real, tested, and correct; it
+simply never reached `main`. Recovered cleanly: cut a fresh branch
+`ux-08-hypothesis-card-corrections` off a freshly-pulled `origin/main`,
+then `git cherry-pick a5b8fda` (clean, no conflicts) — commit
+`945b7bf`. Re-verified live against a **freshly triggered run** on the
+seeded case (the stale persisted hypothesis still shows the old
+duplicate, expected, since assembly-code fixes don't retroactively
+rewrite already-stored rows): the KNOWN section now shows "Product
+context: system clock — 40 MHz" exactly once.
+
+### This ticket's own delta: full border-colour removal
+
+The UX-07 correction had already removed the glyphs, pills, and italic
+(items 3/4/6 of this ticket) and already rendered the four evidence
+categories as a single ordered list (item 7) — verified present in the
+cherry-picked code by direct grep before writing any new code, so no
+changes were needed there. The one thing UX-07 correction had
+deliberately kept — "one 2px accent bar on the outer card" (amber for
+the hypothesis card, `border-l-warning`) — is exactly what this
+ticket's item 2 says to remove, on the reasoning that colour on a card
+border reads as a warning state the data doesn't carry, on top of a
+glyph-free label and an eyebrow that already say what the card is.
+
+- `hypothesis-card.tsx`: dropped `border-l-2 ${style.accent}` from the
+  container class entirely. The card now takes only `surface.card`'s
+  own uniform `border-border` on all four sides — identical treatment
+  to the deterministic card. `artifact.hypothesis.accent` is no longer
+  read anywhere in this component (kept as a doc-comment note, not
+  deleted from the token file — `context-rail.tsx` still uses the
+  broader `evidence`/`artifact` token set for other purposes, out of
+  this ticket's scope).
+- `correlation-card.tsx`: same removal (`border-l-2 ${style.accent}`,
+  which was `border-l-muted-foreground`, never amber). Not literally
+  named by the ticket text, but left in would have meant the two
+  reasoning cards used two different border treatments for no
+  remaining reason — a hypothesis card with a flat border sitting next
+  to a correlation card that still had one colored edge reads as an
+  inconsistency, not a deliberate distinction. Flattened for
+  consistency; the two cards are told apart by their eyebrow text and
+  internal structure (equation vs. evidence list), never by border
+  colour, matching the ticket's own stated principle.
+
+Items 3, 5, and the palette sweep were re-verified directly on this
+pass, not merely assumed carried over: `grep -i` for `warning|amber`
+and for hex literals (`#[0-9a-fA-F]{3,8}`) across both components
+returns nothing live (only doc-comment prose mentioning "amber" as a
+description of what was removed).
+
+### New regression tests
+
+Two tests added to each of `hypothesis-card.test.tsx` and
+`correlation-card.test.tsx`: one asserts the rendered card's
+`className` contains no `border-l-*` utility at all (not just "not
+amber" — any single-sided accent border), the other asserts the full
+rendered HTML contains no `warning`/`amber` class-name fragment, no
+hardcoded hex colour, and no `●◆△○` glyph character, plus (on the
+correlation card) that "Candidate relationship" carries no
+`rounded-full` pill class. Sanity-checked as real regression coverage,
+not tautological: `git stash push --keep-index` reverted only the two
+component files back to their pre-UX-08 state while leaving the new
+tests in place, ran the two test files, confirmed exactly the 4 new
+assertions failed (border-l-warning / border-l-muted-foreground
+present, "warning" string present in the amber-accent class), then
+`git stash pop` to restore the fix and re-ran to confirm all 16 tests
+in the two files pass again.
+
+### No hosted deployment exists
+
+The ticket's verification step asks for screenshots "on the hosted
+deployment." Checked directly via the Vercel MCP tools before
+asserting anything: `list_teams` found one team, `list_projects` for
+that team returned zero projects; no `.vercel/project.json` or
+`vercel.json` exists in the repo either. This matches `features.json`'s
+MVP-16 ("Production deployment") already being `passes: false`. No
+hosted deployment has been created for this pilot yet — verification
+below was done against the real local dev server instead (chrome-
+devtools MCP, no mocks, real seeded Gateway X case), which is the
+closest available substitute, not a claim that a hosted check happened.
+
+### Verification
+
+- `pnpm run lint` / `pnpm exec tsc --noEmit` — clean.
+- `hypothesis-card.test.tsx` + `correlation-card.test.tsx` run
+  directly: 16/16 passing. (A full-suite run in the same pass showed
+  one unrelated failure, `case-composer.test.tsx`'s observation-
+  confirmation test, under `vitest run` with an unusual arg-passing
+  invocation; re-run alone it passed 14/14 — a timing-sensitive test
+  behaving differently under a different run mode, not a UX-08
+  regression. That file was never touched by this ticket.)
+- Live QA (chrome-devtools MCP, real dev server, seeded case
+  CASE-4FA53E, no mocks), **1440 and 1280, both themes, before/after**:
+  a genuine before pair was captured by stashing only the UX-08 delta
+  (component files, not the cherry-picked UX-07-correction code),
+  reloading, screenshotting the still-live amber-accented card, then
+  popping the stash and reloading again for the after pair — both
+  against the same freshly-generated hypothesis, not the case's older
+  stale one. Confirmed visually at all four before/after pairs: the
+  amber left border is present in every "before" shot and absent in
+  every "after" shot; nothing else on the card changed (no glyphs,
+  pills, or italics were present in either, confirming those were
+  already fixed by the cherry-picked UX-07 correction rather than by
+  this pass). The pinned "RECOMMENDED NEXT TEST" bar's own left accent
+  is untouched — it belongs to `next-action-bar.tsx`, a different
+  component outside both this ticket's named scope ("the hypothesis
+  card... the NEXT INVESTIGATION block") and its correlation-card
+  extension.
+
+**Can a reader still tell OBSERVED from INFERRED at a glance with all
+colour removed?** Yes, verified by looking at the actual screenshots,
+not inferred from the code: each label sits alone in a fixed 96px left
+column, uppercase, at a consistent row position, immediately followed
+by its value in the same row — position and the word itself (four
+short, distinct words: Observed/Known/Inferred/Missing) carry the
+distinction, and every row reads as clearly at-a-glance in both themes
+as it did with the amber border present. No follow-up weight/spacing
+change is needed.
+
+### Not met / deliberately out of scope
+
+- No hosted-deployment screenshot exists, for the reason stated above
+  (MVP-16 is not yet built). Local dev server verification was
+  substituted and disclosed rather than left unstated.
+- Every other acceptance criterion in the ticket was checked directly
+  against the current code and found met.

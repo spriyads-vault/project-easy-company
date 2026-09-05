@@ -1,20 +1,40 @@
 // DETERMINISTIC RELATIONSHIP artifact (UX-03, promoted to the Decision
-// view's reasoning object in UX-07): a compact mathematical object — must
-// visually read as arithmetic, not as an AI opinion. Labeled "Candidate
-// relationship" deliberately, never "root cause" (see CLAUDE.md "Product
-// truth": a harmonic match is a coincidence worth investigating, not a
-// diagnosis). This is a deterministic engine output (MVP-06) — the card's
-// whole visual job is to look calculated, not inferred, which is why the
-// equation is the single largest thing on it and every supporting fact
-// underneath stays monospace.
+// view's reasoning object in UX-07, restyled by the UX-07 correction): a
+// compact mathematical object — must visually read as arithmetic, not as
+// an AI opinion. Labeled "Candidate relationship" deliberately, never
+// "root cause" (see CLAUDE.md "Product truth": a harmonic match is a
+// coincidence worth investigating, not a diagnosis). This is a
+// deterministic engine output (MVP-06).
+//
+// UX-07 correction: the equation used to be the single largest thing on
+// the card (text-2xl/3xl) — the correction ticket's fixed type scale
+// caps every technical value, equations included, at 13px monospace, so
+// the card no longer shouts its result; it reads it out plainly, like a
+// line in a lab notebook. "Candidate relationship" is no longer a pill
+// badge — folded into the eyebrow line as plain text, matching
+// hypothesis-card.tsx's own eyebrow treatment (a pill implies a
+// precision this qualifier doesn't carry either).
 //
 // UX-07: carries its own "State" (always "Verified" — the calculation
 // itself is complete/reproducible, distinct from a hypothesis's
 // confidence/strength) directly on the object, replacing the retired
 // InvestigationItemTable's "State" column — see decision-view.tsx and
 // docs/PROGRESS.md's UX-07 entry for why that table was retired.
+//
+// UX-08 correction: hypothesis-card.tsx dropped its own border-l-2
+// accent (amber) for the same reason CLAUDE.md's palette rule and the
+// UX-08 ticket give — colour on a card border reads as a semantic
+// state the data doesn't have, on top of the eyebrow label already
+// naming what this is. This card's own accent was never amber (just
+// `border-l-muted-foreground`, `artifact.deterministic.accent`) but
+// kept it anyway would leave the two reasoning cards using two
+// different border treatments for no remaining reason — flattened to
+// the same plain `surface.card` border-border both cards now share;
+// they're told apart by their eyebrow text and internal structure
+// (equation vs. h3 + evidence list), never by border colour.
 import type { CorrelationFoundPayload } from "@/lib/analysis/events";
-import { artifact, focusRing, motion, surface, text } from "./theme";
+import { artifact, focusRing, motion, surface } from "./theme";
+import { bodyText, sectionLabel, technicalValue } from "./reasoning-typography";
 
 interface CorrelationCardProps {
   correlation: CorrelationFoundPayload;
@@ -36,34 +56,33 @@ export function CorrelationCard({ correlation, onSelect, isSelected = false }: C
 
   const body = (
     <>
-      <div className="flex items-center justify-between gap-2">
-        <span className={text.kicker}>{style.label} relationship</span>
-        <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-          Candidate relationship
-        </span>
+      <div className={`flex flex-wrap items-baseline gap-x-1 ${sectionLabel}`}>
+        <span>{style.label} relationship</span>
+        <span aria-hidden="true">·</span>
+        <span>Candidate relationship</span>
       </div>
 
-      <p className={`text-2xl font-semibold sm:text-3xl ${text.mono}`}>
+      <p className={`${technicalValue} font-medium`}>
         {correlation.sourceFrequencyMhz} MHz × {correlation.harmonicNumber} ={" "}
         {correlation.expectedFrequencyMhz} MHz
       </p>
 
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-        <dt className={text.muted}>Source</dt>
-        <dd>
+      <dl className="grid grid-cols-[96px_1fr] items-baseline gap-x-3 gap-y-1.5">
+        <dt className={sectionLabel}>Source</dt>
+        <dd className={bodyText}>
           ProductFact · {correlation.productFactCategory} · {correlation.productFactLabel}
         </dd>
-        <dt className={text.muted}>Observed</dt>
-        <dd className={text.mono}>{correlation.measuredFrequencyMhz} MHz peak</dd>
-        <dt className={text.muted}>Deviation</dt>
-        <dd className={text.mono}>{deviationLabel}</dd>
-        <dt className={text.muted}>State</dt>
-        <dd className="text-foreground">Verified — deterministic check</dd>
+        <dt className={sectionLabel}>Observed</dt>
+        <dd className={technicalValue}>{correlation.measuredFrequencyMhz} MHz peak</dd>
+        <dt className={sectionLabel}>Deviation</dt>
+        <dd className={technicalValue}>{deviationLabel}</dd>
+        <dt className={sectionLabel}>State</dt>
+        <dd className={bodyText}>Verified — deterministic check</dd>
       </dl>
     </>
   );
 
-  const containerClass = `flex flex-col gap-3 border-l-2 p-4 ${style.accent} ${motion.rise} ${surface.card} ${
+  const containerClass = `flex flex-col gap-3 p-4 ${motion.rise} ${surface.card} ${
     isSelected ? "ring-1 ring-primary/50" : ""
   }`;
 

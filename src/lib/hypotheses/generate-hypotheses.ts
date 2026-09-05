@@ -91,6 +91,25 @@ export function buildKnownEvidence(
   return { category: "known", description: `Product context: ${fact.summary}` };
 }
 
+// UX-07 correction: the same product fact can legitimately enter a single
+// hypothesis's evidence twice — once as the deterministic correlation's own
+// grounding fact, once again if the model separately cites it as an
+// evidenceRef (src/lib/agents/validate-agent-output.ts does both). That
+// produced an exact duplicate line ("Product context: 40 MHz system clock"
+// twice) on screen — a content-assembly bug, not a model or evidence-model
+// issue. Dedupes by (category, description) — the same fact cited via two
+// different, differently-worded routes would NOT collide here, which is
+// correct: only byte-identical restatements are the bug.
+export function dedupeEvidence(evidence: FinalEvidenceItem[]): FinalEvidenceItem[] {
+  const seen = new Set<string>();
+  return evidence.filter((item) => {
+    const key = `${item.category}:${item.description}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 /**
  * Generates ranked, evidence-labeled investigation hypotheses for a
  * measurement. Does not touch the database or any model SDK directly —
@@ -171,7 +190,7 @@ export async function generateHypothesesForMeasurement(
       title: modelHypothesis.title,
       confidenceBand: modelHypothesis.confidenceBand,
       recommendedNextStep: modelHypothesis.recommendedNextStep,
-      evidence,
+      evidence: dedupeEvidence(evidence),
     });
   }
 

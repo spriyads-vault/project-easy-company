@@ -40,4 +40,19 @@ describe("CorrelationCard", () => {
     );
     expect(screen.getByText("1.250% deviation")).toBeInTheDocument();
   });
+
+  it("carries no coloured accent border — a plain neutral border-border only (UX-08 correction)", () => {
+    render(<CorrelationCard correlation={gatewayXCorrelation} />);
+    const card = screen.getByText("40 MHz × 5 = 200 MHz").closest("div")!;
+    expect(card.className).not.toMatch(/border-l-2|border-l-muted-foreground|border-l-\S/);
+  });
+
+  it("uses no amber/warning colour class, no hardcoded hex, and no glyph character, and 'Candidate relationship' is not a pill/badge element (UX-08 correction)", () => {
+    const { container } = render(<CorrelationCard correlation={gatewayXCorrelation} />);
+    expect(container.innerHTML).not.toMatch(/warning|amber/i);
+    expect(container.innerHTML).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+    expect(container.textContent).not.toMatch(/[●◆△○]/);
+    const candidateLabel = screen.getByText("Candidate relationship");
+    expect(candidateLabel.className).not.toMatch(/rounded-full/);
+  });
 });
