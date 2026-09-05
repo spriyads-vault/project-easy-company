@@ -38,16 +38,10 @@ describe("SignUpForm", () => {
     expect(screen.queryByLabelText(/phone/i)).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/confirm password/i)).not.toBeInTheDocument();
 
-    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
-  });
-
-  it("preserves the intended destination in the Sign in link", () => {
-    mockedSignUp.mockResolvedValue({});
-    render(<SignUpForm next="/cases/abc-123" />);
-    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
-      "href",
-      `/login?next=${encodeURIComponent("/cases/abc-123")}`,
-    );
+    // UX-10: the "Sign in" switch link moved out of this component into
+    // AuthShell's shared top bar — no longer rendered here at all. See
+    // auth-shell.test.tsx for its coverage.
+    expect(screen.queryByRole("link", { name: "Sign in" })).not.toBeInTheDocument();
   });
 
   it("disables the submit button while the action is pending", async () => {

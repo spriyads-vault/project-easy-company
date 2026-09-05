@@ -7,22 +7,22 @@
 // params on the server and passed in as `notice`; this component only
 // owns the action-result error/message state useActionState gives it.
 import { useActionState, useState } from "react";
-import Link from "next/link";
 import { LoaderCircle } from "lucide-react";
 import { signIn, type AuthFormState } from "@/lib/auth/actions";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/lib/design/password-input";
 import { AuthBanner } from "@/lib/design/auth-banner";
-import { switchHref } from "@/lib/design/auth-shell";
 import { focusRing } from "@/lib/design/tokens";
+import { authHeading, authInput, authLabel, authPrimaryButton, authSupportingLine } from "@/lib/design/auth-tokens";
 
 const initialState: AuthFormState = {};
 
 interface SignInFormProps {
   /** Sanitized post-auth destination — carried as a hidden field so the
-   * server action redirects somewhere real after success, and re-used
-   * to build the "Create account" link so a deep link a signed-out
-   * visitor followed survives switching to Sign up first. */
+   * server action redirects somewhere real after success. The matching
+   * "Sign up" switch button (which also needs this to survive a deep
+   * link across the Sign in <-> Sign up hop) is owned by AuthShell now
+   * (UX-10 moved it into the shared top bar), not this component. */
   next: string;
   notice?: { tone: "error" | "info"; message: string };
 }
@@ -41,10 +41,8 @@ export function SignInForm({ next, notice }: SignInFormProps) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-[26px] font-semibold tracking-tight text-foreground sm:text-[28px]">
-          Sign in to Crado
-        </h1>
-        <p className="text-sm text-muted-foreground">Continue to your engineering workspace.</p>
+        <h1 className={authHeading}>Sign in to Crado</h1>
+        <p className={authSupportingLine}>Continue to your engineering workspace.</p>
       </div>
 
       {notice ? <AuthBanner tone={notice.tone}>{notice.message}</AuthBanner> : null}
@@ -53,7 +51,7 @@ export function SignInForm({ next, notice }: SignInFormProps) {
         <input type="hidden" name="next" value={next} />
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="signin-email" className="text-[13px] font-medium text-foreground">
+          <label htmlFor="signin-email" className={authLabel}>
             Email
           </label>
           <Input
@@ -65,12 +63,12 @@ export function SignInForm({ next, notice }: SignInFormProps) {
             autoFocus
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            className="h-11"
+            className={authInput}
           />
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="signin-password" className="text-[13px] font-medium text-foreground">
+          <label htmlFor="signin-password" className={authLabel}>
             Password
           </label>
           {/* No "Forgot password" link here — no password-reset flow
@@ -83,28 +81,17 @@ export function SignInForm({ next, notice }: SignInFormProps) {
             required
             autoComplete="current-password"
             minLength={8}
-            className="h-11"
+            className={authInput}
           />
         </div>
 
         {state.error ? <AuthBanner tone="error">{state.error}</AuthBanner> : null}
 
-        <button
-          type="submit"
-          disabled={pending}
-          className={`mt-1 flex h-11 w-full items-center justify-center gap-2 rounded-[6px] bg-primary text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`}
-        >
+        <button type="submit" disabled={pending} className={`mt-1 ${authPrimaryButton} ${focusRing}`}>
           {pending ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
           {pending ? "Signing in…" : "Sign in"}
         </button>
       </form>
-
-      <p className="text-sm text-muted-foreground">
-        New to Crado?{" "}
-        <Link href={switchHref("/signup", next)} className="font-medium text-primary hover:underline">
-          Create account
-        </Link>
-      </p>
     </div>
   );
 }

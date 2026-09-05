@@ -43,19 +43,18 @@ describe("SignInForm", () => {
     // link would point nowhere.
     expect(screen.queryByText(/forgot password/i)).not.toBeInTheDocument();
 
-    expect(screen.getByRole("link", { name: "Create account" })).toHaveAttribute("href", "/signup");
+    // UX-10: the "Create account" switch link moved out of this
+    // component into AuthShell's shared top bar — no longer rendered
+    // here at all. See auth-shell.test.tsx for its coverage.
+    expect(screen.queryByRole("link", { name: "Create account" })).not.toBeInTheDocument();
   });
 
-  it("preserves the intended post-auth destination through a hidden field and the Create account link", () => {
+  it("preserves the intended post-auth destination through a hidden field", () => {
     mockedSignIn.mockResolvedValue({});
     const { container } = render(<SignInForm next="/cases/abc-123" />);
 
     const hidden = container.querySelector('input[name="next"]') as HTMLInputElement;
     expect(hidden.value).toBe("/cases/abc-123");
-    expect(screen.getByRole("link", { name: "Create account" })).toHaveAttribute(
-      "href",
-      `/signup?next=${encodeURIComponent("/cases/abc-123")}`,
-    );
   });
 
   it("toggles password visibility with an accessible, keyboard-operable control", () => {

@@ -9,18 +9,27 @@
 // field either — the existing security design (a single Supabase
 // signUp call) never required one.
 import { useActionState, useState } from "react";
-import Link from "next/link";
 import { LoaderCircle } from "lucide-react";
 import { signUp, type AuthFormState } from "@/lib/auth/actions";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/lib/design/password-input";
 import { AuthBanner } from "@/lib/design/auth-banner";
-import { switchHref } from "@/lib/design/auth-shell";
 import { focusRing } from "@/lib/design/tokens";
+import {
+  authHeading,
+  authHelperText,
+  authInput,
+  authLabel,
+  authPrimaryButton,
+  authSupportingLine,
+} from "@/lib/design/auth-tokens";
 
 const initialState: AuthFormState = {};
 
 interface SignUpFormProps {
+  /** Sanitized post-auth destination — carried as a hidden field. The
+   * matching "Sign in" switch button lives in AuthShell's top bar
+   * (UX-10), not this component. */
   next: string;
 }
 
@@ -35,10 +44,8 @@ export function SignUpForm({ next }: SignUpFormProps) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1.5">
-        <h1 className="text-[26px] font-semibold tracking-tight text-foreground sm:text-[28px]">
-          Create your Crado account
-        </h1>
-        <p className="text-sm text-muted-foreground">Set up secure access to your engineering workspace.</p>
+        <h1 className={authHeading}>Create your Crado account</h1>
+        <p className={authSupportingLine}>Set up secure access to your engineering workspace.</p>
       </div>
 
       {state.message ? <AuthBanner tone="success">{state.message}</AuthBanner> : null}
@@ -48,7 +55,7 @@ export function SignUpForm({ next }: SignUpFormProps) {
           <input type="hidden" name="next" value={next} />
 
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="signup-email" className="text-[13px] font-medium text-foreground">
+            <label htmlFor="signup-email" className={authLabel}>
               Email
             </label>
             <Input
@@ -60,12 +67,12 @@ export function SignUpForm({ next }: SignUpFormProps) {
               autoFocus
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="h-11"
+              className={authInput}
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="signup-password" className="text-[13px] font-medium text-foreground">
+            <label htmlFor="signup-password" className={authLabel}>
               Password
             </label>
             <PasswordInput
@@ -75,32 +82,21 @@ export function SignUpForm({ next }: SignUpFormProps) {
               autoComplete="new-password"
               minLength={8}
               aria-describedby="signup-password-requirements"
-              className="h-11"
+              className={authInput}
             />
-            <p id="signup-password-requirements" className="text-xs text-muted-foreground">
+            <p id="signup-password-requirements" className={authHelperText}>
               At least 8 characters.
             </p>
           </div>
 
           {state.error ? <AuthBanner tone="error">{state.error}</AuthBanner> : null}
 
-          <button
-            type="submit"
-            disabled={pending}
-            className={`mt-1 flex h-11 w-full items-center justify-center gap-2 rounded-[6px] bg-primary text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60 ${focusRing}`}
-          >
+          <button type="submit" disabled={pending} className={`mt-1 ${authPrimaryButton} ${focusRing}`}>
             {pending ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}
             {pending ? "Creating account…" : "Create account"}
           </button>
         </form>
       ) : null}
-
-      <p className="text-sm text-muted-foreground">
-        Already have an account?{" "}
-        <Link href={switchHref("/login", next)} className="font-medium text-primary hover:underline">
-          Sign in
-        </Link>
-      </p>
     </div>
   );
 }
