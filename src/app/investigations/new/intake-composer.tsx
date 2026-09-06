@@ -237,10 +237,9 @@ export function IntakeComposer({ products }: IntakeComposerProps) {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className={typography.metadata}>Operating mode</label>
+              <label className={typography.metadata}>Operating mode (optional)</label>
               <Input
                 name="operatingMode"
-                required
                 value={operatingMode}
                 onChange={(event) => setOperatingMode(event.target.value)}
                 placeholder="e.g. WiFi TX + display active"

@@ -115,7 +115,14 @@ const intakeSchema = z.object({
   productId: z.string().trim().min(1).optional(),
   newProductName: z.string().trim().min(1).optional(),
   revisionLabel: z.string().trim().min(1, "Give this revision a label."),
-  operatingMode: z.string().trim().min(1, "Describe what the product was doing during this measurement."),
+  // FIX-04: never required. correlateMeasurementWithProductFacts (the only
+  // thing that reads a measurement's frequency to produce a result) takes
+  // just the frequency and the product's facts — operating mode is stored
+  // on the measurement for the engineer's own record and shown back in the
+  // UI, but never passed in (see docs/CAPABILITY_AUDIT.md section 5, and
+  // measurements.operating_mode's own nullable column). Blocking submission
+  // on a field the pipeline cannot use was wrong.
+  operatingMode: z.string().trim().min(1).max(300).optional(),
   peak: measurementPeakInputSchema,
 });
 
@@ -156,7 +163,7 @@ export async function createInvestigationIntake(
     productId: typeof productId === "string" && productId ? productId : undefined,
     newProductName: typeof newProductName === "string" && newProductName ? newProductName : undefined,
     revisionLabel: formData.get("revisionLabel"),
-    operatingMode: formData.get("operatingMode"),
+    operatingMode: stringOrUndefined(formData.get("operatingMode")),
     peak: {
       frequencyMhz: numberOrUndefined(formData.get("frequencyMhz")),
       marginDb: numberOrUndefined(formData.get("marginDb")),
@@ -298,4 +305,13 @@ function numberOrUndefined(value: FormDataEntryValue | null): number | undefined
   if (!value || typeof value !== "string" || value.trim() === "") return undefined;
   const parsed = Number(value);
   return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+// FIX-04: a blank text input still submits FormData as "" (a truthy
+// string), not the actual absence `intakeSchema`'s `.optional()` checks
+// for — without this normalization an empty Operating mode field would
+// still fail `.min(1)`, right back to blocking submission.
+function stringOrUndefined(value: FormDataEntryValue | null): string | undefined {
+  if (!value || typeof value !== "string" || value.trim() === "") return undefined;
+  return value;
 }

@@ -78,19 +78,41 @@ function matchExistingProduct(text: string, products: ProductCandidate[]): Produ
   return matches.reduce((best, candidate) => (candidate.name.length > best.name.length ? candidate : best));
 }
 
-// FIX-02 Defect 2: which words identify each category, matched only as the
-// word(s) immediately after a frequency figure — "N MHz <words>". Kept
-// narrow and literal on purpose ("extract nothing rather than guess"):
-// no synonyms beyond the ticket's own "clocks, radios and switching
-// rails", so a sentence with a frequency but no recognized source word
-// next to it correctly produces nothing rather than a guessed category.
+// FIX-02 Defect 2 / FIX-04: which words identify each category, matched
+// only as the word(s) immediately after a frequency figure —
+// "N MHz <words>". Kept narrow and literal on purpose ("extract nothing
+// rather than guess"): every alternative here is a real, specific
+// component/topology word an engineer would actually write next to a
+// figure, never a generic word that could belong to something unrelated
+// (e.g. "controller" or "rail" alone are deliberately left out — see
+// FIX-04's own PROGRESS.md entry for the "flyback controller" case this
+// excludes from the label). FIX-04 widened this from FIX-02's original
+// "clock"/radio-list/"switching rail|regulator|converter" after
+// "25 MHz MCU crystal" and "8 MHz reference oscillator" were found to
+// extract nothing — the keyword only ever needs to be the LAST word
+// matchFrequencySourceLabel captures; a descriptive word in front of it
+// ("MCU", "reference", "system") is already handled by that function's
+// own up-to-4-leading-words allowance, so words like "clock" alone cover
+// every "<adjective> clock" phrasing without a compound entry per
+// adjective.
 const FREQUENCY_FACT_CATEGORIES: ReadonlyArray<{
   category: FrequencyFactCategory;
   keywordPattern: string;
 }> = [
-  { category: "clock", keywordPattern: "clock" },
-  { category: "radio", keywordPattern: "radio|wifi|wi-fi|bluetooth|ble|lora|zigbee|transceiver" },
-  { category: "power", keywordPattern: "switching\\s+(?:rail|regulator|converter)|power\\s+rail" },
+  {
+    category: "clock",
+    keywordPattern: "clock|crystal|oscillator|xtal|resonator|phy|mclk|timebase",
+  },
+  {
+    category: "radio",
+    keywordPattern:
+      "radio|wifi|wi-fi|bluetooth|ble|lora|zigbee|transceiver|transmitter|module",
+  },
+  {
+    category: "power",
+    keywordPattern:
+      "switching\\s+(?:rail|regulator|converter|frequency)|power\\s+rail|switcher|regulator|converter|buck|boost|flyback|smps",
+  },
 ];
 
 const FREQUENCY_TOKEN_PATTERN = /(\d+(?:\.\d+)?)\s*(MHz|GHz|kHz)\b/gi;

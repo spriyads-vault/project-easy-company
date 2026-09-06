@@ -133,3 +133,81 @@ describe("parseInvestigationIntake — product fact extraction (FIX-02 Defect 2)
     ]);
   });
 });
+
+// FIX-04: "25 MHz MCU crystal" (from a Tier A case run through
+// /investigations/new) extracted nothing — the vocabulary only recognized
+// the literal word "clock", missing every other real word an engineer
+// writes next to a clock/oscillator/switching-rail figure. Each of these
+// is the ticket's own required test string.
+describe("parseInvestigationIntake — widened clock/switching-rail vocabulary (FIX-04)", () => {
+  it('extracts one clock fact from "25 MHz MCU crystal"', () => {
+    const result = parseInvestigationIntake("25 MHz MCU crystal", []);
+    expect(result.productFacts).toEqual([
+      { category: "clock", label: "MCU crystal", frequencyMhz: 25 },
+    ]);
+  });
+
+  it('extracts one clock fact from "40 MHz system clock"', () => {
+    const result = parseInvestigationIntake("40 MHz system clock", []);
+    expect(result.productFacts).toEqual([
+      { category: "clock", label: "System clock", frequencyMhz: 40 },
+    ]);
+  });
+
+  it('extracts one clock fact from "50 MHz PHY clock"', () => {
+    const result = parseInvestigationIntake("50 MHz PHY clock", []);
+    expect(result.productFacts).toEqual([
+      { category: "clock", label: "PHY clock", frequencyMhz: 50 },
+    ]);
+  });
+
+  it('extracts one clock fact from "10.34 MHz pixel clock"', () => {
+    const result = parseInvestigationIntake("10.34 MHz pixel clock", []);
+    expect(result.productFacts).toEqual([
+      { category: "clock", label: "Pixel clock", frequencyMhz: 10.34 },
+    ]);
+  });
+
+  it('extracts one clock fact from "12.288 MHz audio codec clock"', () => {
+    const result = parseInvestigationIntake("12.288 MHz audio codec clock", []);
+    expect(result.productFacts).toEqual([
+      { category: "clock", label: "Audio codec clock", frequencyMhz: 12.288 },
+    ]);
+  });
+
+  it('extracts one clock fact from "100 MHz SoC core clock"', () => {
+    const result = parseInvestigationIntake("100 MHz SoC core clock", []);
+    expect(result.productFacts).toEqual([
+      { category: "clock", label: "SoC core clock", frequencyMhz: 100 },
+    ]);
+  });
+
+  it('extracts one clock fact from "8 MHz reference oscillator"', () => {
+    const result = parseInvestigationIntake("8 MHz reference oscillator", []);
+    expect(result.productFacts).toEqual([
+      { category: "clock", label: "Reference oscillator", frequencyMhz: 8 },
+    ]);
+  });
+
+  it('extracts one power fact from "2.08 MHz buck regulator"', () => {
+    const result = parseInvestigationIntake("2.08 MHz buck regulator", []);
+    expect(result.productFacts).toEqual([
+      { category: "power", label: "Buck regulator", frequencyMhz: 2.08 },
+    ]);
+  });
+
+  it('extracts one power fact from "0.4 MHz flyback controller" (label is "Flyback" — "controller" is deliberately not in the vocabulary, so it never becomes part of the captured label; still exactly one fact, no guess)', () => {
+    const result = parseInvestigationIntake("0.4 MHz flyback controller", []);
+    expect(result.productFacts).toEqual([
+      { category: "power", label: "Flyback", frequencyMhz: 0.4 },
+    ]);
+  });
+
+  it("extracts two facts from a sentence naming two clocks", () => {
+    const result = parseInvestigationIntake("25 MHz MCU crystal and 8 MHz reference oscillator", []);
+    expect(result.productFacts).toEqual([
+      { category: "clock", label: "MCU crystal", frequencyMhz: 25 },
+      { category: "clock", label: "Reference oscillator", frequencyMhz: 8 },
+    ]);
+  });
+});

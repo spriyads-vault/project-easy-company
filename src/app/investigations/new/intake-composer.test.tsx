@@ -69,3 +69,29 @@ describe("IntakeComposer — product fact extraction (FIX-02 Defect 2)", () => {
     expect(mockedAction).not.toHaveBeenCalled();
   });
 });
+
+describe("IntakeComposer — required fields (FIX-04)", () => {
+  beforeEach(() => {
+    mockedAction.mockReset();
+  });
+
+  it("does not require Operating mode — the correlation engine never reads it (docs/CAPABILITY_AUDIT.md section 5), so blocking submission on it was wrong", () => {
+    render(<IntakeComposer products={products} />);
+    continueFrom("Gateway X Rev17 failed at 200 MHz. 40 MHz system clock.");
+
+    expect(screen.getByPlaceholderText(/wifi tx \+ display active/i)).not.toBeRequired();
+  });
+
+  it("still requires the fields the pipeline genuinely cannot proceed without: product, revision, observed peak, margin", () => {
+    render(<IntakeComposer products={products} />);
+    continueFrom("Gateway X Rev17 failed at 200 MHz. 40 MHz system clock.");
+
+    expect(screen.getByPlaceholderText(/rev17/i)).toBeRequired();
+    expect(screen.getByPlaceholderText(/7\.4 or -3\.6/i)).toBeRequired();
+    // Observed peak has no placeholder (it's pre-filled from extraction) —
+    // found by its label's associated metadata text instead.
+    const peakLabel = screen.getByText("Observed peak (MHz)");
+    const peakInput = peakLabel.parentElement?.querySelector("input");
+    expect(peakInput).toBeRequired();
+  });
+});
