@@ -80,6 +80,13 @@ const clarificationRequired = () =>
     payload: { question: "Was the display refresh clock documented?" },
   });
 
+const hypothesisRetried = () =>
+  event({
+    type: "hypothesis.retried",
+    sequence: 3,
+    payload: { correlationCount: 1 },
+  });
+
 const agentStarted = () =>
   event({
     type: "agent.started",
@@ -281,6 +288,16 @@ describe("applyAnalysisEvent", () => {
     });
   });
 
+  it("hypothesis.retried surfaces a status line without disturbing the correlation already shown (FIX-01)", () => {
+    const state = [correlationFound(), hypothesisRetried()].reduce(
+      applyAnalysisEvent,
+      initialWorkspaceState,
+    );
+    expect(state.correlations).toHaveLength(1);
+    expect(state.hypotheses).toEqual([]);
+    expect(state.lastEventSummary).toBe("No hypothesis produced yet — retrying once");
+  });
+
   it("run.completed with zero correlations/hypotheses stays a valid completed state (empty hypotheses case)", () => {
     const state = [
       runStarted(),
@@ -356,5 +373,26 @@ describe("reconstructFromPersistedEvents", () => {
     const state = reconstructFromPersistedEvents([runStarted(), measurementLoaded()]);
     expect(state.status).toBe("interrupted");
     expect(state.errorMessage).toContain("Run again to retry");
+  });
+
+  it("reconstructs a run that retried once identically to a live stream (FIX-01: without this, a refresh mid/post-retry would not rebuild correctly)", () => {
+    const events = [
+      runStarted(),
+      measurementLoaded(),
+      correlationFound(),
+      hypothesisRetried(),
+      hypothesisCreated(),
+      runCompleted(),
+    ];
+    const state = reconstructFromPersistedEvents(events);
+    expect(state.status).toBe("completed");
+    expect(state.correlations).toHaveLength(1);
+    expect(state.hypotheses).toHaveLength(1);
+    // The retry itself leaves no separate field — it's observable only via
+    // lastEventSummary at the moment it fires, same as every other
+    // progress-line-only event (agent.started, agent.tool.started). A
+    // completed reconstruction correctly ends on run.completed's own
+    // summary line, not stuck showing the mid-run retry message.
+    expect(state.lastEventSummary).toBe("Investigation complete");
   });
 });
