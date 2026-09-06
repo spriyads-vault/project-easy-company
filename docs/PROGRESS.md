@@ -5555,3 +5555,126 @@ screenshots and functional checks above are from the local dev server.
 This ticket touched presentation only (the right panel + the logo);
 no auth behaviour changed, so the existing hosted-auth-behaviour gap
 recorded in prior entries is unaffected either way.
+
+## UX-15 — left region inverted to dark, right panel deepened; CSS-only
+
+Four literal value changes, explicitly framed by the ticket as
+CSS-only: no component rewrites, no new files, no auth logic touched.
+
+### 1–2: right panel
+
+`.auth-panel-gradient`'s main radial gradient (globals.css) shifted its
+stops toward a stronger blue, same 0/24/58/100 percentages, same
+corner-anchored direction:
+
+| Stop | UX-14 | UX-15 |
+|---|---|---|
+| 0% | `#fff` | `#fff` (unchanged — still the lightest point) |
+| 24% | `#e8f0ff` | `#cfe0ff` |
+| 58% | `#9bbcff` | `#5f8ff2` |
+| 100% | `#275ee9` | `#163ea6` |
+
+`--auth-panel-grid-line` halved: `rgba(255,255,255,.35)` →
+`rgba(255,255,255,.175)`.
+
+### 3–4: left region
+
+`--auth-bg`/`--auth-foreground`/`--auth-muted`/`--auth-border`/
+`--auth-tile-bg` (globals.css, all in the same frozen `:root` block
+established in UX-13) flipped from light-theme's own values to
+dark-theme's own **already-existing** values — no new custom property:
+
+| Token | Light (was) | Dark (now) | Mirrors |
+|---|---|---|---|
+| `--auth-bg` | `#ffffff` | `#1f1f21` | `--card` dark |
+| `--auth-foreground` | `#101828` | `#f5f7fa` | `--foreground` dark |
+| `--auth-muted` | `#667085` | `#98a2b3` | `--muted-foreground` dark |
+| `--auth-border` | `#e7e3db` | `rgba(255,255,255,.09)` | `--border` dark |
+| `--auth-tile-bg` | `#f1efe9` | `#29292b` | `--secondary` dark |
+
+`--auth-primary` untouched (`#4f46e5`, light theme's own value) — not
+one of the ticket's 4 values.
+
+Because `authPrimaryButton` (auth-tokens.ts) was already written as
+`bg-auth-foreground text-auth-bg` rather than a literal black-on-white
+pair, flipping just the two base tokens **automatically** inverted the
+Sign in/Create account button to light-fill-dark-text with zero
+changes to the button's own class string. Inputs
+(`bg-auth-bg` + `border-auth-border`) automatically became
+dark-surface-with-existing-border the same way. Confirmed live, not
+assumed — see Verification below.
+
+### A real token-collision found and fixed before it shipped
+
+`auth-marketing-panel.tsx`'s headline and supporting line used
+`text-auth-foreground` — a token this ticket repurposes to mean
+"light region text." Left unfixed, the right panel's headline would
+have flipped to *white* text sitting on its own still-pale top-left
+gradient corner: unreadable. This wasn't asked for — the ticket's
+scope for the right panel was only the gradient stops and grid
+opacity (items 1–2), not its text colour. Fixed by pinning those two
+lines to the literal `text-[#101828]` arbitrary value — exactly the
+literal number `--auth-foreground` used to resolve to before this
+ticket — rather than inventing a new token. This matches the same
+plain-arbitrary-value style already used throughout that file's own
+`border-white/[...]`, `bg-white/[...]`, and `shadow-[...]` classes, so
+it's not a new pattern either.
+
+### Logo
+
+Swapped `crado-mark-black.png` → `crado-mark-white.png` (`AuthShell`)
+now that the left region is dark — the same reasoning UX-14 already
+established for the opposite direction (ThemedMark was deleted then;
+this is just the other literal asset on the same always-render-the-
+correct-one-directly pattern). Icon-tile contrast wasn't assumed
+adequate, it was computed: background `#29292b`, icon `#98a2b3` →
+≈5.6:1 contrast ratio, comfortably above the 3:1 floor for non-text
+graphical elements.
+
+### Test changes
+
+`auth-shell.test.tsx`: the UX-14 mark-src assertion flipped to expect
+`crado-mark-white.png`; two test descriptions that said "light only"
+reworded to "frozen, not theme-reactive" — the actual property being
+tested (no toggle, no `data-theme` dependency) never changed, only the
+literal word "light" stopped being accurate. No assertion logic or
+behaviour changed.
+
+### Verification
+
+- `pnpm exec eslint .` / `pnpm exec tsc --noEmit` / `pnpm run build` —
+  all clean.
+- Unit tests: 549/549 across 66 files (net zero — one assertion's
+  expected string changed, none added or removed).
+- Live QA (chrome-devtools MCP, real local dev server): screenshotted
+  `/login` and `/signup` at 1440 (this ticket's own required check) —
+  dark left region, light text (heading/supporting line/labels/
+  copyright), inverted light-fill/dark-text primary button, visible
+  input borders, legible icon tile, white logo+wordmark, deepened
+  right-panel gradient, halved grid opacity — all confirmed by eye and,
+  for the two places where "looks fine" isn't good enough on its own
+  (the icon tile, the input border), by reading the actual computed
+  colours via `getComputedStyle` rather than assuming the token flip
+  produced something legible.
+  - Forced the OS colour scheme to dark and reloaded both pages:
+    pixel-identical to the light-OS render — confirms the frozen-token
+    architecture still holds after this ticket's changes, the same way
+    UX-13/14 verified it before them.
+  - `/login?error=confirmation-failed` banner still renders correctly
+    (`AuthBanner` reads the theme-reactive `--destructive`/`--success`
+    tokens directly, not any `--auth-*` token, so it was never at risk
+    — confirmed rather than assumed by grepping the component first).
+
+### A judgment call worth flagging
+
+The ticket asked for "a visible border" on the inputs. The literal
+existing dark-theme `--border` value (`rgba(255,255,255,.09)`) is the
+same subtle border the rest of the app's dark theme already uses
+everywhere (sidebar, cards, etc.) — visible against the input's own
+slightly-lighter surface, but restrained, not high-contrast. Given
+"use existing tokens, do not add new ones," no other already-existing
+neutral token in the dark palette reads more clearly as a border
+without either looking inconsistent with the rest of the app (a grey
+built for text, not borders) or being a new value. Went with the
+literal existing token; flagging this explicitly in case a bolder
+border was intended — that would need a value that doesn't exist yet.

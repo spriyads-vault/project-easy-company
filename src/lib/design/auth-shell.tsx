@@ -9,11 +9,14 @@
 // page.tsx/sign-in-form.tsx/sign-up-form.tsx/lib/auth/**, none of which
 // this file touches.
 //
-// Light only: the reference has no dark variant and the ticket is
-// explicit ("These pages are light only... Remove [the theme toggle]"),
+// Frozen, not theme-reactive: UX-13's original reference had no dark
+// variant ("These pages are light only... Remove [the theme toggle]"),
 // so this file and everything under it reads the frozen `--auth-*`
 // tokens (globals.css), never the theme-reactive --background/
 // --foreground/etc. — no ThemeToggleCompact, no data-theme branching.
+// UX-15 changed what those frozen tokens resolve to (the left region
+// is now dark), not the architecture: still frozen, still independent
+// of the visitor's own theme choice, just a different fixed look.
 //
 // What the reference showed that is deliberately NOT here, and why:
 //   - Google/Apple sign-in buttons and the "Or" divider — no OAuth
@@ -41,13 +44,18 @@
 // correct for a surface that follows the app theme, but this page
 // doesn't (see the "Light only" comment above). A visitor with a
 // stored/OS dark preference got the *white* mark on this page's frozen
-// *white* background: invisible. Fixed by rendering the black mark
-// directly, unconditionally, the same way app-shell-chrome.tsx's
-// sidebar renders the white mark directly on its own always-dark
-// surface — ThemedMark's job is specifically to follow the theme, which
-// is exactly what a surface that has opted out of theming shouldn't do.
-// ThemedMark had no other consumer, so it was deleted rather than left
-// as a landmine for the next always-one-theme surface.
+// *white* background: invisible. Fixed by rendering the mark directly,
+// unconditionally, the same way app-shell-chrome.tsx's sidebar renders
+// its own mark directly on its own fixed-tone surface — ThemedMark's
+// job is specifically to follow the theme, which is exactly what a
+// surface that has opted out of theming shouldn't do. ThemedMark had
+// no other consumer, so it was deleted rather than left as a landmine
+// for the next always-one-theme surface.
+//
+// UX-15: the left region's own frozen tone flipped from light to dark
+// (see the --auth-bg/--auth-foreground comment in globals.css), so the
+// mark flips with it — white-on-transparent now, same reasoning as
+// UX-14's fix, just the other asset.
 import Image from "next/image";
 import Link from "next/link";
 import { User, UserPlus } from "lucide-react";
@@ -85,10 +93,10 @@ export function AuthShell({ mode, next, children }: AuthShellProps) {
       <div className="flex w-full flex-col lg:w-[44%]">
         <header className="flex items-center justify-between gap-3 px-6 pt-6 sm:px-10 sm:pt-8">
           <Link href="/" className="flex min-w-0 items-center gap-2.5" aria-label="Crado home">
-            {/* Always the black mark: this page's background is frozen
-                white regardless of the app's theme (see file header). */}
+            {/* Always the white mark: this page's background is frozen
+                dark regardless of the app's theme (see file header). */}
             <Image
-              src="/brand/crado-mark-black.png"
+              src="/brand/crado-mark-white.png"
               alt=""
               aria-hidden="true"
               width={20}
