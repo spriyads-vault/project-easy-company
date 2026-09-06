@@ -6277,3 +6277,126 @@ needs.
 
 Verification: `pnpm exec tsc --noEmit` / `pnpm exec eslint .` clean.
 `harmonic-correlation.tier-a-group1.test.ts`: 7/7.
+
+## FIX-04 — intake extraction vocabulary too narrow; Operating mode wrongly required
+
+Found by running the Tier A cases through the real `/investigations/new`
+form (not just `correlateMeasurementWithProductFacts` directly, which is
+all the Tier A group 1 test above exercises): "Sensor Hub A Rev3 failed
+radiated emissions at 175 MHz, 4.1 dB above the limit, with a 25 MHz MCU
+crystal, during normal operation" extracted zero product facts.
+
+### 1. Vocabulary
+
+`extractProductFacts` (`src/lib/investigations/parse-investigation-intake.ts`)
+recognized only the literal word "clock" for the clock category — every
+`"<adjective> clock"` phrasing (pixel clock, system clock, PHY clock,
+audio codec clock, SoC core clock) already worked via
+`matchFrequencySourceLabel`'s own up-to-4-leading-words mechanism (the
+descriptive word is just a leading word; "clock" alone as the keyword is
+enough), so the actual gap was narrower than it first looked: only
+bare-word endings the old list had no entry for at all — "crystal",
+"oscillator" — and the equivalent gap on the power side ("regulator",
+"flyback" with no "switching"/"power" prefix).
+
+Widened `FREQUENCY_FACT_CATEGORIES`' `keywordPattern` per category,
+changing nothing about the surrounding mechanism (still deterministic,
+still "extract nothing rather than guess", still only the word(s)
+immediately after a frequency figure, still capped at 4 leading words,
+still never crosses a clause boundary):
+
+- **Clock**: clock, crystal, oscillator, xtal, resonator, phy, mclk,
+  timebase.
+- **Radio**: kept everything already working (radio, wifi, wi-fi,
+  bluetooth, ble, lora, zigbee, transceiver) plus transmitter, module.
+- **Power**: kept the existing "switching rail/regulator/converter" /
+  "power rail" compounds plus bare switcher, regulator, converter, buck,
+  boost, flyback, smps, and "switching frequency".
+
+"0.4 MHz flyback controller" deliberately extracts as label "Flyback",
+not "Flyback controller" — "controller" was not added ("motor
+controller", "PID controller" are not power facts; too generic for this
+narrow-on-purpose list), so it never becomes the captured label's
+terminal word. Still exactly one correctly-categorized fact at the
+right frequency, never a guess at a fuller name.
+
+New test coverage (`parse-investigation-intake.test.ts`): all 9 of the
+ticket's own required strings, each asserted individually, plus a
+two-clocks sentence yielding two facts (10 new tests, all passing):
+
+| Input | Category | Expected label | Expected MHz |
+|---|---|---|---|
+| "25 MHz MCU crystal" | clock | MCU crystal | 25 |
+| "40 MHz system clock" | clock | System clock | 40 |
+| "50 MHz PHY clock" | clock | PHY clock | 50 |
+| "10.34 MHz pixel clock" | clock | Pixel clock | 10.34 |
+| "12.288 MHz audio codec clock" | clock | Audio codec clock | 12.288 |
+| "100 MHz SoC core clock" | clock | SoC core clock | 100 |
+| "8 MHz reference oscillator" | clock | Reference oscillator | 8 |
+| "2.08 MHz buck regulator" | power | Buck regulator | 2.08 |
+| "0.4 MHz flyback controller" | power | Flyback | 0.4 |
+
+### 2. Operating mode required-field
+
+The correlation engine (`correlateMeasurementWithProductFacts`) takes
+only `measuredFrequencyMhz` and `productFacts` — confirmed by reading
+`run-analysis.ts`'s call site directly, not assumed. `operating_mode`
+is a nullable column on `measurements` (no `not null` in
+`20260831035611_core_domain.sql`) — stored for the engineer's own
+record and shown back in the UI, never passed into the correlator (see
+`docs/CAPABILITY_AUDIT.md` section 5). Blocking submission on it was
+wrong.
+
+Fixed in two places, both required — removing only the HTML attribute
+would not have been enough:
+- `intake-composer.tsx`: removed `required` from the Operating mode
+  `<Input>`, relabeled "Operating mode (optional)".
+- `actions.ts`: `intakeSchema.operatingMode` relaxed from
+  `z.string().trim().min(1, "...")` to `z.string().trim().min(1).max(300).optional()`.
+  A blank text input still submits `FormData` as `""` — a truthy
+  string, not the actual absence `.optional()` checks for — so a new
+  `stringOrUndefined()` helper (mirrors the file's own existing
+  `numberOrUndefined()`) normalizes it before validation. Without this
+  second half, removing only the UI's `required` attribute would have
+  left the server action itself still rejecting a blank submission.
+
+Checked every other field on this form against the same standard
+("required only if the pipeline genuinely cannot proceed without it"),
+by reading the actual DB constraints rather than assuming:
+
+| Field | DB constraint | Stays required? |
+|---|---|---|
+| Product (name/id) | `products.name not null` | Yes |
+| Revision | `product_revisions.label not null` | Yes |
+| Observed peak (MHz) | `measurement_peaks.frequency_mhz not null check (> 0)` — also the correlator's own required input | Yes |
+| Margin (dB) | `measurement_peaks.margin_db not null` | Yes |
+| Operating mode | `measurements.operating_mode` — nullable, no constraint | **No — fixed** |
+
+New test coverage (`intake-composer.test.tsx`): Operating mode's input
+element is not required; the four fields that are genuinely required
+still are.
+
+Related, out of scope for this ticket: `measurementInputSchema`
+(`src/lib/domain/schema.ts`, used by the "Add measurement" / second-
+measurement flow elsewhere in the app) has the identical
+`operatingMode: z.string().trim().min(1, ...)` pattern — the ticket
+scoped this check to "this form" (`/investigations/new`), so that
+sibling schema was left untouched, but it carries the same defect and
+is a reasonable candidate for a follow-up ticket.
+
+### Hosted-deployment verification
+
+NOT performed as of this commit — this PR is unmerged at write time.
+Per the ticket's own explicit requirement, will be run against the
+hosted deployment (all 9 extraction strings through
+`/investigations/new`, plus one case submitted with Operating mode
+left blank) once merged; results reported directly rather than
+inferred from the passing unit suite above.
+
+### Verification
+
+- `pnpm exec tsc --noEmit` / `pnpm exec eslint .` / `pnpm run build`:
+  clean.
+- Full unit suite: 595/595 across 69 files (10 new
+  `parse-investigation-intake.test.ts` tests, 2 new
+  `intake-composer.test.tsx` tests), zero regressions.
