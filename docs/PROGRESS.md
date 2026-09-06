@@ -6244,3 +6244,36 @@ migration-deployment problem.
   every event" happy-path test (which would have caught a regression
   in the insert-error-check logic itself).
 - `run-analysis.test.ts`: 17/17 unchanged.
+
+## Tier A group 1 — arithmetic verification of the correlation engine
+
+Ad-hoc verification request, source: `crado-tier-a-cases.json` (pasted
+by the user, not present in the repo), cases TA-09 through TA-14 and
+TA-20. New test file
+`src/lib/correlation/harmonic-correlation.tier-a-group1.test.ts`
+asserts each case directly against `correlateMeasurementWithProductFacts`
+— no UI, no model call, no database — matching the fixture's own
+stated purpose ("tests computation, not engineering insight").
+
+All 7 cases pass. TA-13 and TA-14 are the fixture's own documented
+engine limitations (harmonic number exceeds the hardcoded
+`maxHarmonicNumber` cap of 25): their `expectedCandidates` is `[]` by
+design, asserted the same as any other case rather than skipped — the
+gap is a product-capability note (a real low-frequency-switcher or
+RTC-crystal harmonic this high is structurally invisible to the
+correlator), not a reason to weaken the assertion.
+
+The ticket text said "three of these exercise documented engine
+limitations" — the fixture's own `scoring.knownGapCount` names three
+total (TA-13, TA-14, TA-25), but only TA-13/TA-14 fall inside this
+specific case range (TA-09–TA-14, TA-20); TA-25 (operating-mode blind
+spot) is outside this group and wasn't run.
+
+This surfaced FIX-04 (see below): running the Tier A cases through the
+real `/investigations/new` intake form (not just the correlation
+engine directly) found the extraction vocabulary and the Operating
+mode required-field were both narrower than the pipeline actually
+needs.
+
+Verification: `pnpm exec tsc --noEmit` / `pnpm exec eslint .` clean.
+`harmonic-correlation.tier-a-group1.test.ts`: 7/7.
