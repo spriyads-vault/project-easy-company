@@ -104,11 +104,20 @@ export function AuthMarketingPanel() {
           Engineering assurance · continuous traceability
         </span>
 
+        {/* UX-15: pinned to the literal dark value rather than
+            text-auth-foreground — that token now means "light region
+            text" (the left region is dark per this ticket), but the
+            panel's own top-left corner is still the pale end of its
+            gradient, so the headline still needs dark text here. Not a
+            new token: the same #101828 literal --auth-foreground used
+            to resolve to, kept as a plain arbitrary value the same way
+            every other colour in this file already is (see the
+            border-white/bg-white/shadow values below). */}
         <div className="mt-5 flex max-w-[520px] flex-col gap-3">
-          <h2 className="text-[32px] font-semibold leading-[1.1] tracking-tight text-auth-foreground lg:text-[38px]">
+          <h2 className="text-[32px] font-semibold leading-[1.1] tracking-tight text-[#101828] lg:text-[38px]">
             Regulation, inside the engineering loop.
           </h2>
-          <p className="max-w-[440px] text-sm leading-relaxed text-auth-foreground/70">
+          <p className="max-w-[440px] text-sm leading-relaxed text-[#101828]/70">
             Connect product revisions, measurements, evidence and engineering decisions in one
             traceable investigation record.
           </p>

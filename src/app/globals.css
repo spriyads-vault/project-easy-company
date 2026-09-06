@@ -483,20 +483,26 @@ body {
    frozen here (defined once, in bare :root, never redefined in the
    dark blocks above) instead of read from the theme-reactive
    --background/--foreground/--primary/etc. — referencing those would
-   re-introduce the dark variant these pages are deliberately not
-   getting. Values are light theme's own numbers, not a new palette:
-   #ffffff/#101828/#667085/#e7e3db/#f1efe9/#4f46e5 above are exactly
-   --card/--foreground/--muted-foreground/--border/--secondary/
-   --primary's own light-theme values. */
+   re-couple these pages to the visitor's theme, which "light only"
+   (and now this ticket's "dark only") both still rule out.
+   UX-15: the LEFT region's own values flipped from light to dark —
+   still not a new palette, still no new tokens: #1f1f21/#f5f7fa/
+   #98a2b3/rgba(255,255,255,.09)/#29292b above are exactly --card/
+   --foreground/--muted-foreground/--border/--secondary's own DARK-
+   theme values (see the `[data-theme="dark"]` block above), the same
+   mirroring rule this file already used for the light values, just
+   pointed at the other half of the existing ramp. --auth-primary is
+   untouched (not one of the ticket's 4 values) — still light theme's
+   own #4f46e5. */
 :root {
-  --auth-bg: #ffffff;
-  --auth-foreground: #101828;
-  --auth-muted: #667085;
-  --auth-border: #e7e3db;
-  --auth-tile-bg: #f1efe9;
+  --auth-bg: #1f1f21;
+  --auth-foreground: #f5f7fa;
+  --auth-muted: #98a2b3;
+  --auth-border: rgba(255, 255, 255, 0.09);
+  --auth-tile-bg: #29292b;
   --auth-primary: #4f46e5;
 
-  --auth-panel-grid-line: rgba(255, 255, 255, 0.35);
+  --auth-panel-grid-line: rgba(255, 255, 255, 0.175);
 }
 
 /* The panel's diagonal grid texture — a flat 2D pattern (no 3D
@@ -505,35 +511,38 @@ body {
    mode, and live-verified made headless screenshot capture hang on
    compositing cost. This is cheap: two crossed repeating-linear-
    gradients, nothing else. One-off for this panel, same "deliberate,
-   not reused elsewhere" rule as .crado-canvas-grid above. UX-14 didn't
-   flag the grid texture as wrong, only the colour underneath it, so
-   this stays untouched — no reason to reintroduce the isometric
-   version's hang risk. */
+   not reused elsewhere" rule as .crado-canvas-grid above. The
+   technique (flat 2D repeating gradients) stays untouched — no reason
+   to reintroduce the isometric version's hang risk — UX-15 only
+   halved --auth-panel-grid-line's opacity (.35 -> .175) so the grid
+   sits further back against the panel's own now-deeper gradient. */
 .auth-panel-grid {
   background-image:
     repeating-linear-gradient(45deg, var(--auth-panel-grid-line) 0 1px, transparent 1px 32px),
     repeating-linear-gradient(-45deg, var(--auth-panel-grid-line) 0 1px, transparent 1px 32px);
 }
 
-/* UX-14: the panel's background colour, replacing UX-13's own
-   approximation (a single 135deg linear gradient) with the two layered
-   radial gradients from the supplied reference HTML file's
-   `.marketing-panel` rule, copied literally rather than re-derived:
-     background:
-       radial-gradient(circle at 70% 46%, rgba(37,99,235,.2), transparent 28%),
-       radial-gradient(circle at 18% 10%, #fff 0%, #e8f0ff 24%, #9bbcff 58%, #275ee9 100%);
-   The second (main) gradient's centre sits near the panel's own
-   top-left corner, which is what actually produces "light, almost
-   white at the top left, deepening to a medium blue at the bottom
-   right" — a corner-anchored radial reads as a diagonal from any
+/* UX-14: the panel's background colour, the two layered radial
+   gradients from the supplied reference HTML file's `.marketing-panel`
+   rule, copied literally rather than re-derived. The second (main)
+   gradient's centre sits near the panel's own top-left corner, which
+   is what produces the light-to-dark diagonal falloff from any
    rectangular viewport, without needing a literal 135deg linear
    gradient. Not a token: nothing else in the app reuses this exact
    two-layer radial combination, so it's a plain class rather than
-   another set of --auth-panel-* custom properties. */
+   another set of --auth-panel-* custom properties.
+   UX-15: shifted the main gradient's own stops toward a stronger,
+   deeper blue at the same 3 percentages (24/58/100) so the panel reads
+   darker overall — same direction, same centre, same light-to-dark
+   falloff shape, just a bluer/darker set of colours along it:
+     0%   #fff    -> unchanged (still the lightest point)
+     24%  #e8f0ff -> #cfe0ff
+     58%  #9bbcff -> #5f8ff2
+     100% #275ee9 -> #163ea6 */
 .auth-panel-gradient {
   background:
     radial-gradient(circle at 70% 46%, rgba(37, 99, 235, 0.2), transparent 28%),
-    radial-gradient(circle at 18% 10%, #fff 0%, #e8f0ff 24%, #9bbcff 58%, #275ee9 100%);
+    radial-gradient(circle at 18% 10%, #fff 0%, #cfe0ff 24%, #5f8ff2 58%, #163ea6 100%);
 }
 
 /* @xyflow/react ships its own base stylesheet import in the canvas

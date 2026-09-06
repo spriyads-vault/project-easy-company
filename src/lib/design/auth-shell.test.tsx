@@ -108,7 +108,7 @@ describe("AuthShell", () => {
     expect(screen.getByText(/continuous traceability/i)).toBeInTheDocument();
   });
 
-  it("renders no theme toggle — these pages are light only (UX-13)", () => {
+  it("renders no theme toggle — these pages are frozen to one fixed look, not theme-reactive (UX-13)", () => {
     render(
       <AuthShell mode="sign-in" next="/investigations">
         <div>form content</div>
@@ -117,14 +117,14 @@ describe("AuthShell", () => {
     expect(screen.queryByRole("button", { name: /theme/i })).not.toBeInTheDocument();
   });
 
-  it("always renders the black Crado mark, regardless of the app's theme (UX-14: was picking the white mark on this always-white page)", () => {
+  it("always renders the white Crado mark, regardless of the app's theme (UX-15: left region is now dark)", () => {
     const { container } = render(
       <AuthShell mode="sign-in" next="/investigations">
         <div>form content</div>
       </AuthShell>,
     );
     const mark = container.querySelector("img");
-    expect(mark).toHaveAttribute("src", expect.stringContaining("crado-mark-black.png"));
+    expect(mark).toHaveAttribute("src", expect.stringContaining("crado-mark-white.png"));
   });
 
   it("does not claim a live per-visitor status on the marketing panel (Crado is not tracing anything for a signed-out visitor)", () => {
