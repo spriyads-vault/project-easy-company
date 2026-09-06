@@ -30,15 +30,27 @@
 //     form is passwordless/magic-link shaped, but this product has no
 //     such flow; both Email and Password are wired here.
 //   - The reference's blue "+" tile mark — replaced with the real
-//     Crado mark (ThemedMark), which on this always-light surface
-//     always resolves to the black variant.
+//     Crado mark.
 //   - The static demo-only button choreography — theatre for buttons
 //     that no longer exist (OAuth) or that already have a real pending
 //     state (the submit button's own "Signing in…"/"Creating
 //     account…" via useActionState).
+//
+// UX-14: the logo previously rendered via ThemedMark, which reads the
+// app's global useTheme() and picks white-on-dark or black-on-light —
+// correct for a surface that follows the app theme, but this page
+// doesn't (see the "Light only" comment above). A visitor with a
+// stored/OS dark preference got the *white* mark on this page's frozen
+// *white* background: invisible. Fixed by rendering the black mark
+// directly, unconditionally, the same way app-shell-chrome.tsx's
+// sidebar renders the white mark directly on its own always-dark
+// surface — ThemedMark's job is specifically to follow the theme, which
+// is exactly what a surface that has opted out of theming shouldn't do.
+// ThemedMark had no other consumer, so it was deleted rather than left
+// as a landmine for the next always-one-theme surface.
+import Image from "next/image";
 import Link from "next/link";
 import { User, UserPlus } from "lucide-react";
-import { ThemedMark } from "./themed-mark";
 import { AuthMarketingPanel } from "./auth-marketing-panel";
 import { authIconTile, authOutlineButton } from "./auth-tokens";
 
@@ -73,7 +85,18 @@ export function AuthShell({ mode, next, children }: AuthShellProps) {
       <div className="flex w-full flex-col lg:w-[44%]">
         <header className="flex items-center justify-between gap-3 px-6 pt-6 sm:px-10 sm:pt-8">
           <Link href="/" className="flex min-w-0 items-center gap-2.5" aria-label="Crado home">
-            <ThemedMark width={18} height={21} className="shrink-0" />
+            {/* Always the black mark: this page's background is frozen
+                white regardless of the app's theme (see file header). */}
+            <Image
+              src="/brand/crado-mark-black.png"
+              alt=""
+              aria-hidden="true"
+              width={20}
+              height={23}
+              priority
+              style={{ width: 20, height: 23 }}
+              className="shrink-0"
+            />
             <span className="truncate text-sm font-semibold tracking-tight text-auth-foreground">CRADO</span>
           </Link>
           <div className="flex shrink-0 items-center gap-3">

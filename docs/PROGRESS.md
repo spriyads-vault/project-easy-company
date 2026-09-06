@@ -5380,3 +5380,178 @@ This PR has not merged, so `project-easy-company.vercel.app` still
 serves the pre-UX-13 shell — nothing of this ticket's own work to
 check there yet, same disclosure pattern as UX-09 through UX-12. All
 screenshots and functional checks above are from the local dev server.
+
+## UX-14 — right panel matched exactly to the supplied reference HTML file
+
+### Why this ticket exists
+
+UX-13 built the right panel from a *screenshot* of a reference design
+and approximated by eye: a single 135deg linear gradient instead of the
+reference's actual two-layer radial gradient, centre-anchored nodes on
+a hand-derived curve instead of the reference's own edge-anchored
+coordinates and cubic-bezier path, and a uniform "Verified" chip
+instead of the reference's per-row state treatment. This ticket
+supplied the *HTML file itself* and asked for literal fidelity — "Take
+gradient stops, node coordinates, the SVG path, glow values, animation
+timings and easing from it directly. Do not re-derive them by eye."
+Method followed accordingly: every value below was read from the
+file's CSS/markup and copied, not eyeballed from a render.
+
+### Colour
+
+`.auth-panel-gradient` (globals.css) replaces UX-13's linear-gradient
+approximation with the reference's own composition, copied verbatim:
+
+```css
+background:
+  radial-gradient(circle at 70% 46%, rgba(37,99,235,.2), transparent 28%),
+  radial-gradient(circle at 18% 10%, #fff 0%, #e8f0ff 24%, #9bbcff 58%, #275ee9 100%);
+```
+
+The second gradient's centre sits near the panel's own top-left
+corner — that's the actual mechanism behind "light, almost white at
+the top left, deepening to a medium blue at the bottom right"; a
+corner-anchored radial reads as a diagonal across any rectangular
+viewport without needing a literal 135deg linear gradient. Not turned
+into new `--auth-panel-*` custom properties: nothing else in the app
+reuses this exact two-layer radial combination, so it's a plain,
+well-commented CSS class instead of more indirection.
+
+### Node layout and connector
+
+The four nodes now sit at the reference's literal edge-anchored
+coordinates — `left:0/top:52%`, `left:23%/top:1%`, `left:54%/top:58%`,
+`right:0/top:8%` — inside a container inset 8%/7% from the panel's own
+edges (`absolute left-[8%] right-[7%] top-[42%] h-[230px]`), which is
+the reference's own mechanism for keeping edge-anchored boxes off the
+panel boundary — not UX-13's centre-anchoring fix, which solved a
+different, now-superseded layout's clipping problem. Connected by the
+reference's literal path
+(`M38 152C132 152 120 66 218 66s92 101 190 101S514 82 660 82` in a
+`0 0 700 230` viewBox) with its own linear-gradient stroke, a
+blur-filtered glow underlay, and a travelling particle
+(`animateMotion`). A rotating double-ringed marker (the reference's own
+`.trace-orbit`) sits near the curve's midpoint — this is what the
+ticket called "a larger ringed pulse marker."
+
+### A real hang defect found and fixed during this ticket's own QA
+
+Porting the reference's `trace-scan` light-sweep literally — animating
+the CSS `left` property on an element under a `blur()` filter —
+reproduced the exact class of defect UX-12's isometric grid caused:
+`take_screenshot` hung past 120s at 1280px, confirmed live (not
+assumed) by capturing it happening, then isolating the sweep animation
+before touching anything else. `left` is a layout property; the
+browser must reflow every frame it changes, and doing that under a
+blur filter compounds the cost. Fixed by converting *only* this one
+animation to `transform: translateX` (composited, no layout cost) —
+same visual sweep, same opacity ramp, no reflow. Re-verified with
+repeated screenshot captures at 1280/1440/1024: fast, no hang, every
+time.
+
+### Node content
+
+| Node | Reference | Built | Why |
+|---|---|---|---|
+| 01 Revision | R-184 | **Rev17** | Ticket's own instruction: keep the real Crado value. |
+| 02 Measurement | Verified | **Verified** | Matches — honest, non-regulatory status word. |
+| 03 Evidence | Linked | **Linked** | Matches — already Crado's real value. |
+| 04 Decision | Approved | **Recorded** | NOT carried over — an approval claim crosses CLAUDE.md's compliance-verdict boundary ("Crado records engineering decisions, it does not issue compliance sign-off"), already refused twice (UX-12, UX-13) with a standing regression test (`auth-shell.test.tsx` asserts "approved" never appears). |
+
+### Status rows
+
+Kept the reference's exact visual treatment — one pulsing "active" row,
+settled rows, the last visually faded — but not its literal copy. The
+reference's own faded row is labelled a faded "Done," which is
+internally inconsistent (faded to imply "hasn't happened" while still
+saying it has); relabelled honestly as "Pending" instead, which also
+happens to be literally true product-wide (a case has no recorded
+decision until an engineer records one). The three row sentences are
+unchanged from UX-12/13 — already fact-checked against real
+architecture. A new test guards against the reference's literal
+"Tracing…" wording specifically, on the same reasoning as the
+"approved" guard: an anonymous, signed-out visitor has no case and
+nothing is actually being traced for them.
+
+Separately: Tailwind's own `animate-pulse` utility (used for the active
+row's dot) isn't reduced-motion-gated by default. Replaced with a
+dedicated `auth-status-pulse` class inside the same
+`prefers-reduced-motion: no-preference` block as every other animation
+in this file, so "gate all of it" actually holds for every animated
+element, not only the ones original to this file.
+
+### Logo fix
+
+The Crado mark was invisible on both pages. Root cause: `AuthShell`
+rendered it via `ThemedMark`, which reads the app's *global* theme
+(`useTheme().resolved`) and picks white-on-dark or black-on-light —
+correct for a surface that follows the app theme, but these pages
+explicitly don't (UX-13: "light only"). A visitor with a stored or
+OS dark preference got the *white* mark on this page's frozen-*white*
+background: invisible, confirmed live by forcing the OS colour scheme
+to dark and reloading.
+
+Fixed at the root, not patched: `ThemedMark` had no other consumer in
+the whole app (verified by grep), so it was deleted rather than
+special-cased with a new prop — a theme-following component was never
+the right tool for a surface that has opted out of theming. `AuthShell`
+now renders `crado-mark-black.png` directly and unconditionally, the
+same pattern `app-shell-chrome.tsx`'s sidebar already uses for its own
+always-dark surface. Size bumped from 18×21 to 20×23 to match that
+sidebar's own established size, per the ticket's "confirm ... renders
+at a legible size."
+
+### Files changed
+
+- `src/app/globals.css` — new `.auth-panel-gradient` (the reference's
+  two-layer radial background); replaced the old dash/pulse keyframes
+  with 5: dash (-240, was -280), glow-pulse (peaks .6, was .4),
+  node-breathe, scan-sweep (transform-based, see above), orbit-spin;
+  new `auth-status-pulse` keyframe/class; removed the now-unused
+  `--auth-panel-from/via/to/line/node-bg/node-border/row-bg/row-border`
+  tokens (and their `@theme inline` registrations) — the new
+  implementation uses literal `white/[x]` Tailwind utilities directly,
+  matching the reference's own literal-utility style, rather than a
+  layer of semi-abstracted tokens nothing else reuses.
+- `src/lib/design/auth-marketing-panel.tsx` — rewritten: reference's
+  literal gradient class, node coordinates/content, SVG path/gradient/
+  glow-filter/particle, orbit ring, scan sweep, and per-row status chip
+  treatment.
+- `src/lib/design/auth-shell.tsx` — logo fix (direct black-mark
+  `Image`, no `ThemedMark`); no other change.
+- `src/lib/design/themed-mark.tsx` — deleted (no remaining consumer).
+- `src/lib/design/auth-shell.test.tsx` — node-02 assertion updated
+  (Logged → Verified, now via `getAllByText` since "Verified" also
+  appears as a status chip); 2 new tests (mark src is
+  `crado-mark-black.png`; no "tracing" claim). Every other existing
+  assertion unmodified and still passes.
+
+### Verification
+
+- `pnpm exec eslint .` / `pnpm exec tsc --noEmit` / `pnpm run build` —
+  all clean.
+- Unit tests: 549/549 across 66 files (+2 net new). One pre-existing,
+  unrelated flake observed in `recent-investigations.test.tsx` (an
+  intermittent timing test in a file this ticket never touched) —
+  logged here rather than silently ignored; not fixed, out of scope.
+- Live QA (chrome-devtools MCP, real local dev server) against both
+  pages: screenshotted at 1440, 1280, 1024 (this ticket's own required
+  set) — no clipped text in any node at any of the three widths;
+  forced the OS colour scheme to dark and reloaded — both pages stayed
+  correctly light with the black mark, confirming the logo fix and the
+  frozen-token architecture both hold regardless of theme-timing;
+  `/login?error=confirmation-failed` banner still renders correctly;
+  confirmed via `getComputedStyle().animationName` that every
+  decorative element (`auth-trace-path`, `-glow`, `-node`, `-scan`,
+  `-orbit`) carries its intended animation under the default (no
+  preference) media state.
+
+### Hosted-deployment verification — not yet applicable
+
+This PR has not merged, so `project-easy-company.vercel.app` still
+serves the pre-UX-14 panel — nothing of this ticket's own work to
+check there yet, same disclosure pattern as UX-09 through UX-13. All
+screenshots and functional checks above are from the local dev server.
+This ticket touched presentation only (the right panel + the logo);
+no auth behaviour changed, so the existing hosted-auth-behaviour gap
+recorded in prior entries is unaffected either way.
