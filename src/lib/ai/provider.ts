@@ -98,6 +98,11 @@ export function createAnthropicHypothesisAdapter(
         schema: hypothesisGenerationOutputSchema,
         system: SYSTEM_PROMPT,
         prompt: JSON.stringify(validatedInput),
+        // FIX-01: minimize run-to-run variance on identical input. Does not
+        // guarantee determinism (Anthropic's API doesn't expose a seed), so
+        // this is paired with a bounded retry in run-analysis.ts rather than
+        // relied on alone — see docs/CAPABILITY_AUDIT.md section 7.
+        temperature: 0,
       });
       // generateObject already validates against the schema, but re-parsing
       // costs nothing and keeps this function's contract self-evident.

@@ -135,6 +135,14 @@ export function applyAnalysisEvent(
         clarification: event.payload.question,
         lastEventSummary: "Next evidence required appears",
       };
+    case "hypothesis.retried":
+      // FIX-01: the model's first attempt returned nothing usable despite a
+      // real correlation to ground on — surfaced as a status line so the
+      // retry is visible, not silently doubling the model call.
+      return {
+        ...state,
+        lastEventSummary: "No hypothesis produced yet — retrying once",
+      };
     case "agent.started":
       return {
         ...state,

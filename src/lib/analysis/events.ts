@@ -54,6 +54,18 @@ const clarificationRequiredPayloadSchema = z.object({
   question: z.string(),
 });
 
+// FIX-01: fired when a completed hypothesis-generation attempt returned zero
+// hypotheses and no clarification question while correlation candidates
+// existed — almost certainly a miss rather than a considered answer (see
+// generate-hypotheses.ts), so run-analysis.ts retries exactly once. This
+// event makes that retry observable rather than a silent doubled model call;
+// it never fires when there are zero correlation candidates (the
+// deterministic gate is untouched) or when the model instead returned a
+// clarification question (a considered answer, not a miss).
+const hypothesisRetriedPayloadSchema = z.object({
+  correlationCount: z.number().int().positive(),
+});
+
 // The Investigation Agent's observable activity (MVP-10B) — never the
 // model's raw reasoning tokens. "agent.started" fires once the deterministic
 // correlations are in hand and the agent begins gathering additional
@@ -154,6 +166,7 @@ export const analysisEventSchema = z.discriminatedUnion("type", [
   eventVariant("correlation.found", correlationFoundPayloadSchema),
   eventVariant("hypothesis.created", hypothesisCreatedPayloadSchema),
   eventVariant("clarification.required", clarificationRequiredPayloadSchema),
+  eventVariant("hypothesis.retried", hypothesisRetriedPayloadSchema),
   eventVariant("agent.started", agentStartedPayloadSchema),
   eventVariant("agent.tool.started", agentToolStartedPayloadSchema),
   eventVariant("agent.tool.completed", agentToolCompletedPayloadSchema),
@@ -177,6 +190,9 @@ export type HypothesisCreatedPayload = z.infer<
 >;
 export type ClarificationRequiredPayload = z.infer<
   typeof clarificationRequiredPayloadSchema
+>;
+export type HypothesisRetriedPayload = z.infer<
+  typeof hypothesisRetriedPayloadSchema
 >;
 export type RunCompletedPayload = z.infer<typeof runCompletedPayloadSchema>;
 export type RunFailedPayload = z.infer<typeof runFailedPayloadSchema>;

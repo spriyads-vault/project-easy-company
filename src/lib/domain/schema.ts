@@ -52,6 +52,7 @@ export const analysisEventTypeSchema = z.enum([
   "measurement.loaded",
   "correlation.found",
   "clarification.required",
+  "hypothesis.retried",
   "hypothesis.created",
   "hypothesis.updated",
   "observation.recorded",

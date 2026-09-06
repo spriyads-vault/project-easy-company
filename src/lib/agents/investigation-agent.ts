@@ -313,6 +313,13 @@ export function createInvestigationAgent(
     tools: activeTools,
     stopWhen: stepCountIs(MAX_AGENT_STEPS),
     output: Output.object({ schema: agentOutputSchema }),
+    // FIX-01: minimize run-to-run variance on identical input, same as the
+    // plain hypothesis adapter (src/lib/ai/provider.ts). Set here rather
+    // than in provider.ts because AnthropicProvider's model factory takes
+    // only a modelId — there's no settings parameter to carry temperature
+    // at model-construction time; ToolLoopAgent's own constructor is where
+    // it can actually be applied for the agent path.
+    temperature: 0,
   });
 }
 

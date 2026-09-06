@@ -56,6 +56,26 @@ function throwingAdapter(error: unknown): HypothesisModelAdapter {
   };
 }
 
+/** Returns a different response on each successive call, in order. Throws
+ * if called more times than responses were supplied — makes an
+ * unintended extra retry (a loop, not a single retry) fail loudly rather
+ * than silently succeed on a repeated fixture value. */
+function sequencedAdapter(responses: HypothesisGenerationOutput[]): HypothesisModelAdapter {
+  let call = 0;
+  return {
+    generateHypotheses: async () => {
+      if (call >= responses.length) {
+        throw new Error(
+          `generateHypotheses called more times (${call + 1}) than expected (${responses.length})`,
+        );
+      }
+      const response = responses[call];
+      call += 1;
+      return response;
+    },
+  };
+}
+
 async function collect(
   generator: AsyncGenerator<AnalysisEvent, void, void>,
 ): Promise<AnalysisEvent[]> {
@@ -121,10 +141,27 @@ describe("runAnalysis — Gateway X happy path", () => {
   });
 
   it("assigns strictly increasing sequence numbers starting at 0, all stamped with the run id", async () => {
-    const adapter = fakeAdapter({ hypotheses: [], clarificationQuestion: null });
+    // A non-empty hypothesis, deliberately: an empty-hypotheses/no-
+    // clarification response with real correlation candidates now triggers
+    // FIX-01's retry (see the "empty hypothesis" describe block below) —
+    // this test is about sequence numbering, not retry, so its fixture
+    // avoids that path to stay focused.
+    const adapter = fakeAdapter({
+      hypotheses: [
+        {
+          productFactId: "fact-clock-40mhz",
+          title: "40 MHz clock 5th harmonic",
+          confidenceBand: "medium",
+          reasoning: "The measured frequency lines up with a 5th-order harmonic.",
+          missingEvidence: [],
+          recommendedNextStep: "Re-clock or shield the oscillator and re-measure.",
+        },
+      ],
+      clarificationQuestion: null,
+    });
     const events = await collect(runAnalysis(baseInput(), adapter));
 
-    expect(events.map((e) => e.sequence)).toEqual([0, 1, 2, 3]);
+    expect(events.map((e) => e.sequence)).toEqual([0, 1, 2, 3, 4]);
     expect(events.every((e) => e.runId === "run-1")).toBe(true);
   });
 
@@ -173,6 +210,97 @@ describe("runAnalysis — no correlation candidates (missing-data case)", () => 
       clarificationRequired: false,
     });
     expect(called).toBe(false);
+    // FIX-01: the retry gate is `correlationCandidates.length > 0`, so a
+    // zero-candidate run never reaches it, even though the model's (never
+    // actually called) response would otherwise be empty too — the
+    // deterministic gate stays untouched.
+    expect(events.some((e) => e.type === "hypothesis.retried")).toBe(false);
+  });
+});
+
+describe("runAnalysis — empty hypothesis retry (FIX-01)", () => {
+  it("retries exactly once when the first attempt returns zero hypotheses with a real correlation candidate", async () => {
+    const adapter = sequencedAdapter([
+      { hypotheses: [], clarificationQuestion: null },
+      {
+        hypotheses: [
+          {
+            productFactId: "fact-clock-40mhz",
+            title: "40 MHz clock 5th harmonic",
+            confidenceBand: "medium",
+            reasoning: "The measured frequency lines up with a 5th-order harmonic of the system clock.",
+            missingEvidence: ["Check emissions with the clock disabled."],
+            recommendedNextStep: "Re-clock or shield the oscillator and re-measure.",
+          },
+        ],
+        clarificationQuestion: null,
+      },
+    ]);
+
+    const events = await collect(runAnalysis(baseInput(), adapter));
+
+    expect(events.map((e) => e.type)).toEqual([
+      "run.started",
+      "measurement.loaded",
+      "correlation.found",
+      "hypothesis.retried",
+      "hypothesis.created",
+      "run.completed",
+    ]);
+
+    const retried = events[3];
+    if (retried.type !== "hypothesis.retried") throw new Error("expected hypothesis.retried");
+    expect(retried.payload).toEqual({ correlationCount: 1 });
+
+    const completed = events.at(-1);
+    if (!completed || completed.type !== "run.completed") throw new Error("expected run.completed");
+    expect(completed.payload.hypothesesCreated).toBe(1);
+  });
+
+  it("does not retry a third time when both attempts return zero hypotheses", async () => {
+    const adapter = sequencedAdapter([
+      { hypotheses: [], clarificationQuestion: null },
+      { hypotheses: [], clarificationQuestion: null },
+    ]);
+
+    const events = await collect(runAnalysis(baseInput(), adapter));
+
+    // sequencedAdapter throws on a third call, which would surface as
+    // run.failed instead of run.completed — this event list is proof no
+    // third attempt happened, not just an assumption from the retry count.
+    expect(events.map((e) => e.type)).toEqual([
+      "run.started",
+      "measurement.loaded",
+      "correlation.found",
+      "hypothesis.retried",
+      "run.completed",
+    ]);
+    expect(events.filter((e) => e.type === "hypothesis.retried")).toHaveLength(1);
+
+    const completed = events.at(-1);
+    if (!completed || completed.type !== "run.completed") throw new Error("expected run.completed");
+    expect(completed.payload).toEqual({
+      correlationsFound: 1,
+      hypothesesCreated: 0,
+      clarificationRequired: false,
+    });
+  });
+
+  it("does not retry when the first attempt returns a clarification question instead of hypotheses (a considered answer, not a miss)", async () => {
+    const adapter = sequencedAdapter([
+      { hypotheses: [], clarificationQuestion: "Was the WiFi radio active during this scan?" },
+    ]);
+
+    const events = await collect(runAnalysis(baseInput(), adapter));
+
+    expect(events.map((e) => e.type)).toEqual([
+      "run.started",
+      "measurement.loaded",
+      "correlation.found",
+      "clarification.required",
+      "run.completed",
+    ]);
+    expect(events.some((e) => e.type === "hypothesis.retried")).toBe(false);
   });
 });
 
@@ -324,7 +452,19 @@ describe("runAnalysis — Investigation Agent phase (MVP-10B)", () => {
   it("still emits guaranteed deterministic correlation.found events before the agent phase (correlation stays authoritative)", async () => {
     const agentRunner = fakeAgentRunner({
       activity: [],
-      hypotheses: [],
+      // A non-empty hypothesis, deliberately: an empty result with no
+      // clarification would trigger FIX-01's retry (see its own describe
+      // block below), doubling the agent phase and muddying this test's
+      // actual focus — ordering of correlation.found vs. agent.started.
+      hypotheses: [
+        {
+          productFactId: "fact-clock-40mhz",
+          title: "40 MHz clock 5th harmonic",
+          confidenceBand: "medium",
+          recommendedNextStep: "Re-clock or shield the oscillator and re-measure.",
+          evidence: [{ category: "observed", description: "Measured 200 MHz." }],
+        },
+      ],
       clarificationQuestion: null,
       metrics: emptyAgentMetrics,
     });
@@ -418,7 +558,19 @@ describe("runAnalysis — Investigation Agent phase (MVP-10B)", () => {
         };
         return {
           activity: [],
-          hypotheses: [],
+          // Non-empty, deliberately — see the comment on the previous test:
+          // an empty result with no clarification would trigger FIX-01's
+          // retry and double the scripted tool call this test is asserting
+          // ordering on.
+          hypotheses: [
+            {
+              productFactId: "fact-clock-40mhz",
+              title: "40 MHz clock 5th harmonic",
+              confidenceBand: "medium",
+              recommendedNextStep: "Re-clock or shield the oscillator and re-measure.",
+              evidence: [{ category: "observed", description: "Measured 200 MHz." }],
+            },
+          ],
           clarificationQuestion: null,
           metrics: emptyAgentMetrics,
         };

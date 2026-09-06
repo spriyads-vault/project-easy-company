@@ -143,44 +143,58 @@ export async function* runAnalysis(
       });
     }
 
-    let hypothesisResult: {
+    type HypothesisAttemptResult = {
       hypotheses: FinalHypothesis[];
       clarificationQuestion: string | null;
       rejectedCount: number;
     };
 
-    if (correlationCandidates.length > 0 && agentRunner) {
-      // The Investigation Agent phase (MVP-10B) — additional context
-      // gathering the model itself decides it needs, layered on top of the
-      // guaranteed deterministic correlations above. Never a substitute for
-      // them: this branch only ever runs once real candidates already
-      // exist.
-      yield emit("agent.started", { correlationCount: correlationCandidates.length });
-      // Delegate into the agent's own generator so each tool completion
-      // becomes an SSE event the moment it actually happens — never
-      // collected into an array and replayed after the whole phase
-      // finishes (that was the reopened ticket's proven root cause of the
-      // activity list appearing to batch/freeze then jump all at once).
-      const agentGenerator = agentRunner.investigate(correlationCandidates);
-      let agentStep = await agentGenerator.next();
-      while (!agentStep.done) {
-        const item = agentStep.value;
-        if (item.kind === "started") {
-          yield emit("agent.tool.started", item.payload);
-        } else {
-          yield emit("agent.tool.completed", item.payload);
+    // Extracted so it can run a second time on retry (see below) without
+    // duplicating the agent-vs-plain-adapter branch. Re-evaluates the same
+    // `correlationCandidates.length > 0 && agentRunner` condition both
+    // times, so a retry always reuses whichever path the first attempt
+    // used. The zero-candidates gate lives entirely inside this condition
+    // and is untouched by the retry addition below: with zero candidates
+    // this always takes the plain-adapter branch, which itself returns
+    // immediately without calling the model (see
+    // generateHypothesesForMeasurement).
+    async function* attemptHypothesisGeneration(): AsyncGenerator<
+      AnalysisEvent,
+      HypothesisAttemptResult,
+      void
+    > {
+      if (correlationCandidates.length > 0 && agentRunner) {
+        // The Investigation Agent phase (MVP-10B) — additional context
+        // gathering the model itself decides it needs, layered on top of
+        // the guaranteed deterministic correlations above. Never a
+        // substitute for them: this branch only ever runs once real
+        // candidates already exist.
+        yield emit("agent.started", { correlationCount: correlationCandidates.length });
+        // Delegate into the agent's own generator so each tool completion
+        // becomes an SSE event the moment it actually happens — never
+        // collected into an array and replayed after the whole phase
+        // finishes (that was the reopened ticket's proven root cause of the
+        // activity list appearing to batch/freeze then jump all at once).
+        const agentGenerator = agentRunner.investigate(correlationCandidates);
+        let agentStep = await agentGenerator.next();
+        while (!agentStep.done) {
+          const item = agentStep.value;
+          if (item.kind === "started") {
+            yield emit("agent.tool.started", item.payload);
+          } else {
+            yield emit("agent.tool.completed", item.payload);
+          }
+          agentStep = await agentGenerator.next();
         }
-        agentStep = await agentGenerator.next();
+        const agentResult = agentStep.value;
+        yield emit("agent.completed", agentResult.metrics);
+        return {
+          hypotheses: agentResult.hypotheses,
+          clarificationQuestion: agentResult.clarificationQuestion,
+          rejectedCount: 0, // already logged by runInvestigationAgent
+        };
       }
-      const agentResult = agentStep.value;
-      yield emit("agent.completed", agentResult.metrics);
-      hypothesisResult = {
-        hypotheses: agentResult.hypotheses,
-        clarificationQuestion: agentResult.clarificationQuestion,
-        rejectedCount: 0, // already logged by runInvestigationAgent
-      };
-    } else {
-      hypothesisResult = await generateHypothesesForMeasurement(
+      return await generateHypothesesForMeasurement(
         {
           measurement: {
             frequencyMhz: input.measurement.frequencyMhz,
@@ -192,6 +206,26 @@ export async function* runAnalysis(
         },
         adapter,
       );
+    }
+
+    let hypothesisResult: HypothesisAttemptResult = yield* attemptHypothesisGeneration();
+
+    // FIX-01: a correlation exists but the model returned nothing at all —
+    // no hypothesis, no clarification question — is almost certainly a
+    // miss rather than a considered answer, so retry exactly once (never a
+    // loop). A clarification question IS a considered answer (the model
+    // explicitly asked for missing information), so that case is left
+    // alone. Zero correlation candidates never reaches here with a
+    // non-empty result to retry from, since the plain-adapter branch above
+    // already short-circuits to an empty result without calling the model —
+    // the deterministic gate stays untouched.
+    if (
+      correlationCandidates.length > 0 &&
+      hypothesisResult.hypotheses.length === 0 &&
+      hypothesisResult.clarificationQuestion === null
+    ) {
+      yield emit("hypothesis.retried", { correlationCount: correlationCandidates.length });
+      hypothesisResult = yield* attemptHypothesisGeneration();
     }
 
     if (hypothesisResult.rejectedCount > 0) {

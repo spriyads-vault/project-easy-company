@@ -368,6 +368,36 @@ describe("InvestigationWorkspace — streaming", () => {
     });
   });
 
+  it("states a relationship was found but no hypothesis was produced, and offers Run again (FIX-01 honest empty state)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        buildSseResponse(
+          [
+            runStarted(),
+            measurementLoaded(),
+            correlationFound(),
+            runCompleted({ correlationsFound: 1, hypothesesCreated: 0, clarificationRequired: false }),
+          ],
+          0,
+        ),
+      ),
+    );
+    render(<InvestigationWorkspace {...baseProps} initialState={initialWorkspaceState} />);
+    fireEvent.click(screen.getByRole("button", { name: /run investigation/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("No hypothesis produced")).toBeInTheDocument();
+      expect(
+        screen.getByText(/a frequency relationship was found, but this run did not produce/i),
+      ).toBeInTheDocument();
+    });
+    // The one RUN AGAIN control (the top status-bar button, already
+    // relabeled now that a run has completed) stays enabled — no separate,
+    // ambiguously-duplicate button is rendered for this state.
+    expect(screen.getByRole("button", { name: /run again/i })).not.toBeDisabled();
+  });
+
   it("adds React Flow canvas nodes incrementally as events stream in — never empty after completion (UX-04 reopened)", async () => {
     vi.stubGlobal(
       "fetch",

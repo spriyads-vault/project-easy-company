@@ -16,12 +16,30 @@ interface InvestigationControlsProps {
   state: WorkspaceState;
 }
 
+// FIX-01: a correlation was found but the run still produced neither a
+// hypothesis nor a clarification question — almost always after a retry
+// (see hypothesis.retried in reconstruct.ts) has already been attempted.
+// Previously this fell through to the "no correlations, no hypotheses"
+// empty state's condition being false and rendering nothing at all here,
+// which read as broken (the correlation/reasoning cards show up elsewhere
+// with no explanation of why nothing followed from them) rather than as a
+// real, reportable outcome.
+function hasUnresolvedEmptyHypothesis(state: WorkspaceState): boolean {
+  return (
+    state.status === "completed" &&
+    state.correlations.length > 0 &&
+    state.hypotheses.length === 0 &&
+    !state.clarification
+  );
+}
+
 export function InvestigationControls({ state }: InvestigationControlsProps) {
   if (
     state.status !== "failed" &&
     state.status !== "interrupted" &&
     !state.clarification &&
-    !(state.status === "completed" && state.hypotheses.length === 0 && state.correlations.length === 0)
+    !(state.status === "completed" && state.hypotheses.length === 0 && state.correlations.length === 0) &&
+    !hasUnresolvedEmptyHypothesis(state)
   ) {
     return null;
   }
@@ -53,6 +71,21 @@ export function InvestigationControls({ state }: InvestigationControlsProps) {
           recorded product facts, so no investigation hypotheses were
           generated.
         </p>
+      ) : null}
+
+      {/* No separate "Run again" button here — the header's Run button
+          (run-investigation-button.tsx, moved out of this pane by the App
+          Redesign) already reads "RUN AGAIN" the instant a run completes,
+          so a second identically-labeled control here would be an
+          ambiguous, redundant affordance rather than a real second one. */}
+      {hasUnresolvedEmptyHypothesis(state) ? (
+        <div className={`flex flex-col gap-1 ${radius.card} border border-dashed border-border p-3`}>
+          <span className={text.kicker}>No hypothesis produced</span>
+          <p className="text-sm">
+            A frequency relationship was found, but this run did not produce
+            an investigation hypothesis from it. Run again to retry.
+          </p>
+        </div>
       ) : null}
     </div>
   );
