@@ -1,8 +1,16 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { sanitizeRedirectTarget } from "@/lib/auth/redirect";
 import { AuthShell } from "@/lib/design/auth-shell";
 import { SignInForm } from "./sign-in-form";
+
+// Favicon/metadata ticket: just the page-specific piece of the root
+// title template ("%s · Crado", see layout.tsx) — renders as
+// "Sign in · Crado" in the tab, not a full title string here.
+export const metadata: Metadata = {
+  title: "Sign in",
+};
 
 // Auth enterprise redesign: Server Component so an already-authenticated
 // visitor never sees the form at all (redirected straight to their real

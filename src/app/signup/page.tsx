@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { sanitizeRedirectTarget } from "@/lib/auth/redirect";
 import { AuthShell } from "@/lib/design/auth-shell";
 import { SignUpForm } from "./sign-up-form";
+
+// Favicon/metadata ticket: see login/page.tsx's matching comment —
+// renders as "Create account · Crado" via the root title template.
+export const metadata: Metadata = {
+  title: "Create account",
+};
 
 // Auth enterprise redesign: new route — previously /login rendered both
 // the sign-in and sign-up forms as two buttons in one card. See

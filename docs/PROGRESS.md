@@ -5678,3 +5678,161 @@ without either looking inconsistent with the rest of the app (a grey
 built for text, not borders) or being a new value. Went with the
 literal existing token; flagging this explicitly in case a bolder
 border was intended — that would need a value that doesn't exist yet.
+
+## UX-16 — favicon and metadata for the console app
+
+No ticket ID was given for this one. Continued the session's own
+UX-NN sequence rather than inventing a new prefix — no existing prefix
+(MVP/PERF/VALIDATION) fits an app-wide favicon/metadata change better.
+Flagging this explicitly in case a different scheme was intended.
+
+### Favicon: the mark turns to mush at 16x16 — verified, not assumed
+
+Rendered the full `public/brand/crado-mark-black.png` down to 16x16
+and looked at it before deciding anything: an unrecognizable grey
+blob, no lines or nodes distinguishable. Confirmed the same for the
+white mark. This is exactly the failure mode the ticket's own
+instruction anticipated ("If the isometric detail turns to mush at
+that size, crop tighter to the strongest shape").
+
+Located the mark's single dominant hub node — not by eye, but by an
+automated density scan (a sliding-window sum over a thresholded dark-
+pixel mask) that finds where the mark is "thickest," i.e. the boldest
+node. That gave a precise centre; a 220×220 crop around it (tested at
+three radii before picking the best-balanced one) reads clearly as a
+bold hub-with-radiating-spokes shape at both 16×16 and 32×32, for both
+the black and white mark. Confirmed by rendering each final candidate
+and actually looking at it, not by inspecting code.
+
+`public/apple-icon.png` (180×180) uses the **full, uncropped** mark —
+verified separately that the full mark stays crisp at that size (far
+more resolution headroom than a 16px favicon needs cropping for).
+
+### A real "which Next.js mechanism actually works" question, resolved by reading the source
+
+The ticket said to "Add app/icon.png ... so Next.js generates the
+favicon links automatically" and, as a fallback, "add app/icon.png and
+app/icon-dark.png with the appropriate media query." Before writing
+any code, read `next/dist/lib/metadata/resolve-metadata.js` directly
+rather than assuming which convention actually supports a light/dark
+pair:
+
+- The `app/icon.png` file-convention only auto-merges its generated
+  `<link rel="icon">` into `<head>` when the page/layout's `metadata`
+  export does **not** set `icons` at all (`if (!resolvedMetadata.icons)`
+  guards the merge). The dark-mode override requires a `media` field,
+  which only exists on the explicit `metadata.icons.icon` array shape
+  — so the moment a dark override is declared, the file-convention
+  icon silently stops being merged in, dropping the light-mode default
+  entirely.
+- The bundled Next docs (`node_modules/next/dist/docs/.../generate-
+  metadata.md`) show the actual working pattern for exactly this case:
+  two explicit entries in `metadata.icons.icon`, one with no `media`
+  (default) and one with `media: '(prefers-color-scheme: dark)'`,
+  referencing plain files under `public/`.
+
+Built it the way the docs demonstrate rather than the way the ticket's
+shorthand literally named the files: `public/icon.png` (light default)
+and `public/icon-dark.png` (dark override), both declared explicitly
+in `layout.tsx`'s `metadata.icons`. This is a deliberate, documented
+deviation from the ticket's literal filenames in service of its actual
+goal (a favicon that reads in both browser-chrome themes) — the
+literal `app/icon.png` + `app/icon-dark.png` approach the ticket
+described would not have worked as written.
+
+The pre-existing default Next.js `src/app/favicon.ico` — confirmed via
+`git log --follow` to be untouched since the original MVP-01 scaffold
+commit, never customised — removed.
+
+### Metadata
+
+`layout.tsx`'s `metadata` export now sets:
+- `metadataBase: new URL("https://console.crado.io")`
+- `title: { template: "%s · Crado", default: "Crado" }`
+- a one-sentence `description`, checked line-by-line against CLAUDE.md's
+  product-truth constraints before use: no pass/certified/guaranteed/
+  root-cause language, no standards-coverage claim beyond radiated
+  emissions — *"Crado helps hardware engineering teams investigate
+  radiated-emissions test failures by connecting measurements, product
+  context and design changes into one evidence-linked record."*
+- `robots: { index: false, follow: false }`
+- `icons` (see above)
+- `openGraph` (title/description/siteName "Crado"/type "website"/url)
+- `twitter` (`summary_large_image`, same title/description)
+
+No marketing site exists anywhere in this repo (confirmed by search)
+to have copied metadata or robots configuration from — the ticket's
+"don't copy the marketing site's config" warning doesn't apply here;
+noted rather than silently ignored.
+
+### Robots — a real routing defect found and fixed, not assumed working
+
+`curl`ing `/robots.txt` initially returned a 307 redirect to
+`/login?next=%2Frobots.txt` instead of the disallow rules. Root cause:
+`src/proxy.ts` (Next 16's renamed `middleware.ts`) already excludes
+`favicon.ico`, `_next/static`, `_next/image`, and image-extension paths
+from its `matcher` so the Supabase session-refresh logic doesn't run
+on them — but had no equivalent exclusion for `robots.txt`, a plain-
+text metadata route with no image extension. An anonymous crawler
+requesting it got treated exactly like a request for a private page.
+
+Fixed at the matcher level (the same place `favicon.ico` already
+lives), not by adding `/robots.txt` to `middleware.ts`'s `PUBLIC_PATHS`
+— that list is for real pages a signed-out visitor can land on, not
+metadata routes that shouldn't need session-cookie handling at all.
+Re-verified live after the fix: `200`, correct body, no redirect.
+
+### Per-page titles
+
+`login/page.tsx` and `signup/page.tsx` each export a one-line
+`metadata` object (`title: "Sign in"` / `title: "Create account"`)
+that composes through the root's title template automatically — Next
+appends `" · Crado"` itself. Verified against the actual rendered
+`<title>` tag via `curl`, not just that the template string looks
+correct in code: `Sign in · Crado` / `Create account · Crado`.
+
+### Files changed
+
+- `public/icon.png`, `public/icon-dark.png` (new, 512×512 each),
+  `public/apple-icon.png` (new, 180×180).
+- `src/app/favicon.ico` — deleted.
+- `src/app/layout.tsx` — full `metadata` export (see above).
+- `src/app/robots.ts` — new, disallow-all.
+- `src/app/login/page.tsx`, `src/app/signup/page.tsx` — one-line
+  `metadata` export each.
+- `src/proxy.ts` — added `robots.txt` to the matcher's exclusion
+  pattern (the routing-defect fix above).
+
+### Verification
+
+- `pnpm exec eslint .` / `pnpm exec tsc --noEmit` / `pnpm run build` —
+  all clean. `/robots.txt` appears as its own static route in the
+  build output.
+- Unit tests: 549/549 across 66 files (unchanged — no new component
+  logic to unit-test here; verification was live `curl`/build
+  inspection of the actual generated `<head>` and `/robots.txt`
+  response, not new test files). Two more pre-existing, unrelated
+  flakes observed on separate reruns (a different test file each time
+  than UX-14's own flake) — the pattern suggests suite-wide
+  flakiness rather than one bad test; noted, not fixed, out of scope.
+- Live checks against the real local dev server: `curl -i
+  /robots.txt` → `200`, correct disallow body, no redirect; `curl
+  /login` and `curl /signup` → `<title>` tags correct; `<head>`
+  contains both `<link rel="icon">` entries (light default + dark
+  `media` override) and the `apple-touch-icon` link; `/icon.png`,
+  `/icon-dark.png`, `/apple-icon.png` all `200`.
+- Not verifiable via headless page-content screenshots (they don't
+  render browser chrome/tabs): "the favicon appears in a browser tab
+  in both light and dark browser themes." The generated `<link>` tags
+  are correct and match Next's own documented working pattern, and
+  each icon file was independently confirmed legible at 16×16 by
+  rendering and inspecting it directly — but an actual tab-bar glance
+  in a real browser (light and dark OS) is the one item in this
+  ticket's verification list left for a human to do.
+
+### Hosted-deployment verification — not yet applicable
+
+This PR has not merged, so `project-easy-company.vercel.app` still
+serves the pre-UX-16 `<head>`/favicon/robots.txt — nothing of this
+ticket's own work to check there yet, same disclosure pattern as every
+prior ticket this session.
