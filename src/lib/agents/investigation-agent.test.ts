@@ -291,6 +291,33 @@ describe("runInvestigationAgent (fake model, no real Anthropic call)", () => {
     expect(result.activity[0].label).toBe("Searched engineering documents / 2 passages retrieved");
   });
 
+  it("passes temperature: 0 to the model — asserted, not assumed (FIX-01)", async () => {
+    const supabase = fakeSupabase();
+    const caseContext = buildCaseContext(supabase);
+
+    const minimalOutput = agentOutputSchema.parse({
+      hypotheses: [],
+      clarificationQuestion: null,
+      investigationStatus: "insufficient_evidence",
+    });
+
+    let capturedTemperature: number | undefined;
+    const model = new MockLanguageModelV4({
+      doGenerate: async (options) => {
+        capturedTemperature = options.temperature;
+        return textStep(JSON.stringify(minimalOutput));
+      },
+    });
+
+    await runInvestigationAgent(
+      { supabase, model, caseContext },
+      0,
+      { frequencyMhz: 200, marginDb: 7.4, operatingMode: "WiFi TX + display active" },
+    );
+
+    expect(capturedTemperature).toBe(0);
+  });
+
   it("rejects a hypothesis whose productFactId was never a real correlation candidate", async () => {
     const supabase = fakeSupabase();
     const caseContext = buildCaseContext(supabase);

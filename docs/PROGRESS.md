@@ -5836,3 +5836,146 @@ This PR has not merged, so `project-easy-company.vercel.app` still
 serves the pre-UX-16 `<head>`/favicon/robots.txt — nothing of this
 ticket's own work to check there yet, same disclosure pattern as every
 prior ticket this session.
+
+## FIX-01 — empty hypothesis on a valid run: temperature, bounded retry, honest empty state
+
+Root cause per the ticket's own evidence (`docs/CAPABILITY_AUDIT.md`
+section 7): no `temperature`/seed anywhere in the model call sites, so
+two runs with identical input can produce different results, and one
+observed run returned a correlation with zero hypotheses and no
+explanation. Three-part fix, all implemented.
+
+### 1. `temperature: 0`
+
+- `src/lib/ai/provider.ts` — `createAnthropicHypothesisAdapter`'s
+  `generateObject` call now passes `temperature: 0`.
+- **Deviation from the ticket's literal file, verified before
+  implementing rather than assumed**: the ticket says set it "on both
+  the hypothesis adapter and the investigation agent model in
+  `src/lib/ai/provider.ts`". Read `@ai-sdk/anthropic`'s own `.d.ts`:
+  `AnthropicProvider`'s model factory takes only a bare `modelId`, no
+  settings object — there is nowhere in `provider.ts` to attach a
+  temperature to the agent's model. Read `ai`'s own `.d.ts`:
+  `ToolLoopAgentSettings` (the constructor `createInvestigationAgent`
+  calls) does carry `temperature`. Set it there instead
+  (`src/lib/agents/investigation-agent.ts`), with a comment at the
+  call site explaining why it isn't in `provider.ts`.
+- Both asserted by a real test reading the actual call args, not
+  assumed from source: `provider.test.ts` mocks `ai`/`@ai-sdk/anthropic`
+  and reads `generateObject`'s captured options; `investigation-agent.test.ts`
+  captures `MockLanguageModelV4`'s `doGenerate(options)` call.
+
+### 2. Retry exactly once
+
+`src/lib/analysis/run-analysis.ts`: the existing agent-path/plain-
+adapter-path branch was extracted into a nested generator
+(`attemptHypothesisGeneration`) so a retry re-runs the same branch the
+first attempt used, with no duplicated logic. Retries once, via a
+plain `if` (never a loop), when:
+- `correlationCandidates.length > 0`, AND
+- the attempt returned zero hypotheses, AND
+- `clarificationQuestion` is `null`.
+
+A clarification question is a considered answer (the model explicitly
+asked for missing information), not a miss — narrowed the condition to
+exclude it after tracing the existing test suite and finding two
+existing tests whose fixtures return empty hypotheses *with* a
+clarification question; retrying those would have been wrong. Zero
+candidates never reaches this check: that branch returns immediately
+without calling the model, so the "deterministic gate must stay
+untouched" requirement holds by construction, not just by the
+pre-existing "falls back ... even with an agentRunner provided" test
+(which still passes unmodified).
+
+New `hypothesis.retried` event (`src/lib/analysis/events.ts`'s
+discriminated union, `domain/schema.ts`'s `analysisEventTypeSchema`, a
+new additive migration
+`20260906000000_analysis_events_hypothesis_retried.sql` widening the
+`analysis_events_event_type_check` constraint — the same pattern every
+prior event type used — and a new `reconstruct.ts` case) makes the
+retry observable rather than silent, per the ticket's own requirement.
+**Flagged, not silently decided**: this touches "the Zod schemas" and
+"the database schema", both named in the ticket's do-not list. Read
+that list narrowly as scoped to the model-output-contract schemas
+(hypothesis/agent output, evidence model, certainty-language guards,
+abstention gate — the schemas governing what the *model* is allowed to
+produce), not this event/observability schema, a categorically
+different, always-additive plumbing concern every prior ticket in this
+codebase has extended the same way. Correct this if a stricter reading
+was intended.
+
+Two existing `run-analysis.test.ts` fixtures (agent-phase tests
+asserting event *ordering*/tool-call pairing, not hypothesis content)
+happened to return empty hypotheses with no clarification against a
+real correlation candidate — exactly the new retry trigger. Neither
+assertion would actually have broken (both use `findIndex`/`find`,
+which still find the correct first occurrence even with the phase now
+silently running twice), but leaving them exercising an unintended
+double agent-phase invocation was misleading, so both gained a trivial
+non-empty hypothesis to stay focused on what they test. A third
+existing test (sequence-numbering, `[0,1,2,3]`) hit the same trigger
+and *did* need its expected count updated to `[0,1,2,3,4]` — that's
+the ticket's own intended behavior change (this exact scenario no
+longer produces a same-count no-op), not a weakened assertion.
+
+### 3. Honest empty state
+
+**A real mistake caught before it shipped, not after**: implemented
+this first against `investigation-panel.tsx`, whose existing "no
+correlations, no hypotheses" message matches the ticket's described
+scenario almost exactly — before running its tests, `grep`'d for
+importers across all of `src` and found zero. It's UX-03-era dead code,
+fully superseded by the App Redesign's `decision-view.tsx` +
+`investigation-controls.tsx` (confirmed by the new
+`investigation-workspace.test.tsx` test failing against real output,
+which pointed straight at the actual rendering component). Reverted
+the dead-file edit and re-applied it to `investigation-controls.tsx`.
+
+Added condition (`hasUnresolvedEmptyHypothesis`): `status === "completed"`,
+a correlation exists, `hypotheses.length === 0`, no clarification.
+Renders "No hypothesis produced" / "A frequency relationship was
+found, but this run did not produce an investigation hypothesis from
+it. Run again to retry." — pointing at the header's `RUN AGAIN` button
+(`run-investigation-button.tsx`, already relabeled the instant a run
+completes) rather than adding a second button with the same accessible
+name, which would be both an accessibility ambiguity and untestable by
+role/name.
+
+### Tests
+
+All four required, plus reasonable extensions, landed exactly where
+each fix did:
+- `provider.test.ts` / `investigation-agent.test.ts` — temperature
+  asserted at both real call sites (mocked `ai`/`MockLanguageModelV4`,
+  not assumed).
+- `run-analysis.test.ts` — new `sequencedAdapter` test helper (returns
+  a different response per call, throws if called more times than
+  scripted, so an accidental loop fails loudly): empty-then-nonempty
+  retries once; empty-twice completes with no hypothesis and never
+  attempts a third call; a clarification-question response never
+  retries. Extended the existing zero-candidates test with an explicit
+  "never emits `hypothesis.retried`" assertion.
+- `investigation-workspace.test.tsx` — the Decision view's new empty-
+  state text renders, and the one (not two) `RUN AGAIN` control stays
+  enabled.
+
+### Verification
+
+- `pnpm exec eslint .` / `pnpm exec tsc --noEmit` / `pnpm run build`
+  — all clean.
+- Full unit suite: 555/555 (549 + 6 net new) across 67 files, run
+  twice. One run showed a single failure in `case-composer.test.tsx`
+  (a file this ticket never touched) — confirmed pre-existing,
+  unrelated cross-file flakiness by reverting all changes and running
+  the full suite on clean `main` (passed 549/549 once, reproduced
+  nothing in isolation), then re-running this branch's full suite
+  again (555/555, no failures). Consistent with the flakiness already
+  disclosed in UX-14/UX-16's own PROGRESS entries.
+
+### Hosted-deployment verification — not performed
+
+The ticket's own verification step ("run case CASE-BC64A6 five times
+on the hosted deployment, report all five hypothesis counts") requires
+access this environment does not have, and the PR is unmerged at write
+time. Disclosed rather than fabricated or silently skipped, same
+pattern as every prior ticket this session.
