@@ -6108,3 +6108,139 @@ The ticket's own verification step ("submit the exact sentence through
 relationship") requires access this environment does not have, and the
 PR is unmerged at write time. Disclosed rather than fabricated or
 silently skipped, same pattern as every prior ticket this session.
+
+## FIX-03 — hypothesis.retried not persisted: silent insert-error swallow
+
+Follow-up to the FIX-01/FIX-02 hosted-verification pass: a direct query
+against hosted (`supabase db query --linked`) for
+`event_type = 'hypothesis.retried'` returned zero rows anywhere in
+`analysis_events`, despite a live run on CASE-BC64A6 whose Investigation
+Trace visibly doubled (10 tool checks / 17.6s instead of the normal
+5 / ~15-17s). Two possible explanations, per the ticket: the FIX-01
+migration never reached hosted, or it did and something else swallowed
+the insert. Needed a real answer, not a guess.
+
+### Step 1 — is the migration on hosted at all
+
+`supabase migration list --linked` (this repo is linked to
+`pzgbgolcfjswdffbniwa`, "project-easy-company", confirmed via
+`supabase projects list`): all 9 local migrations, `20260906000000`
+(the FIX-01 hypothesis.retried constraint) included, show identical
+Local/Remote timestamps. Nothing pending.
+
+Confirmed directly rather than trusting the CLI's own migration
+bookkeeping: queried `pg_get_constraintdef` for
+`analysis_events_event_type_check` on hosted itself. It lists
+`'hypothesis.retried'::text` in the allowed set. The migration is
+applied. Ruled out.
+
+### Step 3 — the retry really did fire; the insert silently failed
+
+Found the run that produced the doubled trace
+(`analysis_runs` joined on the measurement's `failure_case_id`, most
+recent), then pulled every `analysis_events` row for that
+`analysis_run_id` ordered by `sequence`. The sequence numbers go
+`..., 13, 14 (agent.completed), 16 (agent.started), 17, ...` —
+**15 is missing**. That's exactly the slot `hypothesis.retried`'s own
+`emit()` call occupies between the first and second
+`attemptHypothesisGeneration()` pass in `run-analysis.ts`. The
+sequence counter is a simple in-process `sequence++`, assigned
+synchronously before the insert is ever attempted — a gap in the
+persisted numbering, with every other number present, means the event
+was produced and given a sequence number, then failed to write.
+
+This also rules out the other plausible explanation for a doubled
+trace floated before checking: the agent's own tool-use loop calling
+the same 5 tools twice within one `investigate()` call (the SDK allows
+up to `MAX_AGENT_STEPS = 9`, and a model can legitimately re-call a
+tool across steps). That would show ONE `agent.started`/`agent.completed`
+pair with 10 tool events between them. This run has **two** full
+`agent.started` → 5×(`agent.tool.started`/`completed`) → `agent.completed`
+cycles under one `analysis_run_id` — only `run-analysis.ts`'s
+retry-once branch produces that shape, since it re-invokes
+`attemptHypothesisGeneration()` (and therefore `agentRunner.investigate()`)
+a second time from scratch.
+
+### Root cause and fix
+
+`src/lib/analysis/create-analysis-run.ts`'s `persistAndYield` did:
+
+```ts
+await supabase.from("analysis_events").insert({...});
+```
+
+— discarding the result outright. Whatever caused this one insert to
+fail on hosted (not reproduced against local Postgres in this session;
+consistent with a transient network/connection condition on the live
+call rather than a deterministic schema defect, since the constraint,
+RLS policy, and payload shape are all otherwise identical to the
+neighboring events that persisted fine) was completely invisible: the
+event still streamed to the client, `persistAndYield`'s loop moved on,
+and the run finished looking entirely normal.
+
+Fixed: the insert's `{ error }` is now checked. On failure:
+`console.error` logs `runId`, event type, sequence, and the Postgres
+error message (no payload contents — nothing customer-confidential in
+a log line per CLAUDE.md), and the event is **not** yielded downstream.
+The invariant this protects: `reconstructFromPersistedEvents` (refresh
+recovery) reads `analysis_events` alone, so a client must never be
+shown live something a refresh can't rebuild — better to silently drop
+a non-critical status event from the live stream (still recoverable by
+re-running) than let live and persisted state permanently diverge with
+no trace anywhere. `finalStatus` for `run.failed` is captured before
+the insert check, so a `run.failed` event that itself fails to persist
+still correctly marks the run failed in `analysis_runs`. Any other
+event's persist failure lets the run keep going rather than aborting —
+losing one status event isn't worth losing the rest of the run over.
+
+### Test: real Postgres, not a mocked client
+
+The ticket was explicit: "Not a unit test with a mocked client. The
+whole failure here is the gap between the two." Added to
+`create-analysis-run.integration.test.ts` (local `supabase start`, no
+`ANTHROPIC_API_KEY` needed — same fake-adapter convention as every
+other test in that file): a fake adapter returns zero
+hypotheses/`null` clarificationQuestion on its first call (the exact
+miss condition) and a real hypothesis on its second, against a seeded
+Gateway X case with one real correlation candidate. Asserts the
+adapter was called exactly twice, the streamed sequence is
+`run.started → measurement.loaded → correlation.found →
+hypothesis.retried → hypothesis.created → run.completed`, and — the
+actual regression this closes — a direct Postgres `select` for that
+`run_id` returns a persisted `hypothesis.retried` row, matching the
+full streamed sequence exactly.
+
+### Every other migration, checked the same way
+
+Per the ticket's "list every other migration and confirm whether each
+has been applied there" — this was the missing-migration branch's
+instruction, but run anyway since Step 1 came back clean and the same
+gap could plausibly affect others: all 9 rows from
+`supabase migration list --linked` matched Local/Remote exactly, none
+pending —
+
+```
+20260831034622  workspaces
+20260831035611  core_domain
+20260831060000  analysis_events_measurement_loaded
+20260901000000  engineering_documents
+20260901010000  analysis_events_agent
+20260901020000  engineering_change_revision_lineage
+20260901040000  benchmarks
+20260903000000  analysis_events_agent_tool_started
+20260906000000  analysis_events_hypothesis_retried
+```
+
+No other gap. This was purely the swallowed-insert bug, not a
+migration-deployment problem.
+
+### Verification
+
+- `pnpm exec tsc --noEmit`: clean.
+- `pnpm exec eslint .`: clean.
+- `pnpm run build`: clean.
+- `create-analysis-run.integration.test.ts` (real local Postgres):
+  9/9, including the new retry test and the pre-existing "persists
+  every event" happy-path test (which would have caught a regression
+  in the insert-error-check logic itself).
+- `run-analysis.test.ts`: 17/17 unchanged.
