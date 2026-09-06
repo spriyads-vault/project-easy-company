@@ -5979,3 +5979,132 @@ on the hosted deployment, report all five hypothesis counts") requires
 access this environment does not have, and the PR is unmerged at write
 time. Disclosed rather than fabricated or silently skipped, same
 pattern as every prior ticket this session.
+
+## FIX-02 — intake parser: operating-mode fallback, no product-fact extraction
+
+Branched off `main` directly (FIX-01 was still an open, unmerged PR at
+this point — this ticket is independent of it and doesn't touch any of
+the same files, so it doesn't need to wait).
+
+**Both files the ticket names are at different real paths, verified
+before editing rather than assumed**: `parse-investigation-intake.ts`
+lives at `src/lib/investigations/`, not
+`src/app/investigations/new/` — that directory holds
+`intake-composer.tsx` (the UI that calls it) and `actions.ts` (the real
+"intake server action"). Fixed at the real locations.
+
+### Defect 1: operating mode
+
+Root cause, from reading `extractOperatingMode`
+(`src/lib/text-extraction/measurement-fields.ts`) directly: there was
+no distinct "fallback to raw input" branch and no lowercasing inside
+the parser at all. The function split text into sentences on
+`.!?`; a single undivided sentence with no terminal punctuation *is*
+"one sentence", so a hint word anywhere in it (e.g. "active") matched
+the entire raw input as "the mode sentence". The lowercasing the
+ticket's rendered example shows comes from `failure-strip.tsx`'s own
+separate, pre-existing, unrelated `.toLowerCase()` display call on any
+`operatingMode` value — left untouched; the ticket's own defect is
+about the *stored* value, not this display convention.
+
+Fix: `extractOperatingMode` now prefers a connector-introduced clause
+(`with`/`while`/`during`, matched from its *last* occurrence — an
+earlier, unrelated "with" can legitimately appear first, e.g. "failed
+with 200 MHz exceeding the limit, with Wi-Fi TX active" — to the end
+of the string), trusted only when the isolated clause actually
+contains an activity/state word (never a guess when "with" introduces
+something else, e.g. "failed with a 7.4 dB margin"). Falls back to the
+old whole-sentence-hint approach only across text genuinely split into
+2+ sentences — a single undivided sentence being "the one sentence
+with a hint word" (this ticket's own bug) never wins there, so it
+returns `null` instead of any fallback string. `cleanModeClause` also
+strips trailing punctuation and standalone "the" (the field's own
+established convention has no articles — see the composer's
+placeholder, "WiFi TX + display active"), so "the display active"
+normalizes to "display active", matching the ticket's exact expected
+output for its own worked example.
+
+### Defect 2: no product-fact extraction
+
+`extractProductFacts` (co-located in `parse-investigation-intake.ts` —
+intake-specific, unlike `measurement-fields.ts`'s shared generic
+extractors) pulls clock/radio/switching-rail facts from the sentence,
+deterministically (no model call, CLAUDE.md tie-breaker 7). For each
+MHz/GHz/kHz figure, checks clock → radio → power keyword sets (narrow
+and literal on purpose: "clock"; "radio"/"wifi"/"wi-fi"/"bluetooth"/
+"ble"/"lora"/"zigbee"/"transceiver"; "switching rail"/"switching
+regulator"/"switching converter"/"power rail") for a match immediately
+after the figure, bounded to at most 4 leading words so it can never
+cross a comma/period into unrelated text. "40 MHz system clock" yields
+one clock fact at 40 MHz labelled "System clock" — the ticket's own
+worked example, verified by test rather than assumed from the regex.
+
+Each extracted fact is a minimal `{category, label, frequencyMhz}`
+shape for the UI; `buildProductFactInput` expands one into the full
+category-specific `ProductFactInput` only at persist time, reusing the
+exact validated insert shape the standalone product-facts form
+(`.../revisions/[revisionId]/actions.ts`'s `createFact`) already uses
+— per the ticket's own "product facts already have a fact-creation
+path, reuse it." Radio/power facts need a `technology`/`topology`
+string a plain sentence doesn't separately name; reusing the label
+itself (never inventing new words) is the only non-guessing choice
+available, documented inline at the mapping.
+
+`intake-composer.tsx`: every extracted fact renders as an editable row
+(label input, frequency input, read-only category, a Remove button)
+under a new "Product facts found" section; one JSON-encoded hidden
+input carries the current (possibly edited/removed) list into the
+actual form submission — nothing is written until "Start investigation"
+is submitted. Zero facts shows the ticket's required named-gap message
+instead of silence. `createInvestigationIntake` (`actions.ts`)
+re-validates the submitted JSON (never trusts client rows as
+already-safe) and inserts each via the same `productFactInputSchema`-
+validated shape/insert `createFact` uses, right after the revision
+resolves — best-effort per fact (skip on failure), the same reasoning
+`attachIntakeFile` already uses for the attachment upload.
+
+### Tests
+
+All five required, plus reasonable extensions:
+- `parse-investigation-intake.test.ts` — the exact Defect 1 sentence
+  yields `"Wi-Fi TX and display active"`; no isolable mode clause
+  yields `null`; `"40 MHz system clock"` yields one clock fact at 40
+  MHz; a no-frequency sentence yields zero facts; a GHz radio figure
+  and a kHz switching-rail figure both convert units correctly; more
+  than one fact extracts from one sentence, in order; the
+  measurement's own failing frequency is never mistaken for a product
+  fact.
+- New `measurement-fields.test.ts` (no test file existed for this
+  shared module before this ticket) — direct coverage of the
+  connector-clause/sentence-fallback/unrelated-"with" distinction.
+- New `intake-composer.test.tsx` (no test file existed for this
+  component before this ticket) — fact rows are editable/removable,
+  the zero-facts message names what to add, and reaching the
+  confirmation stage never calls the server action ("no extraction is
+  persisted before confirmation", proven by asserting the mocked
+  action was never invoked, not just by code inspection).
+- `actions.ts` itself gained no direct unit test: confirmed there is
+  no existing precedent anywhere in this repo for unit-testing a
+  DB-touching Next.js server action directly (`createFact`, the
+  sibling function this ticket reuses the shape of, has none either)
+  — followed that established convention (CLAUDE.md tie-breaker 1)
+  rather than introducing a novel harness.
+
+### Verification
+
+- `pnpm exec eslint .` / `pnpm exec tsc --noEmit` / `pnpm run build`
+  — all clean.
+- Full unit suite: 574/574 across 68 files, verified after rebasing
+  onto FIX-01's merged main. Corrects this section's earlier "568/568
+  (555 + 13 net new)": that subtracted from the wrong pre-FIX-01
+  baseline. FIX-02 added 19 net-new tests to the 549-test branch point
+  it was built on (549 + 19 = 568); once rebased onto FIX-01's own
+  merged 6 net-new tests, the correct total is 555 + 19 = 574.
+
+### Hosted-deployment verification — not performed
+
+The ticket's own verification step ("submit the exact sentence through
+`/investigations/new`, confirm the operating mode/40 MHz clock fact/40x5
+relationship") requires access this environment does not have, and the
+PR is unmerged at write time. Disclosed rather than fabricated or
+silently skipped, same pattern as every prior ticket this session.

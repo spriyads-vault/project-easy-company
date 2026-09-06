@@ -71,3 +71,65 @@ describe("parseInvestigationIntake", () => {
     expect(result.revisionLabel).toBe("Rev22");
   });
 });
+
+describe("parseInvestigationIntake — operating mode (FIX-02 Defect 1)", () => {
+  it("isolates the mode clause from a single-sentence input, not the whole raw text (the ticket's own defect example)", () => {
+    const result = parseInvestigationIntake(
+      "Gateway X Rev17 failed radiated emissions at 200 MHz, 7.4 dB above the limit, with Wi-Fi TX and the display active",
+      products,
+    );
+    expect(result.operatingMode).toBe("Wi-Fi TX and display active");
+  });
+
+  it("leaves operatingMode empty, not a fallback string, when no mode clause can be isolated", () => {
+    const result = parseInvestigationIntake(
+      "Gateway X Rev17 failed radiated emissions at 200 MHz, 7.4 dB above the limit",
+      products,
+    );
+    expect(result.operatingMode).toBeNull();
+  });
+});
+
+describe("parseInvestigationIntake — product fact extraction (FIX-02 Defect 2)", () => {
+  it('extracts one clock fact from "40 MHz system clock"', () => {
+    const result = parseInvestigationIntake("40 MHz system clock", []);
+    expect(result.productFacts).toEqual([
+      { category: "clock", label: "System clock", frequencyMhz: 40 },
+    ]);
+  });
+
+  it("extracts zero facts from a sentence with no frequency source", () => {
+    const result = parseInvestigationIntake("Something broke and we're not sure why.", []);
+    expect(result.productFacts).toEqual([]);
+  });
+
+  it("does not mistake the measurement's own failing frequency for a product fact", () => {
+    const result = parseInvestigationIntake(
+      "Gateway X Rev17 failed radiated emissions at 200 MHz, 7.4 dB above the limit, with Wi-Fi TX and the display active",
+      products,
+    );
+    expect(result.productFacts).toEqual([]);
+  });
+
+  it("extracts a radio fact from a GHz figure next to a recognized radio word", () => {
+    const result = parseInvestigationIntake("Board has a 2.4 GHz WiFi radio.", []);
+    expect(result.productFacts).toEqual([
+      { category: "radio", label: "WiFi radio", frequencyMhz: 2400 },
+    ]);
+  });
+
+  it("extracts a power fact from a switching-rail figure", () => {
+    const result = parseInvestigationIntake("There is a 500 kHz switching rail near the connector.", []);
+    expect(result.productFacts).toEqual([
+      { category: "power", label: "Switching rail", frequencyMhz: 0.5 },
+    ]);
+  });
+
+  it("extracts more than one fact from the same sentence, in order", () => {
+    const result = parseInvestigationIntake("40 MHz system clock and 2.4 GHz WiFi radio.", []);
+    expect(result.productFacts).toEqual([
+      { category: "clock", label: "System clock", frequencyMhz: 40 },
+      { category: "radio", label: "WiFi radio", frequencyMhz: 2400 },
+    ]);
+  });
+});
