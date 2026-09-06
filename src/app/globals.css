@@ -271,14 +271,6 @@
   --color-auth-border: var(--auth-border);
   --color-auth-tile-bg: var(--auth-tile-bg);
   --color-auth-primary: var(--auth-primary);
-  --color-auth-panel-from: var(--auth-panel-from);
-  --color-auth-panel-via: var(--auth-panel-via);
-  --color-auth-panel-to: var(--auth-panel-to);
-  --color-auth-panel-line: var(--auth-panel-line);
-  --color-auth-panel-node-bg: var(--auth-panel-node-bg);
-  --color-auth-panel-node-border: var(--auth-panel-node-border);
-  --color-auth-panel-row-bg: var(--auth-panel-row-bg);
-  --color-auth-panel-row-border: var(--auth-panel-row-border);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -389,27 +381,98 @@ body {
   }
 }
 
-/* UX-13: the auth marketing panel's connector curve — a dashed path
-   plus two small glow waypoints, all decorative (see auth-marketing-
-   panel.tsx). Same prefers-reduced-motion gating convention as the
-   block above: nothing here animates unless the media query matches. */
+/* UX-14: the auth marketing panel's decorative motion — every value
+   (durations, easing, dash length, keyframe percentages) copied
+   literally from the supplied reference HTML file, not re-derived by
+   eye (see auth-marketing-panel.tsx's own header comment for exactly
+   which reference rule each class/keyframe ports). Same
+   prefers-reduced-motion gating convention as the block above:
+   nothing here animates unless the media query matches, and nothing
+   here is a 3D transform / blend-mode / backdrop-filter combination —
+   the isometric-grid attempt UX-12 tried in that shape is the one
+   already known (live-verified) to hang headless screenshot capture. */
 @media (prefers-reduced-motion: no-preference) {
   .auth-trace-path {
     animation: auth-trace-dash 16s linear infinite;
   }
   .auth-trace-glow {
-    animation: auth-trace-pulse 3s ease-in-out infinite;
+    animation: auth-trace-glow-pulse 3s ease-in-out infinite;
+  }
+  .auth-trace-node {
+    animation: auth-trace-node-breathe 4s ease-in-out infinite;
+  }
+  .auth-trace-scan {
+    animation: auth-trace-scan-sweep 5.5s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  }
+  .auth-trace-orbit {
+    animation: auth-trace-orbit-spin 8s linear infinite;
+  }
+  /* Tailwind's own `animate-pulse` utility isn't reduced-motion-gated
+     by default — this is the status row's "in progress" dot, given its
+     own gated class instead so it actually stops under
+     prefers-reduced-motion like the rest of this panel. */
+  .auth-status-pulse {
+    animation: auth-status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 }
 
-@keyframes auth-trace-dash {
-  to {
-    stroke-dashoffset: -280;
+@keyframes auth-status-pulse {
+  50% {
+    opacity: 0.5;
   }
 }
-@keyframes auth-trace-pulse {
+
+/* Reference: `@keyframes dash { to { stroke-dashoffset: -240; } }` */
+@keyframes auth-trace-dash {
+  to {
+    stroke-dashoffset: -240;
+  }
+}
+/* Reference: `@keyframes glow { 50% { opacity: .6; } }` — the path's own
+   resting opacity (.3) is set on the element (see auth-marketing-
+   panel.tsx), matching the reference's `.trace-path-glow { opacity: .3 }`. */
+@keyframes auth-trace-glow-pulse {
   50% {
-    opacity: 0.4;
+    opacity: 0.6;
+  }
+}
+/* Reference: `@keyframes node-breathe { 50% { transform: translateY(-4px);
+   border-color: rgba(255,255,255,.52); } }` */
+@keyframes auth-trace-node-breathe {
+  50% {
+    transform: translateY(-4px);
+    border-color: rgba(255, 255, 255, 0.52);
+  }
+}
+/* Reference: `@keyframes trace-scan { 0% { left: -18%; opacity: 0; }
+   12%, 82% { opacity: 1; } 100% { left: 100%; opacity: 0; } }` —
+   live-verified this exact animation (animating the layout property
+   `left`, on an element under a `blur()` filter, is the one deviation
+   from a literal port: it made headless screenshot capture hang the
+   same way UX-12's isometric-grid hang did, confirmed by isolating it
+   before touching anything else. `left` is a layout property — the
+   browser must reflow every frame; `transform: translateX` is
+   composited instead, so this keeps the same visual sweep (same
+   distance in element-widths, same opacity ramp) without the layout
+   cost. */
+@keyframes auth-trace-scan-sweep {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  12%,
+  82% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(550%);
+    opacity: 0;
+  }
+}
+/* Reference: `@keyframes orbit { to { transform: rotate(360deg); } }` */
+@keyframes auth-trace-orbit-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -424,12 +487,7 @@ body {
    getting. Values are light theme's own numbers, not a new palette:
    #ffffff/#101828/#667085/#e7e3db/#f1efe9/#4f46e5 above are exactly
    --card/--foreground/--muted-foreground/--border/--secondary/
-   --primary's own light-theme values.
-   The panel gradient/node/row tokens are new surfaces the light theme
-   itself has no equivalent for (there's no "pale-blue marketing panel"
-   token elsewhere in the app) — mixed from that same #4f46e5 toward
-   white at increasing strength for the diagonal light-to-deep gradient,
-   not a new hue. */
+   --primary's own light-theme values. */
 :root {
   --auth-bg: #ffffff;
   --auth-foreground: #101828;
@@ -438,15 +496,7 @@ body {
   --auth-tile-bg: #f1efe9;
   --auth-primary: #4f46e5;
 
-  --auth-panel-from: color-mix(in srgb, #4f46e5 4%, white);
-  --auth-panel-via: color-mix(in srgb, #4f46e5 32%, white);
-  --auth-panel-to: color-mix(in srgb, #4f46e5 56%, white);
   --auth-panel-grid-line: rgba(255, 255, 255, 0.35);
-  --auth-panel-line: #ffffff;
-  --auth-panel-node-bg: rgba(255, 255, 255, 0.32);
-  --auth-panel-node-border: rgba(255, 255, 255, 0.5);
-  --auth-panel-row-bg: rgba(255, 255, 255, 0.14);
-  --auth-panel-row-border: rgba(255, 255, 255, 0.24);
 }
 
 /* The panel's diagonal grid texture — a flat 2D pattern (no 3D
@@ -455,11 +505,35 @@ body {
    mode, and live-verified made headless screenshot capture hang on
    compositing cost. This is cheap: two crossed repeating-linear-
    gradients, nothing else. One-off for this panel, same "deliberate,
-   not reused elsewhere" rule as .crado-canvas-grid above. */
+   not reused elsewhere" rule as .crado-canvas-grid above. UX-14 didn't
+   flag the grid texture as wrong, only the colour underneath it, so
+   this stays untouched — no reason to reintroduce the isometric
+   version's hang risk. */
 .auth-panel-grid {
   background-image:
     repeating-linear-gradient(45deg, var(--auth-panel-grid-line) 0 1px, transparent 1px 32px),
     repeating-linear-gradient(-45deg, var(--auth-panel-grid-line) 0 1px, transparent 1px 32px);
+}
+
+/* UX-14: the panel's background colour, replacing UX-13's own
+   approximation (a single 135deg linear gradient) with the two layered
+   radial gradients from the supplied reference HTML file's
+   `.marketing-panel` rule, copied literally rather than re-derived:
+     background:
+       radial-gradient(circle at 70% 46%, rgba(37,99,235,.2), transparent 28%),
+       radial-gradient(circle at 18% 10%, #fff 0%, #e8f0ff 24%, #9bbcff 58%, #275ee9 100%);
+   The second (main) gradient's centre sits near the panel's own
+   top-left corner, which is what actually produces "light, almost
+   white at the top left, deepening to a medium blue at the bottom
+   right" — a corner-anchored radial reads as a diagonal from any
+   rectangular viewport, without needing a literal 135deg linear
+   gradient. Not a token: nothing else in the app reuses this exact
+   two-layer radial combination, so it's a plain class rather than
+   another set of --auth-panel-* custom properties. */
+.auth-panel-gradient {
+  background:
+    radial-gradient(circle at 70% 46%, rgba(37, 99, 235, 0.2), transparent 28%),
+    radial-gradient(circle at 18% 10%, #fff 0%, #e8f0ff 24%, #9bbcff 58%, #275ee9 100%);
 }
 
 /* @xyflow/react ships its own base stylesheet import in the canvas

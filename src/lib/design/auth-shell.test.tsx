@@ -81,7 +81,9 @@ describe("AuthShell", () => {
     );
     expect(screen.getByText("Regulation, inside the engineering loop.")).toBeInTheDocument();
     expect(screen.getByText("Rev17")).toBeInTheDocument();
-    expect(screen.getByText("Logged")).toBeInTheDocument();
+    // "Verified" appears twice — the node-02 value and the row-02 state
+    // chip both legitimately use this same honest word.
+    expect(screen.getAllByText("Verified").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("Linked")).toBeInTheDocument();
     expect(screen.getByText("Recorded")).toBeInTheDocument();
     expect(screen.getByText("Deterministic checks kept separate from AI inference")).toBeInTheDocument();
@@ -113,5 +115,24 @@ describe("AuthShell", () => {
       </AuthShell>,
     );
     expect(screen.queryByRole("button", { name: /theme/i })).not.toBeInTheDocument();
+  });
+
+  it("always renders the black Crado mark, regardless of the app's theme (UX-14: was picking the white mark on this always-white page)", () => {
+    const { container } = render(
+      <AuthShell mode="sign-in" next="/investigations">
+        <div>form content</div>
+      </AuthShell>,
+    );
+    const mark = container.querySelector("img");
+    expect(mark).toHaveAttribute("src", expect.stringContaining("crado-mark-black.png"));
+  });
+
+  it("does not claim a live per-visitor status on the marketing panel (Crado is not tracing anything for a signed-out visitor)", () => {
+    const { container } = render(
+      <AuthShell mode="sign-in" next="/investigations">
+        <div>form content</div>
+      </AuthShell>,
+    );
+    expect(container.textContent).not.toMatch(/tracing/i);
   });
 });
