@@ -199,6 +199,82 @@ describe("createAnalysisRunForFailureCase", () => {
     expect(run?.status).toBe("completed");
   });
 
+  it("FIX-03: retries exactly once when the model returns nothing at all, and persists a real hypothesis.retried row (not just an in-process event)", async () => {
+    // Proven wrong live on the hosted deployment before this test existed:
+    // a real run's tool trace doubled (10 checks instead of 5 — two full
+    // attemptHypothesisGeneration() passes) but analysis_events had zero
+    // hypothesis.retried rows anywhere in the database. The gap was in
+    // persistAndYield's insert, which discarded its own error result — the
+    // event streamed to the client and was gone the moment anyone
+    // refreshed. A fake adapter reproduces the trigger condition
+    // deterministically; only real Postgres proves the persistence half
+    // that fake actually caught the bug.
+    const seed = await seedGatewayXCase(userA.client);
+
+    let call = 0;
+    const retryingAdapter: HypothesisModelAdapter = {
+      generateHypotheses: async () => {
+        call += 1;
+        if (call === 1) {
+          // The exact miss run-analysis.ts retries on: no hypothesis, no
+          // clarification question, despite a real correlation candidate.
+          return { hypotheses: [], clarificationQuestion: null };
+        }
+        return {
+          hypotheses: [
+            {
+              productFactId: seed.factId,
+              title: "40 MHz clock 5th harmonic",
+              confidenceBand: "medium",
+              reasoning:
+                "The measured frequency lines up with a 5th-order harmonic of the system clock.",
+              missingEvidence: ["Check emissions with the clock disabled."],
+              recommendedNextStep:
+                "An engineer could re-clock or shield the oscillator and re-measure.",
+            },
+          ],
+          clarificationQuestion: null,
+        };
+      },
+    };
+
+    const result = await createAnalysisRunForFailureCase(
+      { failureCaseId: seed.failureCaseId, measurementId: seed.measurementId },
+      retryingAdapter,
+      userA.client,
+    );
+    if (!result.ok) throw new Error(`expected ok result, got: ${result.message}`);
+
+    const events = await collect(result.events);
+
+    expect(call).toBe(2);
+    expect(events.map((e) => e.type)).toEqual([
+      "run.started",
+      "measurement.loaded",
+      "correlation.found",
+      "hypothesis.retried",
+      "hypothesis.created",
+      "run.completed",
+    ]);
+
+    const retried = events.find((e) => e.type === "hypothesis.retried");
+    if (!retried || retried.type !== "hypothesis.retried") {
+      throw new Error("expected hypothesis.retried");
+    }
+    expect(retried.payload.correlationCount).toBe(1);
+
+    // Direct Postgres check, not just trust in the in-process stream — this
+    // is the exact query that returned zero rows for real on the hosted
+    // deployment, against the same event type, before the fix.
+    const { data: persistedEvents } = await userA.client
+      .from("analysis_events")
+      .select("event_type, sequence")
+      .eq("analysis_run_id", result.runId)
+      .order("sequence", { ascending: true });
+    expect(persistedEvents?.map((e) => e.event_type)).toEqual(events.map((e) => e.type));
+    expect(persistedEvents?.some((e) => e.event_type === "hypothesis.retried")).toBe(true);
+  });
+
   it("persists a run.failed event and marks the run failed when the adapter throws", async () => {
     const seed = await seedGatewayXCase(userA.client);
     const throwingAdapter: HypothesisModelAdapter = {

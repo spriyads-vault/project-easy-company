@@ -237,15 +237,33 @@ export async function createAnalysisRunForFailureCase(
       // boundary before this leaves the process either direction.
       const validated = analysisEventSchema.parse(event);
 
-      await supabase.from("analysis_events").insert({
+      if (validated.type === "run.failed") {
+        finalStatus = "failed";
+      }
+
+      // FIX-03: this insert's result was previously discarded outright. A
+      // failed insert left a gap in the row's own sequence numbering
+      // (proven live: a hosted hypothesis.retried at sequence 15 was never
+      // written while 14 and 16 either side of it were) while the event
+      // still streamed to the client and reconstructFromPersistedEvents
+      // rebuilds a refresh from analysis_events alone — so a client that
+      // only ever saw this event live, then refreshed, silently lost it
+      // with nothing in any log to explain why. Never stream what didn't
+      // actually persist: skip yielding it, but keep the run itself going
+      // (a single lost status event isn't fatal) and make sure an operator
+      // can find out this happened.
+      const { error: insertError } = await supabase.from("analysis_events").insert({
         analysis_run_id: runId,
         sequence: validated.sequence,
         event_type: validated.type,
         payload: validated.payload,
       });
 
-      if (validated.type === "run.failed") {
-        finalStatus = "failed";
+      if (insertError) {
+        console.error(
+          `[analysis:${runId}] failed to persist ${validated.type} (sequence ${validated.sequence}): ${insertError.message}`,
+        );
+        continue;
       }
 
       yield validated;
