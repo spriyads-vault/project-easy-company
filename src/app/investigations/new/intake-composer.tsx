@@ -13,9 +13,13 @@
 // never unmounts/remounts that input and loses the browser's selected
 // file — React only ever hides/shows sibling blocks inside it.
 import { useActionState, useRef, useState } from "react";
-import { Paperclip, Sparkles } from "lucide-react";
+import { Paperclip, Sparkles, X } from "lucide-react";
 import { createInvestigationIntake, type IntakeFormState } from "./actions";
-import { parseInvestigationIntake, type ProductCandidate } from "@/lib/investigations/parse-investigation-intake";
+import {
+  parseInvestigationIntake,
+  type ExtractedProductFact,
+  type ProductCandidate,
+} from "@/lib/investigations/parse-investigation-intake";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,6 +45,11 @@ export function IntakeComposer({ products }: IntakeComposerProps) {
   const [frequencyMhz, setFrequencyMhz] = useState("");
   const [marginDb, setMarginDb] = useState("");
   const [operatingMode, setOperatingMode] = useState("");
+  // FIX-02 Defect 2: clock/radio/switching-rail facts pulled from the
+  // draft text — reviewable/removable rows, never written until "Start
+  // investigation" is actually submitted (see productFacts hidden input
+  // below, and createInvestigationIntake's own validation of it).
+  const [productFacts, setProductFacts] = useState<ExtractedProductFact[]>([]);
 
   function handleContinue() {
     if (!draft.trim()) return;
@@ -56,7 +65,22 @@ export function IntakeComposer({ products }: IntakeComposerProps) {
     setFrequencyMhz(result.frequencyMhz !== null ? String(result.frequencyMhz) : "");
     setMarginDb(result.marginDb !== null ? String(result.marginDb) : "");
     setOperatingMode(result.operatingMode ?? "");
+    setProductFacts(result.productFacts);
     setStage("confirm");
+  }
+
+  function updateProductFactLabel(index: number, label: string) {
+    setProductFacts((facts) => facts.map((fact, i) => (i === index ? { ...fact, label } : fact)));
+  }
+
+  function updateProductFactFrequency(index: number, value: string) {
+    const frequencyMhz = Number(value);
+    if (value.trim() === "" || Number.isNaN(frequencyMhz)) return;
+    setProductFacts((facts) => facts.map((fact, i) => (i === index ? { ...fact, frequencyMhz } : fact)));
+  }
+
+  function removeProductFact(index: number) {
+    setProductFacts((facts) => facts.filter((_, i) => i !== index));
   }
 
   return (
@@ -221,6 +245,62 @@ export function IntakeComposer({ products }: IntakeComposerProps) {
                 onChange={(event) => setOperatingMode(event.target.value)}
                 placeholder="e.g. WiFi TX + display active"
               />
+            </div>
+
+            {/* FIX-02 Defect 2: every extracted fact is an editable,
+                removable row — nothing here is written until "Start
+                investigation" is submitted (see the hidden productFacts
+                input below and createInvestigationIntake's own
+                validation of it). */}
+            <div className="flex flex-col gap-1.5">
+              <label className={typography.metadata}>Product facts found</label>
+              {productFacts.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  {productFacts.map((fact, index) => (
+                    <div key={`${fact.category}-${index}`} className="flex items-center gap-2">
+                      <span className="w-14 shrink-0 text-xs capitalize text-muted-foreground">
+                        {fact.category}
+                      </span>
+                      <Input
+                        value={fact.label}
+                        onChange={(event) => updateProductFactLabel(index, event.target.value)}
+                        aria-label={`Fact ${index + 1} label`}
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={fact.frequencyMhz}
+                        onChange={(event) => updateProductFactFrequency(index, event.target.value)}
+                        aria-label={`Fact ${index + 1} frequency in MHz`}
+                        className={`w-24 shrink-0 ${text.mono}`}
+                      />
+                      <span className="shrink-0 text-xs text-muted-foreground">MHz</span>
+                      <button
+                        type="button"
+                        onClick={() => removeProductFact(index)}
+                        aria-label={`Remove fact ${index + 1}`}
+                        className="shrink-0 text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={typography.metadata}>
+                  No clock, radio, or switching-rail frequency was found in your description.
+                  Mention one (e.g. &quot;40 MHz system clock&quot;) or add it from the
+                  investigation workspace once this case is open — without it, Crado has
+                  nothing to correlate the measured frequency against.
+                </p>
+              )}
+              {/* Submitted as one JSON blob rather than indexed fields —
+                  the row count is variable and can change (add/remove) as
+                  the engineer edits, so this is simpler and safer than a
+                  parallel-array FormData encoding. */}
+              <input type="hidden" name="productFacts" value={JSON.stringify(productFacts)} />
             </div>
 
             {attachmentName ? (

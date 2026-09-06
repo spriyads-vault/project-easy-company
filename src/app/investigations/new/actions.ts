@@ -11,11 +11,12 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { measurementPeakInputSchema } from "@/lib/domain/schema";
+import { measurementPeakInputSchema, productFactInputSchema } from "@/lib/domain/schema";
 import { buildDocumentStoragePath } from "@/lib/documents/storage-path";
 import { ingestDocument } from "@/lib/documents/ingest-document";
 import { documentMimeTypeSchema } from "@/lib/domain/schema";
 import { listInvestigations, type InvestigationSummary } from "@/lib/investigations/queries";
+import { buildProductFactInput } from "@/lib/investigations/parse-investigation-intake";
 
 /** UX-05 Workstream B: the New Investigation page's "Recent investigations"
  * section fetches through this Server Action (client-triggered, not
@@ -118,6 +119,32 @@ const intakeSchema = z.object({
   peak: measurementPeakInputSchema,
 });
 
+// FIX-02 Defect 2: what the confirmation panel's editable rows submit —
+// re-validated here server-side (never trusting client-supplied JSON as
+// already-safe) before each is expanded (buildProductFactInput) into the
+// full ProductFactInput the existing product_facts insert already
+// validates. See parse-investigation-intake.ts for extraction.
+const extractedProductFactSchema = z.object({
+  category: z.enum(["clock", "radio", "power"]),
+  label: z.string().trim().min(1).max(120),
+  frequencyMhz: z.number().positive(),
+});
+
+/** Never throws on malformed/missing input — an engineer who removed every
+ * row, or a client that sent nothing at all, is not an error, just zero
+ * facts to save. */
+function parseProductFacts(value: FormDataEntryValue | null): z.infer<typeof extractedProductFactSchema>[] {
+  if (typeof value !== "string" || value.trim() === "") return [];
+  let raw: unknown;
+  try {
+    raw = JSON.parse(value);
+  } catch {
+    return [];
+  }
+  const parsed = z.array(extractedProductFactSchema).safeParse(raw);
+  return parsed.success ? parsed.data : [];
+}
+
 export async function createInvestigationIntake(
   _prevState: IntakeFormState,
   formData: FormData,
@@ -188,6 +215,27 @@ export async function createInvestigationIntake(
       return { error: "Could not create the revision." };
     }
     revisionId = revision.id;
+  }
+
+  // 2b. Save the confirmed product facts (FIX-02 Defect 2) — the exact
+  // same validated shape/insert the standalone product-facts form uses
+  // (src/app/products/[productId]/revisions/[revisionId]/actions.ts's
+  // createFact), reused rather than duplicated. Re-validates the
+  // client-submitted rows (never trusts them as already-safe) and
+  // silently skips any fact that fails to save — a fact only ever adds
+  // context; a save failure here must never take down the investigation
+  // it's attached to, same "best-effort" reasoning as attachIntakeFile
+  // below.
+  const productFacts = parseProductFacts(formData.get("productFacts"));
+  for (const extracted of productFacts) {
+    const factInput = productFactInputSchema.safeParse(buildProductFactInput(extracted));
+    if (!factInput.success) continue;
+    await supabase.from("product_facts").insert({
+      product_revision_id: revisionId,
+      category: factInput.data.category,
+      fact: factInput.data.fact,
+      source: factInput.data.source,
+    });
   }
 
   // 3. Open the failure case.
