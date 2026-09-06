@@ -6386,12 +6386,35 @@ is a reasonable candidate for a follow-up ticket.
 
 ### Hosted-deployment verification
 
-NOT performed as of this commit — this PR is unmerged at write time.
-Per the ticket's own explicit requirement, will be run against the
-hosted deployment (all 9 extraction strings through
-`/investigations/new`, plus one case submitted with Operating mode
-left blank) once merged; results reported directly rather than
-inferred from the passing unit suite above.
+Performed after merge, against `https://project-easy-company.vercel.app`
+(production, no Vercel SSO protection on that class of environment —
+see prior tickets' own notes). All 9 of the ticket's extraction strings
+submitted individually through the real `/investigations/new` form,
+each read back off the confirmation panel's "Product facts found"
+section:
+
+| Input | Expected | Actual | Result |
+|---|---|---|---|
+| "25 MHz MCU crystal" | Clock · MCU crystal · 25 MHz | Clock · MCU crystal · 25 MHz | PASS |
+| "40 MHz system clock" | Clock · System clock · 40 MHz | Clock · System clock · 40 MHz | PASS |
+| "50 MHz PHY clock" | Clock · PHY clock · 50 MHz | Clock · PHY clock · 50 MHz | PASS |
+| "10.34 MHz pixel clock" | Clock · Pixel clock · 10.34 MHz | Clock · Pixel clock · 10.34 MHz | PASS |
+| "12.288 MHz audio codec clock" | Clock · Audio codec clock · 12.288 MHz | Clock · Audio codec clock · 12.288 MHz | PASS |
+| "100 MHz SoC core clock" | Clock · SoC core clock · 100 MHz | Clock · SoC core clock · 100 MHz | PASS |
+| "8 MHz reference oscillator" | Clock · Reference oscillator · 8 MHz | Clock · Reference oscillator · 8 MHz | PASS |
+| "2.08 MHz buck regulator" | Power · Buck regulator · 2.08 MHz | Power · Buck regulator · 2.08 MHz | PASS |
+| "0.4 MHz flyback controller" | Power · Flyback · 0.4 MHz | Power · Flyback · 0.4 MHz | PASS |
+
+9/9. The "Operating mode (optional)" label was confirmed live on the
+very first case above.
+
+Blank-Operating-mode submission: a fresh case ("Blank Mode Unit Rev1
+failed radiated emissions at 90 MHz, 2 dB above the limit", Operating
+mode left empty) was submitted through the full flow. It proceeded
+without error — created CASE-E7659F, recorded the 90 MHz / +2 dB
+measurement, and ran analysis (correctly finding zero correlations,
+since this product has no facts) — confirming the field no longer
+blocks submission on either the client or the server action.
 
 ### Verification
 
